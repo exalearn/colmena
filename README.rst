@@ -21,11 +21,28 @@ To run the pipeline::
 
   python3 pipeline.py
 
+The default behavior is for the pipeline to kick off a 4 chains of tasks, launch all tasks dispatched
+to it via the Redis queues and stop listening on the queue. This allows the pipeline to not block
+indefinitely on the redis queue.
 
-Separate from the pipeline running, you may pipe a simulated parameter into the pipeline from the
+To block on the redis_q use the `-b` flag to the pipeline::
+
+  python3 pipeline.py -b
+
+Send params
+-----------
+
+Once the pipeline is running in blocking mode, you may send as many params as you wish via the `pump.py`
+utility. Separate from the pipeline running, you may pipe a simulated parameter into the pipeline from the
 commandline utility ::
 
   python3 pump.py -p 100
 
-
 .. note:: The parameter passed to the pump should be an integer.
+
+Stop pipeline
+-------------
+
+To stop a pipeline that is running in blocking mode run ::
+
+  python3 pump.py -p None
