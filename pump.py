@@ -15,5 +15,8 @@ if __name__ == "__main__":
     redis_queue = RedisQueue(args.redishost, port=int(args.redisport))
     redis_queue.connect()
 
-    redis_queue.put(int(args.param))
+    if args.param == 'None':
+        redis_queue.put(None)
+    else:
+        redis_queue.put(int(args.param))
     print(f"Pushed {args.param} to Redis")
