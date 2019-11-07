@@ -51,7 +51,7 @@ class RedisQueue(object):
             print("Got from pop : ", js)
             params = json.loads(js)
         except AttributeError:
-            raise NotConnected(self)
+            raise Exception("Queue is empty/flushed")
         except redis.exceptions.ConnectionError:
             print(f"ConnectionError while trying to connect to Redis@{self.hostname}:{self.port}")
             raise
@@ -84,7 +84,7 @@ class RedisQueue(object):
         try:
             self.redis_client.delete(self.prefix)
         except AttributeError:
-            raise NotConnected(self)
+            raise Exception("Queue is empty/flushed")
         except redis.exceptions.ConnectionError:
             print("ConnectionError while trying to connect to Redis@{}:{}".format(self.hostname,
                                                                                   self.port))
