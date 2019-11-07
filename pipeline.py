@@ -94,7 +94,7 @@ def chain_of_tasks(i, cache_handle):
     return z
 
 
-def main_loop(queue):
+def main_loop(queue, block=False):
 
     external_task_list = []
     cache_handle = {}
@@ -125,9 +125,13 @@ def main_loop(queue):
             else:
                 break
 
-    # Stop the listener process
-    queue.put(None)
     print("External_task_list : ", external_task_list)
+    if block is True:
+        print("** BLOCKING on queue **")
+    else:
+        # Trigger listener process to exit via a stop message.
+        queue.put(None)
+
     print(m.result())
     print("Done with internally launched tasks")
     for task in external_task_list:
@@ -151,6 +155,8 @@ if __name__ == "__main__":
                         help="Address at which the redis server can be reached")
     parser.add_argument("--redisport", default="6379",
                         help="Port on which redis is available")
+    parser.add_argument("-b", "--block", action='store_true',
+                        help="Set blocking behavior where the pipeline will block until a None message is passed through the queue")
     parser.add_argument("-d", "--debug", action='store_true',
                         help="Count of apps to launch")
     args = parser.parse_args()
@@ -161,5 +167,5 @@ if __name__ == "__main__":
 
     redis_queue = RedisQueue(args.redishost, port=int(args.redisport))
     redis_queue.connect()
-    main_loop(redis_queue)
+    main_loop(redis_queue, block=args.block)
     print("All done")

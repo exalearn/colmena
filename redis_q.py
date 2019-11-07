@@ -82,7 +82,6 @@ class RedisQueue(object):
         """ Flush the REDIS queue
         """
         try:
-
             self.redis_client.delete(self.prefix)
         except AttributeError:
             raise NotConnected(self)
