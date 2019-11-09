@@ -2,6 +2,7 @@ import argparse
 from multiprocessing import Queue
 import redis
 import time
+import os
 
 import parsl
 from parsl import python_app, bash_app
@@ -14,6 +15,13 @@ from concurrent.futures import Future
 
 from redis_q import RedisQueue
 
+config_mac = Config(
+    executors=[
+        ThreadPoolExecutor(label="theta_mpi_launcher"),
+        ThreadPoolExecutor(label="local_threads")
+    ],
+    strategy=None,
+)
 
 config = Config(
     executors=[
@@ -30,7 +38,6 @@ config = Config(
     ],
     strategy=None,
 )
-
 
 # Simulate will run some commands on bash, this can be made to run MPI applications via aprun
 # Here, simulate will put a random number from range(0-32767) into the output file.
@@ -83,12 +90,20 @@ def listen_and_launch(queue, task_list, cache_handle):
     return task_list
 
 
+def make_outdir(path):
+    # Make outputs directory if it does not already exist
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+
 # Calls a sequence of apps
 # simulate  ---> update_cache ---> eval_and_launch
 # (remote)     (local threads)     (local threads)
 def chain_of_tasks(i, cache_handle):
     print(f"Chain of tasks called with {i} \n")
-    x = simulate(i, delay=1 + i % 2, outputs=[File(f'simulate_{i}.out')])
+    outdir = 'outputs'
+    make_outdir(outdir)
+    x = simulate(i, delay=1 + i % 2, outputs=[File(f'{outdir}/simulate_{i}.out')])
     y = update_cache(cache_handle, i, inputs=[x.outputs[0]])
     z = eval_and_launch(cache_handle, y)
     return z
@@ -159,11 +174,16 @@ if __name__ == "__main__":
                         help="Set blocking behavior where the pipeline will block until a None message is passed through the queue")
     parser.add_argument("-d", "--debug", action='store_true',
                         help="Count of apps to launch")
+    parser.add_argument("-m", "--mac", action='store_true',
+                        help="Configure for Mac")
     args = parser.parse_args()
 
     if args.debug:
         parsl.set_stream_logger()
-    parsl.load(config)
+    if args.mac:
+        parsl.load(config_mac)
+    else:
+        parsl.load(config)
 
     redis_queue = RedisQueue(args.redishost, port=int(args.redisport))
     redis_queue.connect()
