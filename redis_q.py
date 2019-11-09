@@ -46,10 +46,20 @@ class RedisQueue(object):
         timeout : int
            Timeout for the blocking get in seconds
         """
+        params = None
         try:
-            q, js = self.redis_client.blpop(self.prefix)
-            print("Got from pop : ", js)
-            params = json.loads(js)
+            if timeout == None:
+                result = self.redis_client.blpop(self.prefix)
+            else:
+                result = self.redis_client.blpop(self.prefix, timeout=int(timeout))
+
+            if result == None:
+                params == None
+            else:
+                q, js = result
+                print("Got from pop : ", js)
+                params = js
+
         except AttributeError:
             raise Exception("Queue is empty/flushed")
         except redis.exceptions.ConnectionError:
