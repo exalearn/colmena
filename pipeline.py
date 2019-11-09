@@ -103,7 +103,7 @@ def chain_of_tasks(i, cache_handle):
     print(f"Chain of tasks called with {i} \n")
     outdir = 'outputs'
     make_outdir(outdir)
-    x = simulate(i, delay=1 + i % 2, outputs=[File(f'{outdir}/simulate_{i}.out')])
+    x = simulate(i, delay=1 + int(i) % 2, outputs=[File(f'{outdir}/simulate_{i}.out')])
     y = update_cache(cache_handle, i, inputs=[x.outputs[0]])
     z = eval_and_launch(cache_handle, y)
     return z

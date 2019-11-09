@@ -57,7 +57,6 @@ class RedisQueue(object):
                 params == None
             else:
                 q, js = result
-                print("Got from pop : ", js)
                 params = js
 
         except AttributeError:

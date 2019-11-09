@@ -105,11 +105,13 @@ def main_loop(input_queue, output_queue, block=False):
     else:
         # Trigger listener process to exit via a stop message.
         print("** NOT blocking on queue **")
-        queue.put(None)
+        input_queue.put(None)
 
+    print("** WAITING **")
     for task in external_task_list:
+        print("** WAITED **")
         current = task
-        print(task)
+        print('Task:',task)
         while True:
             x = current.result()
             if isinstance(x, Future):
