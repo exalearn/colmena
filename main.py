@@ -63,19 +63,24 @@ if __name__ == "__main__":
     else:
         parsl.load(config)
 
+    print('''This program creates an "MPI Method Server" that listens on an input queue and write on an output queue:
+
+        input_queue --> mpi_method_server --> output_queue
+
+To send it a request, add an entry to the input queue:
+     run "python3 new_pump -p N" where N is an integer request
+To access a result, remove it from the outout queue:
+     run "python3 new_pull" (blocking) or "python3 new_pull -t T" (T an integer) to time out after T seconds
+''')
+
+    # input_queue --> mpi_method_server --> output_queue
+
     input_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='input')
     input_queue.connect()
     output_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='output')
     output_queue.connect()
 
-    print('''This program creates an "MPI Method Server" that listens on an input queue and write on an output queue.
-
-To send it a request:
-     run "python3 new_push -p NNN" where NNN is a number.
-To access a result:
-     run "python3 new_pull" (blocking) or "python3 new_pull -t N" (N a number) to time out after N seconds.
-''')
-
     mms = mpi_method_server.MpiMethodServer(input_queue, output_queue)
     mms.main_loop()
+
     print("All done")
