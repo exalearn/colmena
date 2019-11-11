@@ -99,6 +99,23 @@ class RedisQueue(object):
                                                                                   self.port))
             raise
 
+    def set(self, key, val):
+        """ Store the {key, val} pair in Redis
+        Parameters
+        ----------
+        key : text
+        val : text
+            The {key : val} pair to be stored
+        """
+        try:
+            self.redis_client.rpush(self.prefix, {key : val})
+        except AttributeError:
+            raise NotConnected(self)
+        except redis.exceptions.ConnectionError:
+            print("ConnectionError while trying to connect to Redis@{}:{}".format(self.hostname,
+                                                                                  self.port))
+            raise
+
     @property
     def is_connected(self):
         return self.redis_client is not None

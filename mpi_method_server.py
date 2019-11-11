@@ -1,6 +1,4 @@
-import argparse
 from multiprocessing import Queue
-import redis
 import time
 import os
 
@@ -13,39 +11,68 @@ from parsl.config import Config
 from parsl.data_provider.files import File
 from concurrent.futures import Future
 
-from redis_q import RedisQueue
+import mpi_method_server_methods
 
 class MpiMethodServer:
 
-    def __init__(self, input_queue, output_queue):
-        self.input_queue  = input_queue
-        self.output_queue = output_queue
-        self.task_list    = []
+    """ If load_default = True, we load the default methods list from a separate methods file
+        else the user must pass a list of methods via methods_list kwarg.
+    """
+    def __init__(self, input_queue, output_queue, methods_list=None, load_default=True):
+        self.input_queue   = input_queue
+        self.output_queue  = output_queue
+        self.task_list     = []
+        self.methods_table = {} # Dict maps {func_name : func}
+
+        if load_default is True:
+            for method in mpi_method_server_methods.methods_list:
+                self.add_method(method)
+        else:
+            for method in methods_list:
+                self.add_method(method)  
+
+    # Python function's name can be accessed as a string via __name__
+    def add_method(self, method):
+        self.methods_table[method.__name__] = method
+
+    def launch_method(self, method_name, *args, **kwargs):
+        if method_name in self.methods_table:
+            val = self.methods_table[method_name](*args, **kwargs)
+            return val
+        else:
+            print(f"Requested method : {method_name} is not loaded")
+
+#class MpiMethodServer:
+#
+#    def __init__(self, input_queue, output_queue):
+#        self.input_queue  = input_queue
+#        self.output_queue = output_queue
+#        self.task_list    = []
 
     # Simulate will run some commands on bash, this can be made to run MPI applications via aprun
     # Here, simulate will put a random number from range(0-32767) into the output file.
     # ************ NOTE: Seems that a bash_app cannot take a "self", so I need to remove
-    @bash_app(executors=['theta_mpi_launcher'])
-    def simulate(params, delay=1, outputs=[], stdout=parsl.AUTO_LOGNAME, stderr=parsl.AUTO_LOGNAME):
-        return f'''sleep {delay};
-        echo "Running at ", $PWD
-        echo "Running some serious MPI application"
-        set -x
-        echo "aprun mpi_application {params} -o {outputs[0]}"
-        echo $RANDOM > {outputs[0]}
-        '''
+#    @bash_app(executors=['theta_mpi_launcher'])
+#    def simulate(params, delay=1, outputs=[], stdout=parsl.AUTO_LOGNAME, stderr=parsl.AUTO_LOGNAME):
+#        return f'''sleep {delay};
+#        echo "Running at ", $PWD
+#        echo "Running some serious MPI application"
+#        set -x
+#        echo "aprun mpi_application {params} -o {outputs[0]}"
+#        echo $RANDOM > {outputs[0]}
+#        '''
 
     # Output the param and output kv pair on the output queue.
     # This app runs on the Parsl local side on threads.
     # ************ NOTE: Seems that a python_app cannot take a "self", so I need to remove, and pass output_queue through also
-    @python_app(executors=['local_threads'])
-    def output_result(output_queue, param, inputs=[]):
-        print('Output result', param)
-        with open(inputs[0]) as f:
-            simulated_output = int(f.readline().strip())
-            print(f"Outputting {param} : {simulated_output}")
-            output_queue.put((param, simulated_output))
-        return param, simulated_output
+#    @python_app(executors=['local_threads'])
+#    def output_result(output_queue, param, inputs=[]):
+#        print('Output result', param)
+#        with open(inputs[0]) as f:
+#            simulated_output = int(f.readline().strip())
+#            print(f"Outputting {param} : {simulated_output}")
+#            output_queue.put((param, simulated_output))
+#        return param, simulated_output
 
     # We listen on a Python multiprocessing Queue as an example
     # we launch the application with the params that arrive over this queue
@@ -73,8 +100,8 @@ class MpiMethodServer:
         print(f"Run_application called with {i} \n")
         outdir = 'outputs'
         self.make_outdir(outdir)
-        x = self.simulate(i, delay=1 + int(i) % 2, outputs=[File(f'{outdir}/simulate_{i}.out')])
-        y = self.output_result(self.output_queue, i, inputs=[x.outputs[0]])
+        x = self.launch_method('simulate', i, delay=1 + int(i) % 2, outputs=[File(f'{outdir}/simulate_{i}.out')])
+        y = self.launch_method('output_result', self.output_queue, i, inputs=[x.outputs[0]])
         return y
 
 
