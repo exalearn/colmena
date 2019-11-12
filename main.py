@@ -68,9 +68,9 @@ if __name__ == "__main__":
         input_queue --> mpi_method_server --> output_queue
 
 To send it a request, add an entry to the input queue:
-     run "python3 new_pump -p N" where N is an integer request
+     run "python3 pump.py -i -p N" where N is an integer request
 To access a result, remove it from the outout queue:
-     run "python3 new_pull" (blocking) or "python3 new_pull -t T" (T an integer) to time out after T seconds
+     run "python3 pull.py" (blocking) or "python3 pull.py -t T" (T an integer) to time out after T seconds
 ''')
 
     # input_queue --> mpi_method_server --> output_queue

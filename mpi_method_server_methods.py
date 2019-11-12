@@ -25,7 +25,6 @@ def simulate(params, delay=1, outputs=[], stdout=parsl.AUTO_LOGNAME, stderr=pars
 #@python_app(executors=['local_threads'])
 @bash_app(executors=['theta_mpi_launcher'])
 def output_result(output_queue, param, inputs=[]):
-    print('Output result', param)
     with open(inputs[0]) as f:
         simulated_output = int(f.readline().strip())
         print(f"Outputting {param} : {simulated_output}")

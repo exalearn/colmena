@@ -10,9 +10,14 @@ if __name__ == "__main__":
                         help="Address at which the redis server can be reached")
     parser.add_argument("--redisport", default="6379",
                         help="Port on which redis is available")
+    parser.add_argument("-i", "--input", action='store_true',
+                        help='Send message to input queue')
     args = parser.parse_args()
 
-    redis_queue = RedisQueue(args.redishost, port=int(args.redisport))
+    if args.input:
+        redis_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='input')
+    else:
+        redis_queue = RedisQueue(args.redishost, port=int(args.redisport))
     redis_queue.connect()
 
     if args.param == 'None':
