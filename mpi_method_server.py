@@ -42,42 +42,9 @@ class MpiMethodServer:
         else:
             print(f"Requested method : {method_name} is not loaded")
 
-#class MpiMethodServer:
-#
-#    def __init__(self, input_queue, output_queue):
-#        self.input_queue  = input_queue
-#        self.output_queue = output_queue
-#        self.task_list    = []
-
-    # Simulate will run some commands on bash, this can be made to run MPI applications via aprun
-    # Here, simulate will put a random number from range(0-32767) into the output file.
-    # ************ NOTE: Seems that a bash_app cannot take a "self", so I need to remove
-#    @bash_app(executors=['theta_mpi_launcher'])
-#    def simulate(params, delay=1, outputs=[], stdout=parsl.AUTO_LOGNAME, stderr=parsl.AUTO_LOGNAME):
-#        return f'''sleep {delay};
-#        echo "Running at ", $PWD
-#        echo "Running some serious MPI application"
-#        set -x
-#        echo "aprun mpi_application {params} -o {outputs[0]}"
-#        echo $RANDOM > {outputs[0]}
-#        '''
-
-    # Output the param and output kv pair on the output queue.
-    # This app runs on the Parsl local side on threads.
-    # ************ NOTE: Seems that a python_app cannot take a "self", so I need to remove, and pass output_queue through also
-#    @python_app(executors=['local_threads'])
-#    def output_result(output_queue, param, inputs=[]):
-#        print('Output result', param)
-#        with open(inputs[0]) as f:
-#            simulated_output = int(f.readline().strip())
-#            print(f"Outputting {param} : {simulated_output}")
-#            output_queue.put((param, simulated_output))
-#        return param, simulated_output
-
     # We listen on a Python multiprocessing Queue as an example
     # we launch the application with the params that arrive over this queue
     # Listen on the input queue for params, run a task for the param, and output the result on output queue
-    # ************ NOTE: Oddly this python_app CAN take a self
     @python_app(executors=['local_threads'])
     def listen_and_launch(self):
         while True:
@@ -97,7 +64,7 @@ class MpiMethodServer:
 
     # Calls a function (remotely) and add result to output queue
     def run_application(self, i):
-        print(f"Run_application called with {i} \n")
+        print(f"Run_application called with {i}")
         outdir = 'outputs'
         self.make_outdir(outdir)
         x = self.launch_method('simulate', i, delay=1 + int(i) % 2, outputs=[File(f'{outdir}/simulate_{i}.out')])
