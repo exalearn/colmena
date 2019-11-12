@@ -46,3 +46,52 @@ Stop pipeline
 To stop a pipeline that is running in blocking mode run ::
 
   python3 pump.py -p None
+  
+ 
+Multi-server implementation prototyping
+=======================================
+
+Installing
+----------
+
+See above.
+
+
+Running the system
+------------------
+
+To run the system ::
+
+  python3 main.py [-m]
+
+The program waits for requests (integers) submitted via a Redis "input" queue, runs a task for each request, and places the output on a Redis "output" queue. The -m flag allows for running on a Mac.
+
+
+Send params
+-----------
+
+Once the system is running, you may send as many requests as you wish via the `pump.py`
+utility, using the -i flag to indicate that these requests are for the input queue. E.g. ::
+
+  python3 pump.py -i -p 100
+
+.. note:: The parameter passed to the pump should be an integer.
+
+Get results
+-----------
+
+Once the system is running, you may retrieve results from the output queue via the `pull.py` utility ::
+
+  python3 pull.py
+
+By default, this is a blocking request. To impose a timeout, use the -t parameter, e.g. ::
+
+  python3 pull -t 2
+
+Stop pipeline
+-------------
+
+To stop a pipeline that is running in blocking mode run ::
+
+  python3 pump.py -p None
+
