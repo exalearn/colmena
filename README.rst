@@ -86,7 +86,7 @@ Once the system is running, you may retrieve results from the output queue via t
 
 By default, this is a blocking request. To impose a timeout, use the -t parameter, e.g. ::
 
-  python3 pull -t 2
+  python3 pull.py -t 2
 
 Stop pipeline
 -------------
