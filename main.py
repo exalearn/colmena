@@ -17,30 +17,6 @@ from redis_q import RedisQueue
 
 import mpi_method_server
 
-config_mac = Config(
-    executors=[
-        ThreadPoolExecutor(label="theta_mpi_launcher"),
-        ThreadPoolExecutor(label="local_threads")
-    ],
-    strategy=None,
-)
-
-config = Config(
-    executors=[
-        HighThroughputExecutor(
-            label="theta_mpi_launcher",
-            # Max workers limits the concurrency exposed via mom node
-            max_workers=2,
-            provider=LocalProvider(
-                init_blocks=1,
-                max_blocks=1,
-            ),
-        ),
-        ThreadPoolExecutor(label="local_threads")
-    ],
-    strategy=None,
-)
-
 
 if __name__ == "__main__":
 
@@ -59,9 +35,30 @@ if __name__ == "__main__":
         parsl.set_stream_logger()
 
     if args.mac:
-        parsl.load(config_mac)
+        config = Config(
+            executors=[
+                ThreadPoolExecutor(label="theta_mpi_launcher"),
+                ThreadPoolExecutor(label="local_threads")
+            ],
+            strategy=None,
+        )
     else:
-        parsl.load(config)
+        config = Config(
+            executors=[
+                HighThroughputExecutor(
+                    label="theta_mpi_launcher",
+                    # Max workers limits the concurrency exposed via mom node
+                    max_workers=2,
+                    provider=LocalProvider(
+                        init_blocks=1,
+                        max_blocks=1,
+                    ),
+                ),
+                ThreadPoolExecutor(label="local_threads")
+            ],
+            strategy=None,
+        )
+    parsl.load(config)
 
     print('''This program creates an "MPI Method Server" that listens on an input queue and write on an output queue:
 
