@@ -51,41 +51,27 @@ echo "aprun mpi_application {params} -o {outputs[0]}"
 echo $RANDOM > {outputs[0]}
 '''
 
-# Update a cache with the param and output kv pair.
-# Here the cache is a simple python dict, it could be anything, Redis, mongo, file...
+# Output the param and output kv pair on the output queue.
 # This app runs on the Parsl local side on threads.
 @python_app(executors=['local_threads'])
-def update_cache(cache, param, inputs=[]):
-    print(f"Updating cache with data for {param}")
+def output_result(output_queue, param, inputs=[]):
+    print(f"Outputting data for {param}")
     with open(inputs[0]) as f:
         simulated_output = int(f.readline().strip())
-        cache[param] = simulated_output
+        output_queue.put((param, simulated_output))
     return param, simulated_output
-
-# If the simulated output was even, we launch more simulate task chains.
-@python_app(executors=['local_threads'])
-def eval_and_launch(cache, kv_pair):
-    print(f"Evaluating results from {kv_pair}")
-    param, simulated_output = kv_pair
-    # We could also do some error case checking.
-    if simulated_output % 2 == 0:
-        print(f"Launching simulate {simulated_output*2} based on even output!\n")
-        x = chain_of_tasks(simulated_output * 2, cache)
-    else:
-        x = None
-    return x
 
 # We listen on a Python multiprocessing Queue as an example
 # we launch the simulate pipeline with the params that arrive over this queue
-# Listen on the queue for params, and launch the chain of tasks with the param
+# Listen on the input queue for params, run a task for the param, and output the result on output queue
 @python_app(executors=['local_threads'])
-def listen_and_launch(queue, task_list, cache_handle):
+def listen_and_launch(input_queue, output_queue, task_list):
     while True:
-        param = queue.get()
+        param = input_queue.get()
         print(f"QUEUE : Got task params {param}")
         if param is None:
             break
-        future = chain_of_tasks(param, cache_handle)
+        future = chain_of_tasks(param, output_queue)
         task_list.append(future)
     return task_list
 
@@ -97,61 +83,35 @@ def make_outdir(path):
 
 
 # Calls a sequence of apps
-# simulate  ---> update_cache ---> eval_and_launch
-# (remote)     (local threads)     (local threads)
-def chain_of_tasks(i, cache_handle):
+# simulate  ---> output_result
+# (remote)     (local threads)
+def chain_of_tasks(i, output_queue):
     print(f"Chain of tasks called with {i} \n")
     outdir = 'outputs'
     make_outdir(outdir)
-    x = simulate(i, delay=1 + int(i) % 2, outputs=[File(f'{outdir}/simulate_{i}.out')])
-    y = update_cache(cache_handle, i, inputs=[x.outputs[0]])
-    z = eval_and_launch(cache_handle, y)
-    return z
+    x = simulate(i, delay=1 + i % 2, outputs=[File(f'{outdir}/simulate_{i}.out')])
+    y = output_result(output_queue, i, inputs=[x.outputs[0]])
+    return y
 
 
-def main_loop(queue, block=False):
+def main_loop(input_queue, output_queue, block=False):
 
     external_task_list = []
-    cache_handle = {}
-    active_tasks = []
 
-    m = listen_and_launch(queue, external_task_list, cache_handle)
-    # Here we spawn 4 chains of tasks
-    # Each chain may launch a single child chain and so on.
-    # This will terminate since each generation can launches children with p=1/2
-    for i in range(4):
-        z = chain_of_tasks(i, cache_handle)
-        active_tasks.append(z)
+    m = listen_and_launch(input_queue, output_queue, external_task_list)
 
-    # Here we will simulate sending a task in via the queue
-    # mechanism
-    time.sleep(0.5)
-    queue.put(100)
-
-    # I think I might have found a limitation in parsl dfk wait_for_current_tasks
-    # which is why we have this silly function, that checks for child tasks to complete
-    for task in active_tasks:
-        current = task
-        print(task)
-        while True:
-            x = current.result()
-            if isinstance(x, Future):
-                current = x
-            else:
-                break
-
-    print("External_task_list : ", external_task_list)
     if block is True:
         print("** BLOCKING on queue **")
     else:
         # Trigger listener process to exit via a stop message.
-        queue.put(None)
+        print("** NOT blocking on queue **")
+        input_queue.put(None)
 
-    print(m.result())
-    print("Done with internally launched tasks")
+    print("** WAITING **")
     for task in external_task_list:
+        print("** WAITED **")
         current = task
-        print(task)
+        print('Task:',task)
         while True:
             x = current.result()
             if isinstance(x, Future):
@@ -170,7 +130,7 @@ if __name__ == "__main__":
                         help="Address at which the redis server can be reached")
     parser.add_argument("--redisport", default="6379",
                         help="Port on which redis is available")
-    parser.add_argument("-b", "--block", action='store_true',
+    parser.add_argument("-b", "--block", action='store_false',
                         help="Set blocking behavior where the pipeline will block until a None message is passed through the queue")
     parser.add_argument("-d", "--debug", action='store_true',
                         help="Count of apps to launch")
@@ -185,7 +145,9 @@ if __name__ == "__main__":
     else:
         parsl.load(config)
 
-    redis_queue = RedisQueue(args.redishost, port=int(args.redisport))
-    redis_queue.connect()
-    main_loop(redis_queue, block=args.block)
+    input_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='input')
+    input_queue.connect()
+    output_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='output')
+    output_queue.connect()
+    main_loop(input_queue, output_queue, block=args.block)
     print("All done")

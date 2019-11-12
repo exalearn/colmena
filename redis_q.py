@@ -46,10 +46,19 @@ class RedisQueue(object):
         timeout : int
            Timeout for the blocking get in seconds
         """
+        params = None
         try:
-            q, js = self.redis_client.blpop(self.prefix)
-            print("Got from pop : ", js)
-            params = json.loads(js)
+            if timeout == None:
+                result = self.redis_client.blpop(self.prefix)
+            else:
+                result = self.redis_client.blpop(self.prefix, timeout=int(timeout))
+
+            if result == None:
+                params == None
+            else:
+                q, js = result
+                params = js
+
         except AttributeError:
             raise Exception("Queue is empty/flushed")
         except redis.exceptions.ConnectionError:
@@ -85,6 +94,23 @@ class RedisQueue(object):
             self.redis_client.delete(self.prefix)
         except AttributeError:
             raise Exception("Queue is empty/flushed")
+        except redis.exceptions.ConnectionError:
+            print("ConnectionError while trying to connect to Redis@{}:{}".format(self.hostname,
+                                                                                  self.port))
+            raise
+
+    def set(self, key, val):
+        """ Store the {key, val} pair in Redis
+        Parameters
+        ----------
+        key : text
+        val : text
+            The {key : val} pair to be stored
+        """
+        try:
+            self.redis_client.rpush(self.prefix, {key : val})
+        except AttributeError:
+            raise NotConnected(self)
         except redis.exceptions.ConnectionError:
             print("ConnectionError while trying to connect to Redis@{}:{}".format(self.hostname,
                                                                                   self.port))
