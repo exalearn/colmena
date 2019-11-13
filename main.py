@@ -15,7 +15,7 @@ from concurrent.futures import Future
 
 from redis_q import RedisQueue
 
-import mpi_method_server
+from method_server import MpiMethodServer
 
 config_mac = Config(
     executors=[
