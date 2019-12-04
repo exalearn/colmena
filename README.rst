@@ -1,6 +1,7 @@
-Pipeline prototyping
-====================
+1) Pipeline prototyping
+=======================
 
+This is Yadu's original pipeline prototype, developed to show how to tasks from a Redis queue.
 
 Installing
 ----------
@@ -8,37 +9,36 @@ Installing
 
 1. Redis: Install Redis on your machine following instructions from `here <https://redis.io/topics/quickstart>`_
 2. Python3.6
-3. Install python modules::
-
-     pip install -r requirements.txt
-
-
+3. Install the pipeline_prototype::
+     cd pipeline_prototype
+     pip install .
 
 Running the pipeline
 --------------------
 
 To run the pipeline::
 
-  python3 pipeline.py
+  pipeline-main
+
+For more info on arguments for the main pipeline runner::
+
+  pipeline-main -h
 
 The default behavior is for the pipeline to kick off a 4 chains of tasks, launch all tasks dispatched
 to it via the Redis queues and stop listening on the queue. This allows the pipeline to not block
 indefinitely on the redis queue.
 
-To block on the redis_q use the `-b` flag to the pipeline::
-
-  python3 pipeline.py -b
 
 Send params
 -----------
 
 Once the pipeline is running in blocking mode, you may send as many params as you wish via the `pump.py`
-utility. Separate from the pipeline running, you may pipe a simulated parameter into the pipeline from the
-commandline utility ::
+utility. Separate from the pipeline running, you may pipe a simulated parameter into the pipeline from
+the commandline utility ::
 
-  python3 pump.py -p 100
+   pipeline-pump -i -p 100
 
-.. note:: The parameter passed to the pump should be an integer.
+.. note:: The parameter passed to the pump should be an integer or None.
 
 Stop pipeline
 -------------
@@ -46,10 +46,31 @@ Stop pipeline
 To stop a pipeline that is running in blocking mode run ::
 
   python3 pump.py -p None
-  
- 
-Multi-server implementation prototyping
-=======================================
+
+
+2) Multi-server implementation prototyping
+==========================================
+
+This version extends the first version to output results to another Redis queue. 
+
+Overview
+--------
+
+An instance of the `MpiMethodServer` class (mpi_method_server.py) is created with input and output queues.
+The `main_loop` method implements the persistent method server. It repeatedly:
+
+* receives a request on the input queue
+* requests creation of an "MPI computation" (currently a dummy operation) to process the request 
+* sends the result of the computation on the output queue
+
+Notes:
+
+* The output queue might be piped directly to a value server. (Or, alternatively, the value server functionality could be integrated with that of the method server?)
+
+* The implementation does not handle failures
+
+* The implementation does not throttle the number of MPI computation requests made
+
 
 Installing
 ----------

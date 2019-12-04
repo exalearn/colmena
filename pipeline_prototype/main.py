@@ -1,25 +1,17 @@
 import argparse
-from multiprocessing import Queue
-import redis
-import time
-import os
 
 import parsl
-from parsl import python_app, bash_app
 from parsl.executors import ThreadPoolExecutor
 from parsl.executors import HighThroughputExecutor
 from parsl.providers import LocalProvider
 from parsl.config import Config
-from parsl.data_provider.files import File
-from concurrent.futures import Future
 
-from redis_q import RedisQueue
+from pipeline_prototype.redis_q import RedisQueue
 
-import mpi_method_server
+from pipeline_prototype.method_server import MpiMethodServer
 
 
-if __name__ == "__main__":
-
+def cli_run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--redishost", default="127.0.0.1",
                         help="Address at which the redis server can be reached")
@@ -65,24 +57,31 @@ if __name__ == "__main__":
         input_queue --> mpi_method_server --> output_queue
 
 To send it a request, add an entry to the input queue:
-     run "python3 pump.py -i -p N" where N is an integer request
+     run "pipeline-pump -p N" where N is an integer request
 To access a result, remove it from the outout queue:
-     run "python3 pull.py" (blocking) or "python3 pull.py -t T" (T an integer) to time out after T seconds
+     run "pipeline-pull" (blocking) or "pipeline-pull -t T" (T an integer) to time out after T seconds
+    TODO: Timeout does not work yet!
 ''')
 
     # input_queue --> mpi_method_server --> output_queue
 
-    input_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='input')
+    input_queue = RedisQueue(args.redishost, port=int(
+        args.redisport), prefix='input')
     input_queue.connect()
-    output_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='output')
+    output_queue = RedisQueue(args.redishost, port=int(
+        args.redisport), prefix='output')
     output_queue.connect()
-    #value_server = RedisQueue(args.redishost, port=int(args.redisport), prefix='value')
-    #value_server.connect()
+    # value_server = RedisQueue(args.redishost, port=int(args.redisport), prefix='value')
+    # value_server.connect()
 
-    mms = mpi_method_server.MpiMethodServer(input_queue, output_queue)
+    mms = MpiMethodServer(input_queue, output_queue)
     mms.main_loop()
 
     # Next up, we likely want to add the ability to create a value server and connect it to a method server, e.g.:
-    #vs = value_server.ValueServer(output_queue)
+    # vs = value_server.ValueServer(output_queue)
 
     print("All done")
+
+
+if __name__ == "__main__":
+    cli_run()
