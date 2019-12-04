@@ -1,7 +1,7 @@
 import argparse
-from redis_q import RedisQueue
+from pipeline_prototype.redis_q import RedisQueue
 
-if __name__ == "__main__":
+def cli_run():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--redishost", default="127.0.0.1",
@@ -17,3 +17,6 @@ if __name__ == "__main__":
 
     value = redis_queue.get(timeout=args.timeout)
     print(f"Pulled from Redis: {value}")
+
+if __name__ == "__main__":
+    cli_run()

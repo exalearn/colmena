@@ -33,6 +33,7 @@ setup(
     entry_points={'console_scripts':
                   ['pipeline-main=pipeline_prototype.main:cli_run',
                    'pipeline-pump=pipeline_prototype.pump:cli_run',
+                   'pipeline-pull=pipeline_prototype.pull:cli_run',
                   ]
     },
     author="Globus Labs",
