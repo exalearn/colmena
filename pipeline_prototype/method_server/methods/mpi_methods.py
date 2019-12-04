@@ -18,7 +18,7 @@ def simulate(params, delay=1, outputs=[], stdout=parsl.AUTO_LOGNAME, stderr=pars
 
 # Output the param and output kv pair on the output queue.
 # This app runs on the Parsl local side on threads.
-#@python_app(executors=['local_threads'])
+# @python_app(executors=['local_threads'])
 
 
 @python_app(executors=['theta_mpi_launcher'])

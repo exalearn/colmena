@@ -1,6 +1,4 @@
 import argparse
-from multiprocessing import Queue
-import redis
 import time
 import os
 

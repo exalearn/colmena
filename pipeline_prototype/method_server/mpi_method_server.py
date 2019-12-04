@@ -1,13 +1,7 @@
-from multiprocessing import Queue
-import time
 import os
 
 import parsl
-from parsl import python_app, bash_app
-from parsl.executors import ThreadPoolExecutor
-from parsl.executors import HighThroughputExecutor
-from parsl.providers import LocalProvider
-from parsl.config import Config
+from parsl import python_app
 from parsl.data_provider.files import File
 from concurrent.futures import Future
 
@@ -53,7 +47,7 @@ class MpiMethodServer:
             param = self.input_queue.get()
             print("Listen got param : [{}] of type: {}".format(
                 param, type(param)))
-            if param is 'null' or param is None:
+            if param == 'null' or param is None:
                 break
             future = self.run_application(param)
             self.task_list.append(future)

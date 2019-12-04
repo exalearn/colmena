@@ -50,14 +50,14 @@ class RedisQueue(object):
         """
         params = None
         try:
-            if timeout == None:
+            if timeout is None:
                 result = self.redis_client.blpop(self.prefix)
             else:
                 result = self.redis_client.blpop(
                     self.prefix, timeout=int(timeout))
 
-            if result == None:
-                params == None
+            if result is None:
+                params = None
             else:
                 q, js = result
                 params = json.loads(js)
@@ -84,7 +84,7 @@ class RedisQueue(object):
             js = json.dumps(params)
             self.redis_client.rpush(self.prefix, js)
         except AttributeError:
-            raise NotConnected(self)
+            raise Exception("NotConnected")
         except redis.exceptions.ConnectionError:
             print("ConnectionError while trying to connect to Redis@{}:{}".format(self.hostname,
                                                                                   self.port))
@@ -113,7 +113,7 @@ class RedisQueue(object):
         try:
             self.redis_client.rpush(self.prefix, {key: val})
         except AttributeError:
-            raise NotConnected(self)
+            raise Exception("NotConnected(self)")
         except redis.exceptions.ConnectionError:
             print("ConnectionError while trying to connect to Redis@{}:{}".format(self.hostname,
                                                                                   self.port))

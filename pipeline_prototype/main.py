@@ -1,17 +1,10 @@
 import argparse
-from multiprocessing import Queue
-import redis
-import time
-import os
 
 import parsl
-from parsl import python_app, bash_app
 from parsl.executors import ThreadPoolExecutor
 from parsl.executors import HighThroughputExecutor
 from parsl.providers import LocalProvider
 from parsl.config import Config
-from parsl.data_provider.files import File
-from concurrent.futures import Future
 
 from pipeline_prototype.redis_q import RedisQueue
 
@@ -78,14 +71,14 @@ To access a result, remove it from the outout queue:
     output_queue = RedisQueue(args.redishost, port=int(
         args.redisport), prefix='output')
     output_queue.connect()
-    #value_server = RedisQueue(args.redishost, port=int(args.redisport), prefix='value')
+    # value_server = RedisQueue(args.redishost, port=int(args.redisport), prefix='value')
     # value_server.connect()
 
     mms = MpiMethodServer(input_queue, output_queue)
     mms.main_loop()
 
     # Next up, we likely want to add the ability to create a value server and connect it to a method server, e.g.:
-    #vs = value_server.ValueServer(output_queue)
+    # vs = value_server.ValueServer(output_queue)
 
     print("All done")
 
