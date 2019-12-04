@@ -22,7 +22,7 @@ To run the pipeline::
 
 For more info on arguments for the main pipeline runner::
 
-pipeline-main -h
+  pipeline-main -h
 
 The default behavior is for the pipeline to kick off a 4 chains of tasks, launch all tasks dispatched
 to it via the Redis queues and stop listening on the queue. This allows the pipeline to not block
@@ -33,8 +33,8 @@ Send params
 -----------
 
 Once the pipeline is running in blocking mode, you may send as many params as you wish via the `pump.py`
-utility. Separate from the pipeline running, you may pipe a simulated parameter into the pipeline from the
-commandline utility ::
+utility. Separate from the pipeline running, you may pipe a simulated parameter into the pipeline from
+the commandline utility ::
 
    pipeline-pump -i -p 100
 
