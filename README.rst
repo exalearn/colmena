@@ -54,16 +54,19 @@ To stop a pipeline that is running in blocking mode run ::
 
 This version extends the first version to output results to another Redis queue. 
 
+Overview
+--------
+
 An instance of the `MpiMethodServer` class (mpi_method_server.py) is created with input and output queues.
 The `main_loop` method implements the persistent method server. It repeatedly:
 
 * receives a request on the input queue
-* requests creation of an MPI computation to process the request 
+* requests creation of an "MPI computation" (currently a dummy operation) to process the request 
 * sends the result of the computation on the output queue
 
 Notes:
 
-* The output queue might be piped directly to a value server. Or, alternatively, the value server functionality could be integrated with that of the method server.
+* The output queue might be piped directly to a value server. (Or, alternatively, the value server functionality could be integrated with that of the method server?)
 
 * The implementation does not handle failures
 
