@@ -1,6 +1,7 @@
-Pipeline prototyping
-====================
+1) Pipeline prototyping
+=======================
 
+This is Yadu's original pipeline prototype, developed to show how to tasks from a Redis queue.
 
 Installing
 ----------
@@ -48,8 +49,26 @@ To stop a pipeline that is running in blocking mode run ::
   python3 pump.py -p None
   
  
-Multi-server implementation prototyping
-=======================================
+2) Multi-server implementation prototyping
+==========================================
+
+This version extends the first version to output results to another Redis queue. 
+
+An instance of the `MpiMethodServer` class (mpi_method_server.py) is created with input and output queues.
+The `main_loop` method implements the persistent method server. It repeatedly:
+
+* receives a request on the input queue
+* requests creation of an MPI computation to process the request 
+* sends the result of the computation on the output queue
+
+Notes:
+
+* The output queue might be piped directly to a value server. Or, alternatively, the value server functionality could be integrated with that of the method server.
+
+* The implementation does not handle failures
+
+* The implementation does not throttle the number of MPI computation requests made
+
 
 Installing
 ----------
