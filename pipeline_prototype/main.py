@@ -17,6 +17,7 @@ from pipeline_prototype.redis_q import RedisQueue
 
 from pipeline_prototype.method_server import MpiMethodServer
 
+
 def cli_run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--redishost", default="127.0.0.1",
@@ -36,7 +37,7 @@ def cli_run():
         config = Config(
             executors=[
                 ThreadPoolExecutor(label="theta_mpi_launcher"),
-            ThreadPoolExecutor(label="local_threads")
+                ThreadPoolExecutor(label="local_threads")
             ],
             strategy=None,
         )
@@ -55,7 +56,7 @@ def cli_run():
                 ThreadPoolExecutor(label="local_threads")
             ],
             strategy=None,
-)
+        )
     parsl.load(config)
 
     print('''This program creates an "MPI Method Server" that listens on an input queue and write on an output queue:
@@ -71,12 +72,14 @@ To access a result, remove it from the outout queue:
 
     # input_queue --> mpi_method_server --> output_queue
 
-    input_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='input')
+    input_queue = RedisQueue(args.redishost, port=int(
+        args.redisport), prefix='input')
     input_queue.connect()
-    output_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='output')
+    output_queue = RedisQueue(args.redishost, port=int(
+        args.redisport), prefix='output')
     output_queue.connect()
     #value_server = RedisQueue(args.redishost, port=int(args.redisport), prefix='value')
-    #value_server.connect()
+    # value_server.connect()
 
     mms = MpiMethodServer(input_queue, output_queue)
     mms.main_loop()

@@ -13,16 +13,18 @@ from concurrent.futures import Future
 
 from pipeline_prototype.method_server.methods import methods_list as METHODS_LIST
 
+
 class MpiMethodServer:
 
     """ If load_default = True, we load the default methods list from a separate methods file
         else the user must pass a list of methods via methods_list kwarg.
     """
+
     def __init__(self, input_queue, output_queue, methods_list=None, load_default=True):
-        self.input_queue   = input_queue
-        self.output_queue  = output_queue
-        self.task_list     = []
-        self.methods_table = {} # Dict maps {func_name : func}
+        self.input_queue = input_queue
+        self.output_queue = output_queue
+        self.task_list = []
+        self.methods_table = {}  # Dict maps {func_name : func}
 
         if load_default is True:
             for method in METHODS_LIST:
@@ -49,19 +51,18 @@ class MpiMethodServer:
     def listen_and_launch(self):
         while True:
             param = self.input_queue.get()
-            print("Listen got param : [{}] of type: {}".format(param, type(param)))
+            print("Listen got param : [{}] of type: {}".format(
+                param, type(param)))
             if param is 'null' or param is None:
                 break
             future = self.run_application(param)
             self.task_list.append(future)
         return self.task_list
 
-
     def make_outdir(self, path):
         # Make outputs directory if it does not already exist
         if not os.path.exists(path):
             os.makedirs(path)
-
 
     # Calls a function (remotely) and add result to output queue
     def run_application(self, i):
@@ -69,16 +70,16 @@ class MpiMethodServer:
         outdir = 'outputs'
         self.make_outdir(outdir)
         x = self.launch_method('simulate', i, delay=1 + int(i) % 2, outputs=[File(f'{outdir}/simulate_{i}.out')])
-        y = self.launch_method('output_result', self.output_queue, i, inputs=[x.outputs[0]])
+        y = self.launch_method(
+            'output_result', self.output_queue, i, inputs=[x.outputs[0]])
         return y
-
 
     def main_loop(self):
         m = self.listen_and_launch(self)
-        print(m.result())
+        print("Listener has exited", m.result())
         for task in self.task_list:
             current = task
-            print('Task:',current)
+            print('Task:', current)
             while True:
                 x = current.result()
                 if isinstance(x, Future):

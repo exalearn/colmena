@@ -34,8 +34,8 @@ setup(
                   ['pipeline-main=pipeline_prototype.main:cli_run',
                    'pipeline-pump=pipeline_prototype.pump:cli_run',
                    'pipeline-pull=pipeline_prototype.pull:cli_run',
-                  ]
-    },
+                   ]
+                  },
     author="Globus Labs",
     author_email='labs@globus.org',
     license="Apache License, Version 2.0",

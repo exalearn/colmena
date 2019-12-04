@@ -1,6 +1,7 @@
 import argparse
 from pipeline_prototype.redis_q import RedisQueue
 
+
 def cli_run():
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--param", required=True,
@@ -13,7 +14,8 @@ def cli_run():
                         help='Name of the redis-queue to send param to. Default: input')
     args = parser.parse_args()
 
-    redis_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix=args.qname)
+    redis_queue = RedisQueue(args.redishost, port=int(
+        args.redisport), prefix=args.qname)
     redis_queue.connect()
 
     if args.param == 'None':
@@ -21,6 +23,7 @@ def cli_run():
     else:
         redis_queue.put(int(args.param))
     print(f"Pushed {args.param} to Redis Queue:{args.qname}")
+
 
 if __name__ == "__main__":
     cli_run()

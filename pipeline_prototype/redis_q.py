@@ -1,6 +1,7 @@
 import json
 import redis
 
+
 class RedisQueue(object):
     """ A basic redis queue
 
@@ -31,7 +32,8 @@ class RedisQueue(object):
         """
         try:
             if not self.redis_client:
-                self.redis_client = redis.StrictRedis(host=self.hostname, port=self.port, decode_responses=True)
+                self.redis_client = redis.StrictRedis(
+                    host=self.hostname, port=self.port, decode_responses=True)
         except redis.exceptions.ConnectionError:
             print("ConnectionError while trying to connect to Redis@{}:{}".format(self.hostname,
                                                                                   self.port))
@@ -51,7 +53,8 @@ class RedisQueue(object):
             if timeout == None:
                 result = self.redis_client.blpop(self.prefix)
             else:
-                result = self.redis_client.blpop(self.prefix, timeout=int(timeout))
+                result = self.redis_client.blpop(
+                    self.prefix, timeout=int(timeout))
 
             if result == None:
                 params == None
@@ -108,7 +111,7 @@ class RedisQueue(object):
             The {key : val} pair to be stored
         """
         try:
-            self.redis_client.rpush(self.prefix, {key : val})
+            self.redis_client.rpush(self.prefix, {key: val})
         except AttributeError:
             raise NotConnected(self)
         except redis.exceptions.ConnectionError:

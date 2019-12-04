@@ -41,6 +41,8 @@ config = Config(
 
 # Simulate will run some commands on bash, this can be made to run MPI applications via aprun
 # Here, simulate will put a random number from range(0-32767) into the output file.
+
+
 @bash_app(executors=['theta_mpi_launcher'])
 def simulate(params, delay=1, outputs=[], stdout=parsl.AUTO_LOGNAME, stderr=parsl.AUTO_LOGNAME):
     return f'''sleep {delay};
@@ -54,6 +56,8 @@ echo $RANDOM > {outputs[0]}
 # Update a cache with the param and output kv pair.
 # Here the cache is a simple python dict, it could be anything, Redis, mongo, file...
 # This app runs on the Parsl local side on threads.
+
+
 @python_app(executors=['local_threads'])
 def update_cache(cache, param, inputs=[]):
     print(f"Updating cache with data for {param}")
@@ -63,6 +67,8 @@ def update_cache(cache, param, inputs=[]):
     return param, simulated_output
 
 # If the simulated output was even, we launch more simulate task chains.
+
+
 @python_app(executors=['local_threads'])
 def eval_and_launch(cache, kv_pair):
     print(f"Evaluating results from {kv_pair}")
@@ -78,6 +84,8 @@ def eval_and_launch(cache, kv_pair):
 # We listen on a Python multiprocessing Queue as an example
 # we launch the simulate pipeline with the params that arrive over this queue
 # Listen on the queue for params, and launch the chain of tasks with the param
+
+
 @python_app(executors=['local_threads'])
 def listen_and_launch(queue, task_list, cache_handle):
     while True:
