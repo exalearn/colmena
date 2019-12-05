@@ -67,10 +67,18 @@ To access a result, remove it from the outout queue:
 
     input_queue = RedisQueue(args.redishost, port=int(
         args.redisport), prefix='input')
-    input_queue.connect()
+    try:
+        input_queue.connect()
+    except:
+        exit(1)
+
     output_queue = RedisQueue(args.redishost, port=int(
         args.redisport), prefix='output')
-    output_queue.connect()
+    try:
+        output_queue.connect()
+    except:
+        exit(1)
+
     # value_server = RedisQueue(args.redishost, port=int(args.redisport), prefix='value')
     # value_server.connect()
 

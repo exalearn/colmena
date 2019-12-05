@@ -34,10 +34,10 @@ class RedisQueue(object):
             if not self.redis_client:
                 self.redis_client = redis.StrictRedis(
                     host=self.hostname, port=self.port, decode_responses=True)
+                self.redis_client.ping()
         except redis.exceptions.ConnectionError:
             print("ConnectionError while trying to connect to Redis@{}:{}".format(self.hostname,
                                                                                   self.port))
-
             raise
 
     def get(self, timeout=None):
