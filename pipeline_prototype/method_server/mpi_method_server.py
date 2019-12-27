@@ -44,12 +44,14 @@ class MpiMethodServer:
     @python_app(executors=['local_threads'])
     def listen_and_launch(self):
         while True:
+            print("Waiting for item in input_queue")
             param = self.input_queue.get()
             print("Listen got param : [{}] of type: {}".format(
                 param, type(param)))
             if param == 'null' or param is None:
                 break
             future = self.run_application(param)
+            print("run_application returned {}".format(future))
             self.task_list.append(future)
         return self.task_list
 
@@ -63,9 +65,15 @@ class MpiMethodServer:
         print(f"Run_application called with {i}")
         outdir = 'outputs'
         self.make_outdir(outdir)
-        x = self.launch_method('simulate', i, delay=1 + int(i) % 2, outputs=[File(f'{outdir}/simulate_{i}.out')])
-        y = self.launch_method(
-            'output_result', self.output_queue, i, inputs=[x.outputs[0]])
+        x = self.launch_method('simulate',
+                               i,
+                               delay=1 + int(i) % 2,
+                               outputs=[File(f'{outdir}/simulate_{i}.out')])
+
+        y = self.launch_method('output_result',
+                               self.output_queue,
+                               i,
+                               inputs=[x.outputs[0]])
         return y
 
     def main_loop(self):
