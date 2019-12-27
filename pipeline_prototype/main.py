@@ -60,7 +60,7 @@ To send it a request, add an entry to the input queue:
      run "pipeline-pump -p N" where N is an integer request
 To access a result, remove it from the outout queue:
      run "pipeline-pull" (blocking) or "pipeline-pull -t T" (T an integer) to time out after T seconds
-    TODO: Timeout does not work yet!
+     TODO: Timeout does not work yet!
 ''')
 
     # input_queue --> mpi_method_server --> output_queue
