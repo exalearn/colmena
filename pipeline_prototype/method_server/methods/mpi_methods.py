@@ -12,7 +12,7 @@ def simulate(params, delay=1, outputs=[], stdout=parsl.AUTO_LOGNAME, stderr=pars
     echo "Running at ", $PWD
     echo "Running some serious MPI application"
     set -x
-    echo "aprun mpi_application {params} -o {outputs[0]}"
+    echo "aprun mpi_application {params} -o {outputs[0]}" >> {outputs[0]}
     echo $RANDOM > {outputs[0]}
     '''
 
@@ -21,13 +21,14 @@ def simulate(params, delay=1, outputs=[], stdout=parsl.AUTO_LOGNAME, stderr=pars
 # @python_app(executors=['local_threads'])
 
 
-@python_app(executors=['theta_mpi_launcher'])
+@python_app(executors=['local_threads'])
 def output_result(output_queue, param, inputs=[]):
     with open(inputs[0]) as f:
         simulated_output = int(f.readline().strip())
         print(f"Outputting {param} : {simulated_output}")
         output_queue.put((param, simulated_output))
     return param, simulated_output
+    # return 0, 10
 
 
 @bash_app
