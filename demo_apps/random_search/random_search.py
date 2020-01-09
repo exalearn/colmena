@@ -19,12 +19,6 @@ def target_fun(x: float) -> float:
     return (x - 1) * (x - 2)
 
 
-@python_app(executors=['local_threads'])
-def output_result(output_queue, param, output):
-    output_queue.put((param, output))
-    return param, output
-
-
 # The Thinker and Doer Classes
 class Thinker(Thread):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""

@@ -4,7 +4,7 @@ from pipeline_prototype.redis_q import RedisQueue
 
 def cli_run():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-p", "--param", required=True,
+    parser.add_argument("-p", "--param", required=True, type=float,
                         help="Parameter to pass into redis")
     parser.add_argument("--redishost", default="127.0.0.1",
                         help="Address at which the redis server can be reached")
@@ -21,7 +21,7 @@ def cli_run():
     if args.param == 'None':
         redis_queue.put(None)
     else:
-        redis_queue.put(int(args.param))
+        redis_queue.put(args.param)
     print(f"Pushed {args.param} to Redis Queue:{args.qname}")
 
 

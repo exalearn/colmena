@@ -5,10 +5,22 @@ from parsl.executors import ThreadPoolExecutor
 from parsl.executors import HighThroughputExecutor
 from parsl.providers import LocalProvider
 from parsl.config import Config
+from parsl import python_app
 
 from pipeline_prototype.redis_q import RedisQueue
 
 from pipeline_prototype.method_server import MethodServer
+
+# Hard code the function to be optimized
+@python_app(executors=["htex"])
+def target_fun(x: float) -> float:
+    return (x - 1) * (x - 2)
+
+
+# Make a simple method server
+class FunctionServer(MethodServer):
+    def run_application(self, i):
+        return target_fun(i)
 
 
 def cli_run():
@@ -29,7 +41,7 @@ def cli_run():
     if args.mac:
         config = Config(
             executors=[
-                ThreadPoolExecutor(label="theta_mpi_launcher"),
+                ThreadPoolExecutor(label="htex"),
                 ThreadPoolExecutor(label="local_threads")
             ],
             strategy=None,
@@ -38,7 +50,7 @@ def cli_run():
         config = Config(
             executors=[
                 HighThroughputExecutor(
-                    label="theta_mpi_launcher",
+                    label="htex",
                     # Max workers limits the concurrency exposed via mom node
                     max_workers=2,
                     provider=LocalProvider(
@@ -82,8 +94,8 @@ To access a result, remove it from the outout queue:
     # value_server = RedisQueue(args.redishost, port=int(args.redisport), prefix='value')
     # value_server.connect()
 
-    mms = MethodServer(input_queue, output_queue)
-    mms.main_loop()
+    mms = FunctionServer(input_queue, output_queue)
+    mms.run()
 
     # Next up, we likely want to add the ability to create a value server and connect it to a method server, e.g.:
     # vs = value_server.ValueServer(output_queue)
