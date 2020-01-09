@@ -1,3 +1,3 @@
-from pipeline_prototype.method_server.mpi_method_server import MpiMethodServer
+from pipeline_prototype.method_server.mpi_method_server import MethodServer
 
-__all__ = ['MpiMethodServer']
+__all__ = ['MethodServer']

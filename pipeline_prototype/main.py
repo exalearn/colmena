@@ -8,7 +8,7 @@ from parsl.config import Config
 
 from pipeline_prototype.redis_q import RedisQueue
 
-from pipeline_prototype.method_server import MpiMethodServer
+from pipeline_prototype.method_server import MethodServer
 
 
 def cli_run():
@@ -82,7 +82,7 @@ To access a result, remove it from the outout queue:
     # value_server = RedisQueue(args.redishost, port=int(args.redisport), prefix='value')
     # value_server.connect()
 
-    mms = MpiMethodServer(input_queue, output_queue)
+    mms = MethodServer(input_queue, output_queue)
     mms.main_loop()
 
     # Next up, we likely want to add the ability to create a value server and connect it to a method server, e.g.:

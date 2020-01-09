@@ -1,11 +1,10 @@
 """Launches a random-search program"""
-from pipeline_prototype.method_server import MpiMethodServer
+from pipeline_prototype.method_server import MethodServer
 from pipeline_prototype.redis_q import RedisQueue
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider
 from parsl.config import Config
 from parsl import python_app
-from multiprocessing import Process
 from threading import Thread
 from random import uniform
 from math import inf
@@ -27,13 +26,11 @@ def output_result(output_queue, param, output):
 
 
 # The Thinker and Doer Classes
-class Thinker(Process):
+class Thinker(Thread):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, input_queue: RedisQueue,
-                 output_queue: RedisQueue,
-                 n_guesses: int = 10,
-                 log_file: str = 'thinker.log'):
+    def __init__(self, input_queue: RedisQueue, output_queue: RedisQueue,
+                 n_guesses: int = 10, log_file: str = 'thinker.log'):
         """
         Args:
             n_guesses (int): Number of guesses the Thinker can make
@@ -51,22 +48,24 @@ class Thinker(Process):
         """Connects to the Redis queue with the results and pulls them"""
         # Open the logger
         logger = logging.getLogger('thinker')
-        handler = logging.FileHandler(self.log_file, 'w')
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s.%(msecs)03d %(name)s:%(lineno)d [%(levelname)s]  %(message)s")
-        )
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-        logger.info(f'Launched thinking process: {self.pid}')
+        #handler = logging.FileHandler(self.log_file, 'w')
+        #handler.setFormatter(
+        #    logging.Formatter("%(asctime)s.%(msecs)03d %(name)s:%(lineno)d [%(levelname)s]  %(message)s")
+        #)
+        #logger.addHandler(handler)
+        #logger.setLevel(logging.INFO)
+        #logger.info(f'Launched thinking process: {self.pid}')
 
         # Make a bunch of guesses
         best_answer = inf
         for _ in range(self.n_guesses):
             # Add a new guess
             self.input_queue.put(uniform(0, 10))
+            logger.info("Added task to queue")
 
             # Get a result
             _, result = self.output_queue.get()
+            logger.info("Received result")
 
             # Update the best answer
             best_answer = min(best_answer, result)
@@ -76,16 +75,11 @@ class Thinker(Process):
             print(best_answer, file=fp)
 
 
-class Doer(MpiMethodServer):
+class Doer(MethodServer):
     """Class the manages running the function to be optimized"""
 
     def run_application(self, i):
-        """Compute the target function"""
-        print('Running application...')
-        x = self.launch_method('target_fun', i)
-        print('Target function launched:', x)
-        y = self.launch_method('output_result', self.output_queue, i, x)
-        return y
+        return target_fun(i)
 
 
 if __name__ == '__main__':
@@ -97,10 +91,14 @@ if __name__ == '__main__':
                         help="Port on which redis is available")
     args = parser.parse_args()
 
+    # Set up the logging
+    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
     # Write the configuration
     config = Config(
         executors=[
             HighThroughputExecutor(
+                address="localhost",
                 label="htex",
                 # Max workers limits the concurrency exposed via mom node
                 max_workers=2,
@@ -110,7 +108,7 @@ if __name__ == '__main__':
                     max_blocks=1,
                 ),
             ),
-            ThreadPoolExecutor(label="local_threads")
+            ThreadPoolExecutor(label="local_threads", max_threads=4)
         ],
         strategy=None,
     )
@@ -119,22 +117,31 @@ if __name__ == '__main__':
     # Connect to the redis server
     input_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='input')
     input_queue.connect()
+    input_queue.flush()
 
     output_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='output')
     output_queue.connect()
+    output_queue.flush()
 
-    # Create the task server, launch it in another thread
-    #  Using Threads because they let this object access the Parsl dfk
-    doer = Doer(input_queue, output_queue, methods_list=[target_fun, output_result], load_default=False)
-    doer_proc = Thread(target=doer.main_loop)
-    doer_proc.start()
-
-    # Create the thinker
-    #  Starts in another process, as it does not need access to the DFK
+    # Create the method server and task generator
+    doer = Doer(input_queue, output_queue)
     thinker = Thinker(input_queue, output_queue)
-    thinker.start()
+    logging.info('Created the method server and task generator')
 
     try:
+        # Launch the servers
+        #  The method server is a Thread, so that it can access the Parsl DFK
+        #  The task generator is a Thread, so that all debugging methods get cast to screen
+        doer.start()
+        thinker.start()
+        logging.info('Launched the servers')
+
+        # Wait for the task generator to complete
         thinker.join()
+        logging.info('Task generator has completed')
+        input_queue.put('null')  # Send the "exit" to the method server
+
+        # Wait for the method server to complete
+        doer.join()
     finally:
         input_queue.put("null")  # Closes the "Doer"

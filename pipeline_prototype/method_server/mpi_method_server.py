@@ -1,92 +1,75 @@
 import os
+import logging
+from threading import Thread
 
 import parsl
 from parsl import python_app
-from parsl.data_provider.files import File
-from concurrent.futures import Future
 
-from pipeline_prototype.method_server.methods import methods_list as METHODS_LIST
+logger = logging.getLogger(__name__)
 
 
-class MpiMethodServer:
+@python_app(executors=['local_threads'])
+def output_result(output_queue, input_param, output_param):
+    output_queue.put((input_param, output_param))
 
-    """ If load_default = True, we load the default methods list from a separate methods file
-        else the user must pass a list of methods via methods_list kwarg.
+
+class MethodServer(Thread):
+    """Abstract class that executes requests across distributed resources.
+
+    Clients submit requests to the server by pushing them to a Redis queue,
+    and then receives results from a second queue
+
+    Users must implement the :meth:`run_simulation` method, which must return
+    a ``ParslFuture`` object.
+
+    The method server is shutdown by pushing a ``None`` to the input queue,
+    signaling that no new tests will be incoming. The remaining tasks will
+    continue to be pushed to the output queue.
+
+    The method server, itself, implements the thread interface. So, you can start it
     """
 
-    def __init__(self, input_queue, output_queue, methods_list=None, load_default=True):
+    def __init__(self, input_queue, output_queue):
+        super().__init__()
         self.input_queue = input_queue
         self.output_queue = output_queue
-        self.task_list = []
-        self.methods_table = {}  # Dict maps {func_name : func}
 
-        if load_default is True:
-            for method in METHODS_LIST:
-                self.add_method(method)
-        else:
-            for method in methods_list:
-                self.add_method(method)
-
-    # Python function's name can be accessed as a string via __name__
-    def add_method(self, method):
-        self.methods_table[method.__name__] = method
-
-    def launch_method(self, method_name, *args, **kwargs):
-        if method_name in self.methods_table:
-            val = self.methods_table[method_name](*args, **kwargs)
-            return val
-        else:
-            print(f"Requested method : {method_name} is not loaded")
-
-    # We listen on a Python multiprocessing Queue as an example
-    # we launch the application with the params that arrive over this queue
-    # Listen on the input queue for params, run a task for the param, and output the result on output queue
     @python_app(executors=['local_threads'])
     def listen_and_launch(self):
+        logger.info('Begin pulling from task queue')
         while True:
-            print("Waiting for item in input_queue")
             param = self.input_queue.get()
-            print("Listen got param : [{}] of type: {}".format(
-                param, type(param)))
+            logger.debug(f'Received inputs {param}')
+
+            # Check for stop command
             if param == 'null' or param is None:
+                logging.info('None received. No longer listening for new tasks')
                 break
+
+            # Run the application
             future = self.run_application(param)
-            print("run_application returned {}".format(future))
-            self.task_list.append(future)
-        return self.task_list
+            # TODO (wardlt): Implement "resubmit if task renders a new future."
+            #  Requires waiting on two streams: input_queue and the output_queue
 
-    def make_outdir(self, path):
-        # Make outputs directory if it does not already exist
-        if not os.path.exists(path):
-            os.makedirs(path)
+            # Pass the future of that operation to the output queue
+            #  Note that we do not hold on to the future. No need to wait for them as of yet (see above TODO)
+            output_result(self.output_queue, param, future)
+            logger.debug(f'Pushed task to Parsl')
+        return
 
-    # Calls a function (remotely) and add result to output queue
-    def run_application(self, i):
-        print(f"Run_application called with {i}")
-        outdir = 'outputs'
-        self.make_outdir(outdir)
-        x = self.launch_method('simulate',
-                               i,
-                               delay=1 + int(i) % 2,
-                               outputs=[File(f'{outdir}/simulate_{i}.out')])
+    def run_application(self, params):
+        raise NotImplementedError()
 
-        y = self.launch_method('output_result',
-                               self.output_queue,
-                               i,
-                               inputs=[x.outputs[0]])
-        return y
+    def run(self) -> None:
+        """Launch the thread and start running tasks
 
-    def main_loop(self):
-        m = self.listen_and_launch(self)
-        print("Listener has exited", m.result())
-        for task in self.task_list:
-            current = task
-            print('Task:', current)
-            while True:
-                x = current.result()
-                if isinstance(x, Future):
-                    current = x
-                else:
-                    break
+        Blocks until the input queue is closed and all tasks have completed"""
+        logger.info(f"Started method server {self.__class__.__name__} on {self.ident}")
+
+        # Loop until queue has closed
+        self.listen_and_launch(self).result()
+
+        # Wait until all tasks have finished
         dfk = parsl.dfk()
         dfk.wait_for_current_tasks()
+        logger.info(f"All tasks have completed for {self.__class__.__name__} on {self.ident}")
