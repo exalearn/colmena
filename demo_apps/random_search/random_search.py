@@ -23,43 +23,30 @@ def target_fun(x: float) -> float:
 class Thinker(Thread):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, input_queue: RedisQueue, output_queue: RedisQueue,
-                 n_guesses: int = 10, log_file: str = 'thinker.log'):
+    def __init__(self, input_queue: RedisQueue, output_queue: RedisQueue, n_guesses: int = 10):
         """
         Args:
             n_guesses (int): Number of guesses the Thinker can make
             input_queue (RedisQueue): Queue to push new simulation commands
             redis_port (int): Port at which the redis server can be reached
-            task_prefix (str): Name of the queue holding the results of simulations
         """
         super().__init__()
         self.n_guesses = n_guesses
         self.input_queue = input_queue
         self.output_queue = output_queue
-        self.log_file = log_file
+        self.logger = logging.getLogger(self.__class__.__name__)
 
     def run(self):
-        """Connects to the Redis queue with the results and pulls them"""
-        # Open the logger
-        logger = logging.getLogger('thinker')
-        #handler = logging.FileHandler(self.log_file, 'w')
-        #handler.setFormatter(
-        #    logging.Formatter("%(asctime)s.%(msecs)03d %(name)s:%(lineno)d [%(levelname)s]  %(message)s")
-        #)
-        #logger.addHandler(handler)
-        #logger.setLevel(logging.INFO)
-        #logger.info(f'Launched thinking process: {self.pid}')
-
         # Make a bunch of guesses
         best_answer = inf
         for _ in range(self.n_guesses):
             # Add a new guess
             self.input_queue.put(uniform(0, 10))
-            logger.info("Added task to queue")
+            self.logger.info("Added task to queue")
 
             # Get a result
             _, result = self.output_queue.get()
-            logger.info("Received result")
+            self.logger.info("Received result")
 
             # Update the best answer
             best_answer = min(best_answer, result)
