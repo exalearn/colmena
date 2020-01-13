@@ -1,6 +1,5 @@
 """Wrappers for Redis queues."""
 
-import json
 import logging
 from typing import Optional, Any
 
@@ -43,10 +42,9 @@ class RedisQueue(object):
             if not self.redis_client:
                 self.redis_client = redis.StrictRedis(
                     host=self.hostname, port=self.port, decode_responses=True)
-                self.redis_client.ping() # Ping is needed to detect if connection failed
+                self.redis_client.ping()  # Ping is needed to detect if connection failed
         except redis.exceptions.ConnectionError:
-            print("ConnectionError while trying to connect to Redis@{}:{}".format(self.hostname,
-                                                                                  self.port))
+            logger.warning(f"ConnectionError while trying to connect to Redis@{self.hostname}:{self.port}")
             raise
 
     @_error_if_unconnected

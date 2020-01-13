@@ -59,4 +59,3 @@ def test_client_method_pair():
     result = client.get_result()
     assert result.value == 2
     assert result.time_result_received > result.time_result_completed
-
