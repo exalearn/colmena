@@ -3,6 +3,9 @@ python:
   - "3.6"
   - "3.7"
 
+services:
+  - redis-server
+
 env:
   global:
     - HYDRA_LAUNCHER=fork
