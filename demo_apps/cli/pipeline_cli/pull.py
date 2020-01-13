@@ -1,5 +1,5 @@
 import argparse
-from pipeline_prototype.redis_q import RedisQueue
+from pipeline_prototype.redis_q import ClientQueues
 
 
 def cli_run():
@@ -13,12 +13,10 @@ def cli_run():
                         help="Timeout for Redis request")
     args = parser.parse_args()
 
-    redis_queue = RedisQueue(args.redishost, port=int(
-        args.redisport), prefix='output')
-    redis_queue.connect()
+    redis_queue = ClientQueues(args.redishost, port=args.redisport)
 
-    value = redis_queue.get(timeout=args.timeout)
-    print(f"Pulled from Redis: {value}")
+    value = redis_queue.get_result(timeout=args.timeout)
+    print(f"Pulled from Redis: {value.value}")
 
 
 if __name__ == "__main__":

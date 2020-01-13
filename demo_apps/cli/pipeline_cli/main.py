@@ -7,8 +7,7 @@ from parsl.providers import LocalProvider
 from parsl.config import Config
 from parsl import python_app
 
-from pipeline_prototype.redis_q import RedisQueue
-
+from pipeline_prototype.redis_q import MethodServerQueues
 from pipeline_prototype.method_server import MethodServer
 
 # Hard code the function to be optimized
@@ -64,43 +63,23 @@ def cli_run():
         )
     parsl.load(config)
 
-    print('''This program creates an "MPI Method Server" that listens on an input queue and write on an output queue:
+    print('''This program creates an "MPI Method Server" that listens on an inputs queue and write on an output queue:
 
-        input_queue --> mpi_method_server --> output_queue
+        input_queue --> mpi_method_server --> queues
 
-To send it a request, add an entry to the input queue:
+To send it a request, add an entry to the inputs queue:
      run "pipeline-pump -p N" where N is an integer request
-To access a result, remove it from the outout queue:
+To access a value, remove it from the outout queue:
      run "pipeline-pull" (blocking) or "pipeline-pull -t T" (T an integer) to time out after T seconds
      TODO: Timeout does not work yet!
 ''')
 
-    # input_queue --> mpi_method_server --> output_queue
+    # Get the queues for the method server
+    method_queues = MethodServerQueues(args.redishost, port=args.redisport)
 
-    input_queue = RedisQueue(args.redishost, port=int(
-        args.redisport), prefix='input')
-    try:
-        input_queue.connect()
-    except:
-        exit(1)
-
-    output_queue = RedisQueue(args.redishost, port=int(
-        args.redisport), prefix='output')
-    try:
-        output_queue.connect()
-    except:
-        exit(1)
-
-    # value_server = RedisQueue(args.redishost, port=int(args.redisport), prefix='value')
-    # value_server.connect()
-
-    mms = FunctionServer(input_queue, output_queue)
+    # Start the method server
+    mms = FunctionServer(method_queues)
     mms.run()
-
-    # Next up, we likely want to add the ability to create a value server and connect it to a method server, e.g.:
-    # vs = value_server.ValueServer(output_queue)
-
-    print("All done")
 
 
 if __name__ == "__main__":

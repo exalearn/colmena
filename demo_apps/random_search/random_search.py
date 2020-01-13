@@ -1,6 +1,6 @@
 """Launches a random-search program"""
 from pipeline_prototype.method_server import MethodServer
-from pipeline_prototype.redis_q import RedisQueue
+from pipeline_prototype.redis_q import ClientQueues, MethodServerQueues
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider
 from parsl.config import Config
@@ -23,17 +23,15 @@ def target_fun(x: float) -> float:
 class Thinker(Thread):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, input_queue: RedisQueue, output_queue: RedisQueue, n_guesses: int = 10):
+    def __init__(self, queues: ClientQueues, n_guesses: int = 10):
         """
         Args:
+            queues (ClientQueues): Communicator to the MethodServer
             n_guesses (int): Number of guesses the Thinker can make
-            input_queue (RedisQueue): Queue to push new simulation commands
-            redis_port (int): Port at which the redis server can be reached
         """
         super().__init__()
         self.n_guesses = n_guesses
-        self.input_queue = input_queue
-        self.output_queue = output_queue
+        self.queues = queues
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def run(self):
@@ -41,15 +39,15 @@ class Thinker(Thread):
         best_answer = inf
         for _ in range(self.n_guesses):
             # Add a new guess
-            self.input_queue.put(uniform(0, 10))
+            self.queues.send_inputs(uniform(0, 10))
             self.logger.info("Added task to queue")
 
-            # Get a result
-            _, result = self.output_queue.get()
-            self.logger.info("Received result")
+            # Get a value
+            result = self.queues.get_result()
+            self.logger.info(f"Received value: {result}")
 
             # Update the best answer
-            best_answer = min(best_answer, result)
+            best_answer = min(best_answer, result.value)
 
         # Write the best answer to disk
         with open('answer.out', 'w') as fp:
@@ -64,7 +62,7 @@ class Doer(MethodServer):
 
 
 if __name__ == '__main__':
-    # User input
+    # User inputs
     parser = argparse.ArgumentParser()
     parser.add_argument("--redishost", default="127.0.0.1",
                         help="Address at which the redis server can be reached")
@@ -96,17 +94,12 @@ if __name__ == '__main__':
     parsl.load(config)
 
     # Connect to the redis server
-    input_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='input')
-    input_queue.connect()
-    input_queue.flush()
-
-    output_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='output')
-    output_queue.connect()
-    output_queue.flush()
+    client_queues = ClientQueues(args.redishost, args.redisport)
+    server_queues = MethodServerQueues(args.redishost, args.redisport)
 
     # Create the method server and task generator
-    doer = Doer(input_queue, output_queue)
-    thinker = Thinker(input_queue, output_queue)
+    doer = Doer(server_queues)
+    thinker = Thinker(client_queues)
     logging.info('Created the method server and task generator')
 
     try:
@@ -120,9 +113,8 @@ if __name__ == '__main__':
         # Wait for the task generator to complete
         thinker.join()
         logging.info('Task generator has completed')
-        input_queue.put('null')  # Send the "exit" to the method server
-
-        # Wait for the method server to complete
-        doer.join()
     finally:
-        input_queue.put("null")  # Closes the "Doer"
+        client_queues.send_kill_signal()
+
+    # Wait for the method server to complete
+    doer.join()

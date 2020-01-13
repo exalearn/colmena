@@ -1,6 +1,6 @@
 """Perform GPR Active Learning where the model is trained / ran on the local thread"""
 from pipeline_prototype.method_server import MethodServer
-from pipeline_prototype.redis_q import RedisQueue
+from pipeline_prototype.redis_q import MethodServerQueues, ClientQueues
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider
@@ -24,33 +24,31 @@ def target_fun(x: float) -> float:
 class Thinker(Thread):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, input_queue: RedisQueue, output_queue: RedisQueue, n_guesses: int = 10):
+    def __init__(self, queues: ClientQueues, n_guesses: int = 10):
         """
         Args:
             n_guesses (int): Number of guesses the Thinker can make
-            input_queue (RedisQueue): Queue to push new simulation commands
-            redis_port (int): Port at which the redis server can be reached
+            queues (ClientQueues): Queues for communicating with method server
         """
         super().__init__()
         self.n_guesses = n_guesses
-        self.input_queue = input_queue
-        self.output_queue = output_queue
+        self.queues = queues
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def run(self):
         """Connects to the Redis queue with the results and pulls them"""
 
         # Make a random guess to start
-        self.input_queue.put(uniform(0, 10))
+        self.queues.send_inputs(uniform(0, 10))
         self.logger.info('Submitted initial random guess')
         train_X = []
         train_y = []
 
         # Use the initial guess to train a GPR
         gpr = GaussianProcessRegressor(normalize_y=True, kernel=kernels.RBF() * kernels.ConstantKernel())
-        x, y = self.output_queue.get()
-        train_X.append([x])
-        train_y.append(y)
+        result = self.queues.get_result()
+        train_X.append([result.inputs])
+        train_y.append(result.value)
 
         # Make guesses based on expected improvement
         for _ in range(self.n_guesses - 1):
@@ -67,16 +65,16 @@ class Thinker(Thread):
 
             # Run the sample with the highest EI
             best_ei = sample_X[np.argmax(ei), 0]
-            self.input_queue.put(best_ei)
+            self.queues.send_inputs(best_ei)
             self.logger.info(f'Sent new guess based on EI: {best_ei}')
 
-            # Wait for the result to complete
-            _, result = self.output_queue.get()
-            self.logger.info('Received result')
+            # Wait for the value to complete
+            result = self.queues.get_result()
+            self.logger.info('Received value')
 
-            # Add the result to the training set for the GPR
+            # Add the value to the training set for the GPR
             train_X.append([best_ei])
-            train_y.append(result)
+            train_y.append(result.value)
 
         # Write the best answer to disk
         with open('answer.out', 'w') as fp:
@@ -85,13 +83,12 @@ class Thinker(Thread):
 
 class Doer(MethodServer):
     """Class the manages running the function to be optimized"""
-
     def run_application(self, i):
         return target_fun(i)
 
 
 if __name__ == '__main__':
-    # User input
+    # User inputs
     parser = argparse.ArgumentParser()
     parser.add_argument("--redishost", default="127.0.0.1",
                         help="Address at which the redis server can be reached")
@@ -123,17 +120,12 @@ if __name__ == '__main__':
     parsl.load(config)
 
     # Connect to the redis server
-    input_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='input')
-    input_queue.connect()
-    input_queue.flush()
-
-    output_queue = RedisQueue(args.redishost, port=int(args.redisport), prefix='output')
-    output_queue.connect()
-    output_queue.flush()
+    client_queues = ClientQueues(args.redishost, args.redisport)
+    server_queues = MethodServerQueues(args.redishost, args.redisport)
 
     # Create the method server and task generator
-    doer = Doer(input_queue, output_queue)
-    thinker = Thinker(input_queue, output_queue)
+    doer = Doer(server_queues)
+    thinker = Thinker(client_queues)
     logging.info('Created the method server and task generator')
 
     try:
@@ -147,9 +139,8 @@ if __name__ == '__main__':
         # Wait for the task generator to complete
         thinker.join()
         logging.info('Task generator has completed')
-        input_queue.put('null')  # Send the "exit" to the method server
-
-        # Wait for the method server to complete
-        doer.join()
     finally:
-        input_queue.put("null")  # Closes the "Doer"
+        client_queues.send_kill_signal()
+
+    # Wait for the method server to complete
+    doer.join()
