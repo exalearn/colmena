@@ -1,9 +1,10 @@
 import logging
 from threading import Thread
-from typing import Any, Optional
+from typing import Any, Optional, List, Callable, Tuple
 
 import parsl
 from parsl import python_app
+from parsl.app.app import AppBase
 
 from pipeline_prototype.redis_q import MethodServerQueues
 from pipeline_prototype.models import Result
@@ -16,6 +17,9 @@ def output_result(queues: MethodServerQueues, result_obj: Result, output_param: 
     result_obj.set_result(output_param)
     return queues.send_result(result_obj)
 
+
+# TODO (wardlt): Have the MethodServer class manage creating Parsl apps?
+# TODO (wardlt): How do we send back errors? Errors currently cause apps to hang
 
 class MethodServer(Thread):
     """Abstract class that executes requests across distributed resources.
@@ -80,3 +84,25 @@ class MethodServer(Thread):
         dfk = parsl.dfk()
         dfk.wait_for_current_tasks()
         logger.info(f"All tasks have completed for {self.__class__.__name__} on {self.ident}")
+
+
+class MultiMethodServer(MethodServer):
+    """Server that can handle multiple methods"""
+
+    def __init__(self, queues: MethodServerQueues, methods: List[Callable], timeout: Optional[int] = None):
+        super(MultiMethodServer, self).__init__(queues, timeout)
+        self._methods = dict((n.__name__, n) for n in methods)  # Store them in a dict for fast lookup
+
+        # Make sure each method is a ParslApp
+        for name, func in self._methods.items():
+            if not isinstance(func, AppBase):
+                raise ValueError(f'Function "{name}" is not a Parsl app')
+
+    def run_application(self, params: Tuple[str, Any]):
+        # Make sure the input is the correct
+        if not isinstance(params, (list, tuple)) or len(params) != 2:
+            raise ValueError('Inputs need to be a tuple: (method_name, input_data)')
+        method_name, input_data = params
+
+        # Run the desired method
+        return self._methods[method_name](*input_data)

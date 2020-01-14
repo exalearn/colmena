@@ -4,6 +4,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+# TODO (wardlt): Make a result subclass for easily using multimethod servers? Or, add a field for "method" and allow
+#  that to get filled by the queue
+# TODO (wardlt): Be able to define kwargs in the `send_inputs`
+
 
 class Result(BaseModel):
     """A class which describes the inputs and results of the calculations evaluated by the MethodServer
