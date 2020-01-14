@@ -1,5 +1,9 @@
-from pipeline_prototype.redis_q import RedisQueue, ClientQueues, MethodServerQueues
+from pipeline_prototype.redis_q import RedisQueue, ClientQueues, MethodServerQueues, make_queue_pairs
 import pytest
+
+
+class Test:
+    x = None
 
 
 @pytest.fixture
@@ -59,3 +63,33 @@ def test_client_method_pair():
     result = client.get_result()
     assert result.value == 2
     assert result.time_result_received > result.time_result_completed
+
+
+def test_pickling_error():
+    """Test communicating results that need to be pickled fails without correct setting"""
+    client, server = make_queue_pairs('localhost')
+
+    # Attempt to push a non-JSONable object to the queue
+    with pytest.raises(TypeError):
+        client.send_inputs(Test())
+
+
+def test_pickling():
+    """Test communicating results that need to be pickled fails without correct setting"""
+    client, server = make_queue_pairs('localhost', use_pickle=True)
+
+    # Attempt to push a non-JSONable object to the queue
+    client.send_inputs(Test())
+    task = server.get_task()
+    assert task.inputs.x is None
+
+    # Set the value
+    # Test sending the value back
+    x = Test()
+    x.x = 1
+    task.set_result(x)
+    server.send_result(task)
+    result = client.get_result()
+    assert result.inputs.x is None
+    assert result.value.x == 1
+

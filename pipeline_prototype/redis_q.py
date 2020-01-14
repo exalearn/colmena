@@ -1,7 +1,8 @@
 """Wrappers for Redis queues."""
 
 import logging
-from typing import Optional, Any
+import pickle as pkl
+from typing import Optional, Any, Tuple
 
 import redis
 
@@ -16,6 +17,25 @@ def _error_if_unconnected(f):
             raise ConnectionError('Not connected')
         return f(queue, *args, **kwargs)
     return wrapper
+
+
+def make_queue_pairs(hostname: str, port: int = 6379, name='method', use_pickle: bool = False,
+                     clean_slate: bool = True)\
+        -> Tuple['ClientQueues', 'MethodServerQueues']:
+    """Make a pair of queues for a server and client
+
+    Args:
+        hostname (str): Hostname of the Redis server
+        port (int): Port on which to access Redis
+        name (str): Name of the MethodServer
+        clean_slate (bool): Whether to flush the queues before launching
+        use_pickle (bool): Whether to use pickle to save Python objects before sending them
+    Returns:
+        (ClientQueues, MethodServerQueues): Pair of communicators set to use the correct channels
+    """
+
+    return (ClientQueues(hostname, port, name, use_pickle),
+            MethodServerQueues(hostname, port, name, clean_slate=clean_slate, use_pickle=use_pickle))
 
 
 class RedisQueue(object):
@@ -102,13 +122,16 @@ class RedisQueue(object):
 class ClientQueues:
     """Wraps communication with the MethodServer"""
 
-    def __init__(self, hostname: str, port: int = 6379, name: Optional[str] = None):
+    def __init__(self, hostname: str, port: int = 6379, name: Optional[str] = None, use_pickle: bool = False):
         """
         Args:
             hostname (str): Hostname of the Redis server
             port (int): Port on which to access Redis
             name (int): Name of the MethodServer
+            use_pickle (bool): Whether to use pickle to save Python objects before sending them
         """
+
+        self.use_pickle = use_pickle
 
         # Make the queues
         self.outbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs')
@@ -129,6 +152,8 @@ class ClientQueues:
         result = Result(input_data)
 
         # Push the serialized value to the method server
+        if self.use_pickle:
+            result.pickle_data()
         self.outbound.put(result.json(exclude_unset=True))
 
     def get_result(self, timeout: Optional[int] = None) -> Optional[Result]:
@@ -150,6 +175,8 @@ class ClientQueues:
 
         # Parse the value and mark it as complete
         result_obj = Result.parse_raw(message)
+        if self.use_pickle:
+            result_obj.unpickle_data()
         result_obj.mark_result_received()
         return result_obj
 
@@ -161,14 +188,18 @@ class ClientQueues:
 class MethodServerQueues:
     """Communication wrapper for the MethodServer itself"""
 
-    def __init__(self, hostname: str, port: int = 6379, name: Optional[str] = None, clean_slate: bool = True):
+    def __init__(self, hostname: str, port: int = 6379, name: Optional[str] = None,
+                 clean_slate: bool = True, use_pickle: bool = False):
         """
         Args:
             hostname (str): Hostname of the Redis server
             port (int): Port on which to access Redis
             name (str): Name of the MethodServer
             clean_slate (bool): Whether to flush the queues before launching
+            use_pickle (bool): Whether to use pickle to save Python objects before sending them
         """
+
+        self.use_pickle = use_pickle
 
         # Make the queues
         self.inbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs')
@@ -202,6 +233,8 @@ class MethodServerQueues:
 
         # Get the message
         task = Result.parse_raw(message)
+        if self.use_pickle:
+            task.unpickle_data()
         task.mark_input_received()
         return task
 
@@ -211,4 +244,6 @@ class MethodServerQueues:
         Args:
             (Result): Result object to communicate back
         """
+        if self.use_pickle:
+            result.pickle_data()
         self.outbound.put(result.json())

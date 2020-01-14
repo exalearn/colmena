@@ -1,3 +1,4 @@
+import pickle as pkl
 from datetime import datetime
 from typing import Any
 
@@ -45,3 +46,33 @@ class Result(BaseModel):
         """Set the value of this computation"""
         self.value = result
         self.time_result_completed = datetime.now().timestamp()
+
+    def pickle_data(self):
+        """Stores the input and value fields as a pickled objects"""
+        # TODO (wardlt): Talk to Yadu and co about best practices for pickling
+        _value = self.value
+        _inputs = self.inputs
+        try:
+            self.inputs = pkl.dumps(_inputs).hex()
+            self.value = pkl.dumps(_value).hex()
+        except pkl.PickleError:
+            # Put the original values back
+            self.inputs = _inputs
+            self.value = _value
+
+    def unpickle_data(self):
+        """Convert data out of pickled form"""
+        # Check that the data is actually a string
+        if not (isinstance(self.value, str) and isinstance(self.inputs, str)):
+            raise ValueError('Data is not in a serialized form. Are you sure you need to unpickle?')
+
+        # Unserialize the data
+        _value = self.value
+        _inputs = self.inputs
+        try:
+            self.inputs = pkl.loads(bytes.fromhex(_inputs))
+            self.value = pkl.loads(bytes.fromhex(_value))
+        except pkl.PickleError:
+            # Put the original values back
+            self.inputs = _inputs
+            self.value = _value
