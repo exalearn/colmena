@@ -5,6 +5,7 @@ from typing import Optional, Any, Tuple, Dict
 
 import redis
 
+from pipeline_prototype.execptions import TimeoutException, KillSignalException
 from pipeline_prototype.models import Result
 
 logger = logging.getLogger(__name__)
@@ -226,15 +227,19 @@ class MethodServerQueues:
             timeout (int): Timeout for waiting for a task
         Returns:
             (Result) Computation to run or ``None``, which means a kill signal was received
+        Raises:
+            TimeoutException: If the timeout on the queue is reached
+            Kill
         """
 
         # Pull a record off of the queue
         message = self.inbound.get(timeout)
 
         # Return the kill signal
-        # TODO (wardlt): Should we raise a TimeoutError when the timeout occurs?
-        if message == "null" or message is None:
-            return None
+        if message is None:
+            raise TimeoutException('Listening on task queue timed out')
+        elif message == "null":
+            raise KillSignalException('Kill signal received on task queue')
 
         # Get the message
         task = Result.parse_raw(message)

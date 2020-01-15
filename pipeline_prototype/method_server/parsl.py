@@ -6,6 +6,7 @@ import parsl
 from parsl import python_app
 from parsl.app.app import AppBase
 
+from pipeline_prototype.execptions import KillSignalException, TimeoutException
 from pipeline_prototype.redis_q import MethodServerQueues
 from pipeline_prototype.models import Result
 
@@ -47,26 +48,32 @@ class MethodServer(Thread):
         self.queues = queues
         self.timeout = timeout
 
+    def process_queue(self):
+        """Evaluate a single task from the queue"""
+        result = self.queues.get_task(self.timeout)
+        logger.info(f'Received inputs {result}')
+
+        # Run the application
+        future = self.run_application(result.method, *result.args, **result.kwargs)
+        # TODO (wardlt): Implement "resubmit if task returns a new future."
+        #  Requires waiting on two streams: input_queue and the queues
+
+        # Pass the future of that operation to the output queue
+        #  Note that we do not hold on to the future. No need to wait for them as of yet (see above TODO)
+        output_result(self.queues, result, future)
+        logger.debug(f'Pushed task to Parsl')
+
     def listen_and_launch(self):
         logger.info('Begin pulling from task queue')
         while True:
-            result = self.queues.get_task(self.timeout)
-            logger.info(f'Received inputs {result}')
-
-            # Check for stop command
-            if result == 'null' or result is None:
-                logging.info('None received. No longer listening for new tasks')
-                break
-
-            # Run the application
-            future = self.run_application(result.method, *result.args, **result.kwargs)
-            # TODO (wardlt): Implement "resubmit if task returns a new future."
-            #  Requires waiting on two streams: input_queue and the queues
-
-            # Pass the future of that operation to the output queue
-            #  Note that we do not hold on to the future. No need to wait for them as of yet (see above TODO)
-            output_result(self.queues, result, future)
-            logger.debug(f'Pushed task to Parsl')
+            try:
+                self.process_queue()
+            except KillSignalException:
+                logger.info('Kill signal received')
+                return
+            except TimeoutException:
+                logger.info('Timeout while waiting on task queue')
+                return
 
     def run_application(self, method_name, *args, **kwargs):
         """Run an application
