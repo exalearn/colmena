@@ -18,5 +18,10 @@ the ``Thinker`` class.
 
 ## Running 
 
+This example uses a custom class, ``Generator``, which must be installed on the Python path 
+for its definition to be accessible to the worker processes.
+Install it by calling ``pip install -e .``, which will put the ``generator_demo`` module
+on your pass.
+
 First launch a Redis server, then call `python generative.py`.
  

@@ -1,8 +1,7 @@
 """Wrappers for Redis queues."""
 
 import logging
-import pickle as pkl
-from typing import Optional, Any, Tuple
+from typing import Optional, Any, Tuple, Dict
 
 import redis
 
@@ -141,15 +140,21 @@ class ClientQueues:
         self.outbound.connect()
         self.inbound.connect()
 
-    def send_inputs(self, input_data: Any):
+    def send_inputs(self, *input_args: Any, method: str = None, input_kwargs: Optional[Dict[str, Any]] = None):
         """Send inputs to be computed
 
         Args:
-            input_data (Any): Inputs to be computed
+            *input_args (Any): Positional arguments to a function
+            method (str): Name of the method to run. Optional
+            input_kwargs (dict): Any keyword arguments for the function being run
         """
 
+        # Make fake kwargs, if needed
+        if input_kwargs is None:
+            input_kwargs = dict()
+
         # Create a new Result object
-        result = Result(input_data)
+        result = Result((input_args, input_kwargs), method=method)
 
         # Push the serialized value to the method server
         if self.use_pickle:

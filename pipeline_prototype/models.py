@@ -1,12 +1,8 @@
 import pickle as pkl
 from datetime import datetime
-from typing import Any
+from typing import Any, Tuple, Dict, Optional, Union
 
 from pydantic import BaseModel, Field
-
-# TODO (wardlt): Make a result subclass for easily using multimethod servers? Or, add a field for "method" and allow
-#  that to get filled by the queue
-# TODO (wardlt): Be able to define kwargs in the `send_inputs`
 
 
 class Result(BaseModel):
@@ -18,8 +14,11 @@ class Result(BaseModel):
     The Result class also handles serialization of the data to be transmitted over a RedisQueue
     """
 
-    inputs: Any = Field(None, description="Input to a function")
+    inputs: Union[Tuple[Tuple[Any, ...], Dict[str, Any]], str] =\
+        Field(None, description="Input to a function. Positional and keyword arguments. The `str` data type "
+                                "is for advanced usage and i used to communicate serialized objects.")
     value: Any = Field(None, description="Output of a function")
+    method: Optional[str] = Field(None, description="Name of the method to run.")
 
     time_created: float = Field(None, description="Time this value object was create")
     time_input_received: float = Field(None, description="Time the inputs was received by the method server")
@@ -27,16 +26,24 @@ class Result(BaseModel):
     time_running: float = Field(None, description="Runtime of the method. [TBD: Need to refactor method server]")
     time_result_received: float = Field(None, description="Time value was received by client")
 
-    def __init__(self, inputs, **kwargs):
+    def __init__(self, inputs: Tuple[Tuple[Any], Dict[str, Any]], **kwargs):
         """
         Args:
-             inputs: Input to a function
+             inputs (Any, Dict): Inputs to a function. Separated into positional and keyword arguments
         """
         super().__init__(inputs=inputs, **kwargs)
 
         # Mark "created" only if the value is not already set
         if 'time_created' not in kwargs:
             self.time_created = datetime.now().timestamp()
+
+    @property
+    def args(self) -> Tuple[Any]:
+        return self.inputs[0]
+
+    @property
+    def kwargs(self) -> Dict[str, Any]:
+        return self.inputs[1]
 
     def mark_result_received(self):
         """Mark that a completed computation was received by a client"""

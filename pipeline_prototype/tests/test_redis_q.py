@@ -53,7 +53,7 @@ def test_client_method_pair():
     # Push inputs to method server and make sure it is received
     client.send_inputs(1)
     task = server.get_task()
-    assert task.inputs == 1
+    assert task.args == (1,)
     assert task.time_input_received is not None
     assert task.time_created < task.time_input_received
 
@@ -65,11 +65,32 @@ def test_client_method_pair():
     assert result.time_result_received > result.time_result_completed
 
 
+def test_methods():
+    """Test sending a method name"""
+    client, server = make_queue_pairs('localhost')
+
+    # Push inputs to method server and make sure it is received
+    client.send_inputs(1, method='test')
+    task = server.get_task()
+    assert task.args == (1,)
+    assert task.method == 'test'
+    assert task.kwargs == {}
+
+
+def test_kwargs():
+    """Test sending function keyword arguments"""
+    client, server = make_queue_pairs('localhost')
+    client.send_inputs(1, input_kwargs={'hello': 'world'})
+    task = server.get_task()
+    assert task.args == (1,)
+    assert task.kwargs == {'hello': 'world'}
+
+
 def test_pickling_error():
     """Test communicating results that need to be pickled fails without correct setting"""
     client, server = make_queue_pairs('localhost')
 
-    # Attempt to push a non-JSONable object to the queue
+    # Attempt to push a non-JSON-able object to the queue
     with pytest.raises(TypeError):
         client.send_inputs(Test())
 
@@ -81,7 +102,7 @@ def test_pickling():
     # Attempt to push a non-JSONable object to the queue
     client.send_inputs(Test())
     task = server.get_task()
-    assert task.inputs.x is None
+    assert task.args[0].x is None
 
     # Set the value
     # Test sending the value back
@@ -90,6 +111,5 @@ def test_pickling():
     task.set_result(x)
     server.send_result(task)
     result = client.get_result()
-    assert result.inputs.x is None
+    assert result.args[0].x is None
     assert result.value.x == 1
-

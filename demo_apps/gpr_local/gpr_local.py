@@ -47,7 +47,7 @@ class Thinker(Thread):
         # Use the initial guess to train a GPR
         gpr = GaussianProcessRegressor(normalize_y=True, kernel=kernels.RBF() * kernels.ConstantKernel())
         result = self.queues.get_result()
-        train_X.append([result.inputs])
+        train_X.append(result.args)
         train_y.append(result.value)
 
         # Make guesses based on expected improvement
@@ -83,8 +83,8 @@ class Thinker(Thread):
 
 class Doer(MethodServer):
     """Class the manages running the function to be optimized"""
-    def run_application(self, i):
-        return target_fun(i)
+    def run_application(self, method, *args, **kwargs):
+        return target_fun(*args)
 
 
 if __name__ == '__main__':

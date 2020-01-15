@@ -1,6 +1,6 @@
 import logging
 from threading import Thread
-from typing import Any, Optional, List, Callable, Tuple
+from typing import Any, Optional, List, Callable
 
 import parsl
 from parsl import python_app
@@ -51,7 +51,7 @@ class MethodServer(Thread):
         logger.info('Begin pulling from task queue')
         while True:
             result = self.queues.get_task(self.timeout)
-            logger.debug(f'Received inputs {result}')
+            logger.info(f'Received inputs {result}')
 
             # Check for stop command
             if result == 'null' or result is None:
@@ -59,7 +59,7 @@ class MethodServer(Thread):
                 break
 
             # Run the application
-            future = self.run_application(result.inputs)
+            future = self.run_application(result.method, *result.args, **result.kwargs)
             # TODO (wardlt): Implement "resubmit if task returns a new future."
             #  Requires waiting on two streams: input_queue and the queues
 
@@ -68,7 +68,14 @@ class MethodServer(Thread):
             output_result(self.queues, result, future)
             logger.debug(f'Pushed task to Parsl')
 
-    def run_application(self, params):
+    def run_application(self, method_name, *args, **kwargs):
+        """Run an application
+
+        Args:
+            method_name (str): Name of the method to invoke
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+        """
         raise NotImplementedError()
 
     def run(self) -> None:
@@ -98,11 +105,5 @@ class MultiMethodServer(MethodServer):
             if not isinstance(func, AppBase):
                 raise ValueError(f'Function "{name}" is not a Parsl app')
 
-    def run_application(self, params: Tuple[str, Any]):
-        # Make sure the input is the correct
-        if not isinstance(params, (list, tuple)) or len(params) != 2:
-            raise ValueError('Inputs need to be a tuple: (method_name, input_data)')
-        method_name, input_data = params
-
-        # Run the desired method
-        return self._methods[method_name](*input_data)
+    def run_application(self, method_name, *args, **kwargs):
+        return self._methods[method_name](*args, **kwargs)

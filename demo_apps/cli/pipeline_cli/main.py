@@ -18,8 +18,8 @@ def target_fun(x: float) -> float:
 
 # Make a simple method server
 class FunctionServer(MethodServer):
-    def run_application(self, i):
-        return target_fun(i)
+    def run_application(self, method, *args, **kwargs):
+        return target_fun(*args)
 
 
 def cli_run():

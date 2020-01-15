@@ -24,7 +24,6 @@ import parsl
 def target_fun(x: float) -> float:
     return (x - 1) * (x - 2) * (x - 7) * (x + 1)
 
-
 # Make the generative model and its corresponding MethodServer
 @python_app(executors=["htex"])
 def generate(gen: Generator, n: int) -> List[float]:
@@ -62,7 +61,7 @@ class Thinker(Thread):
         """Connects to the Redis queue with the results and pulls them"""
 
         # Make a random guess to start
-        self.queues.send_inputs(('target_fun', (uniform(0, 10),)))
+        self.queues.send_inputs(uniform(0, 10), method='target_fun')
         self.logger.info('Submitted initial random guess')
         train_X = []
         train_y = []
@@ -75,32 +74,32 @@ class Thinker(Thread):
         for _ in range(self.n_guesses - 1):
             # Wait for the result
             result = self.queues.get_result()
-            self.logger.info(f'Received result: {(result.inputs[-1], result.value)}')
-            train_X.append(result.inputs[-1])
+            self.logger.info(f'Received result: {(result.args, result.value)}')
+            train_X.append(result.args)
             train_y.append(result.value)
 
             # Update the generator and  the entry generator
-            generator.partial_fit(result.inputs[-1][0], result.value)
+            generator.partial_fit(*result.args, result.value)
             gpr.fit(train_X, train_y)
 
             # Generate a random assortment of potential next points to sample
-            self.queues.send_inputs(('generate', (generator, 64)))
+            self.queues.send_inputs(generator, 64, method='generate')
             result = self.queues.get_result()
             sample_X = result.value
 
             # Compute the expected improvement for each point
-            self.queues.send_inputs(('score', (gpr, sample_X)))
+            self.queues.send_inputs(gpr, sample_X, method='score')
             result = self.queues.get_result()
             pred_y, pred_std = result.value
 
             # Select the best point
             best_y = np.min(train_y)
-            self.queues.send_inputs(('select', (best_y, pred_y, pred_std)))
+            self.queues.send_inputs(best_y, pred_y, pred_std, method='select')
             result = self.queues.get_result()
             chosen_ix = result.value
 
             # Run the sample with the highest EI
-            self.queues.send_inputs(('target_fun', sample_X[chosen_ix]))
+            self.queues.send_inputs(*sample_X[chosen_ix], method='target_fun')
 
         # Write the best answer to disk
         with open('answer.out', 'w') as fp:
@@ -141,7 +140,8 @@ if __name__ == '__main__':
     parsl.set_stream_logger(level=logging.INFO)
 
     # Connect to the redis server
-    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport, clean_slate=True, use_pickle=True)
+    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport,
+                                                    clean_slate=True, use_pickle=True)
 
     # Create the method server and task generator
     doer = MultiMethodServer(server_queues, methods=[

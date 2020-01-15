@@ -14,7 +14,7 @@ class Generator:
     def partial_fit(self, x: np.ndarray, y: float):
         """Add another entry"""
         if y < self.best_y:
-            self.width = abs(self.best_x - x) * 2
+            self.width = max(abs(self.best_x - x) * 2, 1)  # Mark the increase if needed
             self.best_x = x
             self.best_y = y
 
