@@ -16,7 +16,7 @@ class Result(BaseModel):
 
     inputs: Union[Tuple[Tuple[Any, ...], Dict[str, Any]], str] =\
         Field(None, description="Input to a function. Positional and keyword arguments. The `str` data type "
-                                "is for advanced usage and i used to communicate serialized objects.")
+                                "is for advanced usage and is used to communicate serialized objects.")
     value: Any = Field(None, description="Output of a function")
     method: Optional[str] = Field(None, description="Name of the method to run.")
 

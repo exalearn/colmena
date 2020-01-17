@@ -1,5 +1,5 @@
 import argparse
-from pipeline_prototype.redis_q import ClientQueues
+from pipeline_prototype.redis.queue import ClientQueues
 
 
 def cli_run():

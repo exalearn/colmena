@@ -4,7 +4,7 @@ from parsl.config import Config
 from parsl import python_app, ThreadPoolExecutor
 
 from pipeline_prototype.execptions import KillSignalException, TimeoutException
-from pipeline_prototype.redis_q import ClientQueues, make_queue_pairs
+from pipeline_prototype.redis.queue import ClientQueues, make_queue_pairs
 from pydantic.validators import Tuple
 
 from pipeline_prototype.method_server.parsl import MethodServer

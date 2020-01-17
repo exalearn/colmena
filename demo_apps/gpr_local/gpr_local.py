@@ -1,6 +1,6 @@
 """Perform GPR Active Learning where the model is trained / ran on the local thread"""
 from pipeline_prototype.method_server import MethodServer
-from pipeline_prototype.redis_q import MethodServerQueues, ClientQueues
+from pipeline_prototype.redis.queue import MethodServerQueues, ClientQueues
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider

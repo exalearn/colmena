@@ -2,7 +2,7 @@
 from generator_demo import Generator
 
 from pipeline_prototype.method_server import MultiMethodServer
-from pipeline_prototype.redis_q import ClientQueues, make_queue_pairs
+from pipeline_prototype.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider

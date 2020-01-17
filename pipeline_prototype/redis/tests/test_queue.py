@@ -1,4 +1,4 @@
-from pipeline_prototype.redis_q import RedisQueue, ClientQueues, MethodServerQueues, make_queue_pairs
+from pipeline_prototype.redis.queue import RedisQueue, ClientQueues, MethodServerQueues, make_queue_pairs
 import pytest
 
 

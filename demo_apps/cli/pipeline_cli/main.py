@@ -7,7 +7,7 @@ from parsl.providers import LocalProvider
 from parsl.config import Config
 from parsl import python_app
 
-from pipeline_prototype.redis_q import MethodServerQueues
+from pipeline_prototype.redis.queue import MethodServerQueues
 from pipeline_prototype.method_server import MethodServer
 
 # Hard code the function to be optimized

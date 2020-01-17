@@ -7,7 +7,7 @@ from parsl import python_app
 from parsl.app.app import AppBase
 
 from pipeline_prototype.execptions import KillSignalException, TimeoutException
-from pipeline_prototype.redis_q import MethodServerQueues
+from pipeline_prototype.redis.queue import MethodServerQueues
 from pipeline_prototype.models import Result
 
 logger = logging.getLogger(__name__)
