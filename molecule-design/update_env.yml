@@ -1,0 +1,14 @@
+channels:
+  - conda-forge
+  - psi4
+dependencies:
+  - qcfractal==0.13.1
+  - qcengine==0.14.0
+  - rdkit==2019.09.3
+  - tensorflow==1.14.0
+  - keras==2.3.1
+  - psi4
+  - pip
+  - pip:
+      - gym
+      - -e .
