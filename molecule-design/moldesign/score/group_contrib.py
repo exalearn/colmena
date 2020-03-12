@@ -46,6 +46,7 @@ def get_groups(smiles: str) -> [str]:
 
         # Compile them into a SMARTS
         if len(bonds) > 0:
+            bonds = sorted(bonds)
             my_type += ''.join(f'({x})' for x in bonds[:-1])
             my_type += bonds[-1]
         output.append(my_type)
