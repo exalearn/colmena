@@ -2,6 +2,8 @@ channels:
   - conda-forge
   - psi4
 dependencies:
+  - openbabel==3.0.*
+  - geometric==0.9.*
   - qcfractal==0.13.1
   - qcengine==0.14.0
   - rdkit==2019.09.3
