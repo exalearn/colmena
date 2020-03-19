@@ -1,6 +1,6 @@
 channels:
   - conda-forge
-  - psi4
+  - psi4/label/dev
 dependencies:
   - openbabel==3.0.*
   - geometric==0.9.*
@@ -9,7 +9,7 @@ dependencies:
   - rdkit==2019.09.3
   - tensorflow==1.14.0
   - keras==2.3.1
-  - psi4
+  - psi4==1.4*
   - pip
   - pip:
       - gym
