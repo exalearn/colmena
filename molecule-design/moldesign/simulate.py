@@ -2,15 +2,15 @@
 
 from typing import Dict
 
-from qcelemental.models import AtomicInput, OptimizationInput, Molecule
+from qcelemental.models import OptimizationInput, Molecule, AtomicInput
 from qcelemental.models.procedures import QCInputSpecification
 from qcengine import compute_procedure, compute
-from rdkit import Chem
-from rdkit.Chem import AllChem
 
 from openbabel import OBConformerSearch, OBForceField
 from openbabel.pybel import readstring
 from openbabel import pybel
+
+_code = 'psi4'
 
 
 def generate_atomic_coordinates(smiles) -> str:
@@ -58,7 +58,8 @@ def _get_forcefield(mol: Molecule) -> OBForceField:
     return ff
 
 
-def compute_atomization_energy(smiles: str, qc_config: QCInputSpecification, reference_energies: Dict[int, float]) -> float:
+def compute_atomization_energy(smiles: str, qc_config: QCInputSpecification,
+                               reference_energies: Dict[str, float]) -> float:
     """Compute the atomization energy of a molecule given the SMILES string
 
     Args:
@@ -74,6 +75,35 @@ def compute_atomization_energy(smiles: str, qc_config: QCInputSpecification, ref
     mol = Molecule.from_data(xyz, dtype='xyz')
 
     # Run the relaxation
-    opt_input = dict(input_specification=qc_config, initial_molecule=mol, keywords={'program': 'psi4'})
+    opt_input = OptimizationInput(input_specification=qc_config,
+                                  initial_molecule=mol, keywords={'program': _code})
     res = compute_procedure(opt_input, 'geometric', raise_error=True)
-    return res
+
+    # Get the energy of the relaxed structure
+    total_energy = res.energies[-1]
+    for label in mol.symbols:
+        total_energy -= reference_energies[label]
+
+    # Get the output energy
+    return total_energy
+
+
+def compute_reference_energy(element: str, qc_config: QCInputSpecification) -> float:
+    """Compute the energy of an isolated atom in vacuum
+
+    Args:
+        element (str): Symbol of the element
+        qc_config (QCInputSpecification): Quantum Chemistry configuration used for evaluating he energy
+    Returns:
+        (float): Energy of the isolated atom
+    """
+
+    # Make the molecule
+    xyz = f'1\n{element}\n{element} 0 0 0'
+    mol = Molecule.from_data(xyz, dtype='xyz')
+
+    # Run the atomization energy calculation
+    input_spec = AtomicInput(molecule=mol, driver='energy', model=qc_config.model, keywords=qc_config.keywords)
+    result = compute(input_spec, _code)
+
+    return result.return_result
