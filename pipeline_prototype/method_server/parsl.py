@@ -106,6 +106,7 @@ class MultiMethodServer(MethodServer):
     def __init__(self, queues: MethodServerQueues, methods: List[Callable], timeout: Optional[int] = None):
         super(MultiMethodServer, self).__init__(queues, timeout)
         self._methods = dict((n.__name__, n) for n in methods)  # Store them in a dict for fast lookup
+        logger.info(f'Registered {len(self._methods)} methods: {" ".join(self._methods.keys())}')
 
         # Make sure each method is a ParslApp
         for name, func in self._methods.items():
