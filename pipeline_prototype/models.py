@@ -66,10 +66,11 @@ class Result(BaseModel):
         try:
             self.inputs = pkl.dumps(_inputs).hex()
             self.value = pkl.dumps(_value).hex()
-        except pkl.PickleError:
+        except pkl.PickleError as e:
             # Put the original values back
             self.inputs = _inputs
             self.value = _value
+            raise e
 
     def unpickle_data(self):
         """Convert data out of pickled form"""
