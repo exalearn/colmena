@@ -1,7 +1,8 @@
 import logging
-from typing import Callable, Set
+from typing import Set
 
 from rdkit import RDLogger
+from sklearn.base import BaseEstimator
 
 from .agents.dqn_variable_actions import DQNFinalState
 from .envs import Molecule
@@ -12,13 +13,13 @@ rdkit_logger = RDLogger.logger()
 rdkit_logger.setLevel(RDLogger.CRITICAL)
 
 
-def generate_molecules(target_fn: Callable[[str], float], episodes: int = 10,
+def generate_molecules(target_fn: BaseEstimator, episodes: int = 10,
                        n_steps: int = 32, update_q_every: int = 10) -> Set[str]:
     """Perform the RL experiment
 
     Args:
-        target_fn (Callable): Function to be optimized
-        env (Molecule): Molecular environment used to model the system
+        target_fn (Callable): Function to be optimized. Takes a list of entries as input
+            and returns a list of values as the target. Higher values of the function are better
         episodes (int): Number of episodes to run
         n_steps (int): Maximum number of steps per episode
         update_q_every (int): After how many updates to update the Q function
@@ -27,7 +28,10 @@ def generate_molecules(target_fn: Callable[[str], float], episodes: int = 10,
     """
 
     # Make the environment
-    env = Molecule(max_steps=n_steps, target_fn=target_fn)
+    #  We do not yet support vectorized target functions, so use this wrapper to
+    def non_vector_target_fn(smiles: str) -> float:
+        return target_fn.predict([smiles])[0]
+    env = Molecule(max_steps=n_steps, target_fn=non_vector_target_fn)
 
     # Run the reinforcement learning
     best_reward = 0
@@ -41,6 +45,7 @@ def generate_molecules(target_fn: Callable[[str], float], episodes: int = 10,
     # Keep track of the smiles strings
     for e in range(episodes):
         current_state = env.reset()
+        logger.info(f'Starting episode {e+1}/{episodes}')
         for s in range(n_steps):
             # Get action based on current state
             action = agent.action()

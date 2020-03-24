@@ -5,7 +5,7 @@ from typing import List
 from sklearn.base import BaseEstimator
 
 
-def add_score(model: BaseEstimator, designs: List[str]) -> List[float]:
+def compute_score(model: BaseEstimator, designs: List[str]) -> List[float]:
     """Assign a score to a series of designs given a machine learning model
 
     Args:
@@ -17,4 +17,4 @@ def add_score(model: BaseEstimator, designs: List[str]) -> List[float]:
     y_pred = model.predict(designs)
 
     # Return results
-    return y_pred.to_list()
+    return y_pred.tolist()

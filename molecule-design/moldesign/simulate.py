@@ -104,6 +104,6 @@ def compute_reference_energy(element: str, qc_config: QCInputSpecification) -> f
 
     # Run the atomization energy calculation
     input_spec = AtomicInput(molecule=mol, driver='energy', model=qc_config.model, keywords=qc_config.keywords)
-    result = compute(input_spec, _code)
+    result = compute(input_spec, _code, raise_error=True)
 
     return result.return_result
