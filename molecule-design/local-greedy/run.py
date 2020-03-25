@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+from csv import DictWriter
 from datetime import datetime
 from threading import Thread
 from typing import List
@@ -15,7 +16,6 @@ from moldesign.score import compute_score
 from moldesign.score.group_contrib import GroupFeaturizer
 from moldesign.select import greedy_selection
 from moldesign.simulate import compute_atomization_energy, compute_reference_energy
-from parsl.app.python import PythonApp
 from parsl.config import Config
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider
@@ -23,17 +23,11 @@ from qcelemental.models.procedures import QCInputSpecification, Model
 from sklearn.linear_model import BayesianRidge
 from sklearn.pipeline import Pipeline
 
-from pipeline_prototype.method_server import MultiMethodServer
+from pipeline_prototype.method_server import ParslMethodServer
 from pipeline_prototype.redis.queue import ClientQueues, make_queue_pairs
 
 # Define the QCMethod used for the
 spec = QCInputSpecification(model=Model(method='hf', basis='sto-3g'))
-
-# Create the methods
-sample = PythonApp(generate_molecules, executors=['htex'])
-score = PythonApp(compute_score, executors=['htex'])
-simulate = PythonApp(compute_atomization_energy, executors=['htex'])
-reference = PythonApp(compute_reference_energy, executors=['htex'])
 
 
 class Thinker(Thread):
@@ -42,11 +36,12 @@ class Thinker(Thread):
     Performs one simulation at a time and generates molecules in batches.
     """
 
-    def __init__(self, queues: ClientQueues, initial_molecules: List[str],
+    def __init__(self, queues: ClientQueues, initial_molecules: List[str], output_dir: str,
                  n_parallel: int = 1, n_molecules: int = 10):
         """
         Args:
             n_molecules (int): Number of molecules to evaluate
+            output_dir (str): Path to the run directory
             initial_molecules ([str]): Initial database of molecular property data
             n_parallel (int): Maximum number of QC calculations to perform in parallel
             queues (ClientQueues): Queues for communicating with method server
@@ -59,11 +54,18 @@ class Thinker(Thread):
         assert n_molecules % n_parallel == 0, "# evals must be a multiple of the number of calculations in parallel"
         self.queues = queues
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.output_dir = output_dir
 
     def run(self):
+        # Output files
+        output_files = {
+            'simulation': open(os.path.join(self.output_dir, 'simulation_records.jsonld'), 'w')
+        }
+
         # Get the reference energies
         #  TODO (wardlt): I write many of the "send out and wait" patterns, should I build a utility
         #   or is this a fundamental issue?
+        self.logger.info(f'Starting Thinker process')
         elems = ['H', 'C', 'N', 'O', 'F']
         for elem in elems:
             self.queues.send_inputs(elem, spec, method='compute_reference_energy')
@@ -71,6 +73,7 @@ class Thinker(Thread):
         for _ in elems:
             result = self.queues.get_result()
             ref_energies[result.args[0]] = result.value
+        self.logger.info(f'Computed reference energies for: {", ".join(ref_energies.keys())}')
 
         # Run the initial molecules
         for mol in self.initial_molecules:
@@ -78,8 +81,11 @@ class Thinker(Thread):
         for _ in self.initial_molecules:
             result = self.queues.get_result()
             self.database[result.args[0]] = result.value
+            print(result.json(), file=output_files['simulation'])
+        self.logger.info(f'Computed initial population of {len(self.database)} molecules')
 
         for i in range(self.n_evals // self.n_parallel):
+            self.logger.info(f'Starting design loop step {i}')
             # Train the machine learning model
             gf = GroupFeaturizer()
             model = Pipeline([
@@ -113,6 +119,7 @@ class Thinker(Thread):
             for _ in selections:
                 output = self.queues.get_result()
                 self.database[output.args[0]] = output.value
+                print(output.json(), file=output_files['simulation'])
 
 
 if __name__ == '__main__':
@@ -147,7 +154,8 @@ if __name__ == '__main__':
 
     # Set up the logging
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        level=logging.INFO)
+                        level=logging.INFO,
+                        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log'))])
 
     # Write the configuration
     config = Config(
@@ -172,19 +180,17 @@ if __name__ == '__main__':
     client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport, use_pickle=True)
 
     # Create the method server and task generator
-    doer = MultiMethodServer(server_queues, [
-        score, sample, simulate, reference
-    ])
+    doer = ParslMethodServer([generate_molecules, compute_score, compute_atomization_energy, compute_reference_energy],
+                             server_queues, default_executors=['htex'])
 
     # Select a list of initial molecules
     with open('qm9-smiles.json') as fp:
-        #initial_mols = np.random.choice(json.load(fp), size=(args.initial_count,), replace=False)
-        initial_mols = json.load(fp)[:2]
+        initial_mols = np.random.choice(json.load(fp), size=(args.initial_count,), replace=False)
 
-    thinker = Thinker(client_queues, initial_molecules=initial_mols,
+    thinker = Thinker(client_queues, output_dir=out_dir,
+                      initial_molecules=initial_mols,
                       n_parallel=args.parallel_guesses)
     logging.info('Created the method server and task generator')
-    logging.info(sys.stderr)
 
     try:
         # Launch the servers
