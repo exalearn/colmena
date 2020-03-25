@@ -1,7 +1,7 @@
 """Perform a multi-step AI workflow"""
 from generator_demo import Generator
 
-from pipeline_prototype.method_server import MultiMethodServer
+from pipeline_prototype.method_server import ParslMethodServer
 from pipeline_prototype.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
@@ -20,22 +20,21 @@ import parsl
 # TODO (wardlt): Handle piping results to next calculation on the server side, avoid serializing to/from client
 
 # Hard code the function to be optimized
-@python_app(executors=["htex"])
 def target_fun(x: float) -> float:
     return (x - 1) * (x - 2) * (x - 7) * (x + 1)
 
+
 # Make the generative model and its corresponding MethodServer
-@python_app(executors=["htex"])
 def generate(gen: Generator, n: int) -> List[float]:
     return gen.generate(n)
 
+
 # Create the scorer: Runs a GPR
-@python_app(executors=["htex"])
 def score(gpr: GaussianProcessRegressor, x: np.ndarray):
     return gpr.predict(x, return_std=True)
 
+
 # Make the selector. Determines which calculation to run next
-@python_app(executors=["htex"])
 def select(best_so_far: float, pred_y: np.ndarray, pred_std: np.ndarray) -> int:
     import numpy as np
     ei = (best_so_far - pred_y) / pred_std
@@ -144,9 +143,9 @@ if __name__ == '__main__':
                                                     clean_slate=True, use_pickle=True)
 
     # Create the method server and task generator
-    doer = MultiMethodServer(server_queues, methods=[
+    doer = ParslMethodServer([
         target_fun, generate, score, select
-    ])
+    ], server_queues, default_executors=['htex'])
     thinker = Thinker(client_queues)
     logging.info('Created the method server and task generator')
 

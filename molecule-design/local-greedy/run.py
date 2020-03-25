@@ -16,7 +16,6 @@ from moldesign.score.group_contrib import GroupFeaturizer
 from moldesign.select import greedy_selection
 from moldesign.simulate import compute_atomization_energy, compute_reference_energy
 from parsl.app.python import PythonApp
-from parsl.channels import SSHChannel
 from parsl.config import Config
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider
@@ -89,7 +88,7 @@ class Thinker(Thread):
             ])
             mols, atoms = zip(*self.database.items())
             model.fit(mols, np.multiply(atoms, -1))  # negative so that the RL optimizes a positive value
-            self.logger.info(f'Fit a model with {len(mols)} training points and {len(gf._known_groups)} groups')
+            self.logger.info(f'Fit a model with {len(mols)} training points and {len(gf.known_groups_)} groups')
 
             # Use RL to generate new molecules
             self.queues.send_inputs(model, method='generate_molecules')

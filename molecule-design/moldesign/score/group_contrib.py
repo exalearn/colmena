@@ -79,16 +79,16 @@ class GroupFeaturizer(BaseEstimator, TransformerMixin):
     """Get the count of different functional groups in a molecule to use as features"""
 
     def __init__(self):
-        self._known_groups = None
+        self.known_groups_ = None
 
     def fit(self, X, y=None):
         observed_groups = set(sum([get_groups(x) for x in X], []))
-        self._known_groups = dict((x, i) for i, x in enumerate(sorted(observed_groups)))
+        self.known_groups_ = dict((x, i) for i, x in enumerate(sorted(observed_groups)))
         return self
 
     def transform(self, X, y=None):
         # Get all functional groups in the training data
-        X = np.vstack(compute_features(x, self._known_groups) for x in X)
+        X = np.vstack(compute_features(x, self.known_groups_) for x in X)
         return X
 
 

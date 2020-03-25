@@ -23,7 +23,7 @@ class Result(BaseModel):
     time_created: float = Field(None, description="Time this value object was create")
     time_input_received: float = Field(None, description="Time the inputs was received by the method server")
     time_result_completed: float = Field(None, description="Time the value was completed")
-    time_running: float = Field(None, description="Runtime of the method. [TBD: Need to refactor method server]")
+    time_running: float = Field(None, description="Runtime of the method, if available")
     time_result_received: float = Field(None, description="Time value was received by client")
 
     def __init__(self, inputs: Tuple[Tuple[Any], Dict[str, Any]], **kwargs):
@@ -53,10 +53,19 @@ class Result(BaseModel):
         """Mark that a method server has received a value"""
         self.time_input_received = datetime.now().timestamp()
 
-    def set_result(self, result: Any):
-        """Set the value of this computation"""
+    def set_result(self, result: Any, runtime: float = None):
+        """Set the value of this computation
+
+        Automatically sets the "time_result_completed" field
+        and, if known, defines the runtime.
+
+        Args:
+            result: Result to be stored
+            runtime (float): Runtime for the function
+        """
         self.value = result
         self.time_result_completed = datetime.now().timestamp()
+        self.time_running = runtime
 
     def pickle_data(self):
         """Stores the input and value fields as a pickled objects"""

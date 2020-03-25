@@ -5,21 +5,14 @@ from parsl.executors import ThreadPoolExecutor
 from parsl.executors import HighThroughputExecutor
 from parsl.providers import LocalProvider
 from parsl.config import Config
-from parsl import python_app
 
 from pipeline_prototype.redis.queue import MethodServerQueues
-from pipeline_prototype.method_server import MethodServer
+from pipeline_prototype.method_server import ParslMethodServer
+
 
 # Hard code the function to be optimized
-@python_app(executors=["htex"])
 def target_fun(x: float) -> float:
     return (x - 1) * (x - 2)
-
-
-# Make a simple method server
-class FunctionServer(MethodServer):
-    def run_application(self, method, *args, **kwargs):
-        return target_fun(*args)
 
 
 def cli_run():
@@ -78,7 +71,7 @@ To access a value, remove it from the outout queue:
     method_queues = MethodServerQueues(args.redishost, port=args.redisport)
 
     # Start the method server
-    mms = FunctionServer(method_queues)
+    mms = ParslMethodServer([target_fun], method_queues, default_executors=['htex'])
     mms.run()
 
 

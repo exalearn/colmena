@@ -1,11 +1,10 @@
 """Perform GPR Active Learning where the model is trained / ran on the local thread"""
-from pipeline_prototype.method_server import MethodServer
+from pipeline_prototype.method_server import ParslMethodServer
 from pipeline_prototype.redis.queue import MethodServerQueues, ClientQueues
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider
 from parsl.config import Config
-from parsl import python_app
 from threading import Thread
 from random import uniform
 import numpy as np
@@ -15,7 +14,6 @@ import parsl
 
 
 # Hard code the function to be optimized
-@python_app(executors=["htex"])
 def target_fun(x: float) -> float:
     return (x - 1) * (x - 2) * (x - 7) * (x + 1)
 
@@ -81,12 +79,6 @@ class Thinker(Thread):
             print(np.min(train_y), file=fp)
 
 
-class Doer(MethodServer):
-    """Class the manages running the function to be optimized"""
-    def run_application(self, method, *args, **kwargs):
-        return target_fun(*args)
-
-
 if __name__ == '__main__':
     # User inputs
     parser = argparse.ArgumentParser()
@@ -124,7 +116,7 @@ if __name__ == '__main__':
     server_queues = MethodServerQueues(args.redishost, args.redisport)
 
     # Create the method server and task generator
-    doer = Doer(server_queues)
+    doer = ParslMethodServer([target_fun], server_queues, default_executors=['htex'])
     thinker = Thinker(client_queues)
     logging.info('Created the method server and task generator')
 

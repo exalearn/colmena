@@ -1,3 +1,3 @@
-from pipeline_prototype.method_server.parsl import MethodServer, MultiMethodServer
+from pipeline_prototype.method_server.parsl import ParslMethodServer
 
-__all__ = ['MethodServer', 'MultiMethodServer']
+__all__ = ['ParslMethodServer']
