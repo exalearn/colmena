@@ -3,9 +3,8 @@ import hashlib
 import json
 import logging
 import os
-import sys
-from csv import DictWriter
 from datetime import datetime
+from functools import partial, update_wrapper
 from threading import Thread
 from typing import List
 
@@ -16,6 +15,7 @@ from moldesign.score import compute_score
 from moldesign.score.group_contrib import GroupFeaturizer
 from moldesign.select import greedy_selection
 from moldesign.simulate import compute_atomization_energy, compute_reference_energy
+from moldesign.utils import get_platform_info
 from parsl.config import Config
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider
@@ -100,16 +100,19 @@ class Thinker(Thread):
             self.queues.send_inputs(model, method='generate_molecules')
             result = self.queues.get_result()
             new_molecules = result.value
+            self.logger.info(f'Generated {len(new_molecules)} candidate molecules')
 
             # Assign them scores
             self.queues.send_inputs(model, new_molecules, method='compute_score')
             result = self.queues.get_result()
             scores = result.value
+            self.logger.info(f'Assigned scores to all molecules')
 
             # Pick a set of calculations to run
             #   Greedy selection for now
             task_options = [{'smiles': s, 'pred_atom': e} for s, e in zip(new_molecules, scores)]
             selections = greedy_selection(task_options, self.n_parallel, lambda x: -x['pred_atom'])
+            self.logger.info(f'Selected {len(selections)} new molecules')
 
             # Run the selected simulations
             for task in selections:
@@ -131,8 +134,8 @@ if __name__ == '__main__':
                         help="Port on which redis is available")
     parser.add_argument("--parallel_guesses", default=1, type=int,
                         help="Number of calculations to maintain in parallel")
-    parser.add_argument("--workers", default=1, type=int,
-                        help="Number of workers processes to deploy for function evaluations")
+    parser.add_argument("--rl_episodes", default=100, type=int,
+                        help="Number of episodes to run during the reinforcement learning pipeline")
     parser.add_argument("--search_size", default=10, type=int,
                         help="Number of new molecules to evaluate during this search")
     parser.add_argument("--initial_count", default=10, type=int,
@@ -150,7 +153,14 @@ if __name__ == '__main__':
 
     # Save the run parameters to disk
     with open(os.path.join(out_dir, 'run_params.json'), 'w') as fp:
-        json.dump(run_params, fp)
+        json.dump(run_params, fp, indent=2)
+    with open(os.path.join(out_dir, 'qc_spec.json'), 'w') as fp:
+        print(spec.json(), file=fp)
+
+    # Save the platform information to disk
+    host_info = get_platform_info()
+    with open(os.path.join(out_dir, 'host_info.json'), 'w') as fp:
+        json.dump(host_info, fp, indent=2)
 
     # Set up the logging
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -176,11 +186,20 @@ if __name__ == '__main__':
     )
     parsl.load(config)
 
+    # Save Parsl configuration
+    with open(os.path.join(out_dir, 'parsl_config.txt'), 'w') as fp:
+        print(str(config), file=fp)
+
     # Connect to the redis server
     client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport, use_pickle=True)
 
+    # Apply wrappers to function to affix static settings
+    my_generate_molecules = partial(generate_molecules, episodes=args.rl_episodes)
+    my_generate_molecules = update_wrapper(my_generate_molecules, generate_molecules)
+
     # Create the method server and task generator
-    doer = ParslMethodServer([generate_molecules, compute_score, compute_atomization_energy, compute_reference_energy],
+    doer = ParslMethodServer([my_generate_molecules, compute_score,
+                              compute_atomization_energy, compute_reference_energy],
                              server_queues, default_executors=['htex'])
 
     # Select a list of initial molecules
@@ -189,7 +208,8 @@ if __name__ == '__main__':
 
     thinker = Thinker(client_queues, output_dir=out_dir,
                       initial_molecules=initial_mols,
-                      n_parallel=args.parallel_guesses)
+                      n_parallel=args.parallel_guesses,
+                      n_molecules=args.search_size)
     logging.info('Created the method server and task generator')
 
     try:
