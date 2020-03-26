@@ -2,6 +2,7 @@ channels:
   - conda-forge
   - psi4/label/dev
 dependencies:
+  - matplotlib>=3
   - openbabel==3.0.*
   - geometric==0.9.*
   - qcfractal==0.13.1
@@ -12,6 +13,7 @@ dependencies:
   - psi4==1.4*
   - pip
   - pip:
+      - python-git-info
       - gym
       - parsl
       - -e .
