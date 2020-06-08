@@ -8,9 +8,9 @@ from parsl import python_app
 from parsl.app.python import PythonApp
 from parsl.dataflow.futures import AppFuture
 
-from pipeline_prototype.method_server.base import BaseMethodServer
-from pipeline_prototype.redis.queue import MethodServerQueues
-from pipeline_prototype.models import Result
+from colmena.method_server.base import BaseMethodServer
+from colmena.redis.queue import MethodServerQueues
+from colmena.models import Result
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,7 @@ class ParslMethodServer(BaseMethodServer):
         # Pass the future of that operation to the output queue
         #  Note that we do not hold on to the future. No need to wait for them as of yet (see above TODO)
         output_result(self.queues, result, future)
-        logger.debug(f'Pushed task to Parsl')
+        logger.debug('Pushed task to Parsl')
 
     def submit_application(self, method_name, *args, **kwargs) -> AppFuture:
         """Submit an application to run via Parsl

@@ -23,8 +23,8 @@ from qcelemental.models.procedures import QCInputSpecification, Model
 from sklearn.linear_model import BayesianRidge
 from sklearn.pipeline import Pipeline
 
-from pipeline_prototype.method_server import ParslMethodServer
-from pipeline_prototype.redis.queue import ClientQueues, make_queue_pairs
+from colmena.method_server import ParslMethodServer
+from colmena.redis.queue import ClientQueues, make_queue_pairs
 
 # Define the QCMethod used for the
 spec = QCInputSpecification(model=Model(method='hf', basis='sto-3g'))

@@ -2,7 +2,7 @@ import os
 from setuptools import setup, find_packages
 
 version_ns = {}
-with open(os.path.join("pipeline_prototype", "version.py")) as f:
+with open(os.path.join("colmena", "version.py")) as f:
     exec(f.read(), version_ns)
 version = version_ns['VERSION']
 
@@ -10,10 +10,10 @@ with open('requirements.txt') as f:
     install_requires = f.readlines()
 
 setup(
-    name='pipeline_prototype',
+    name='colmena',
     version=version,
-    packages=find_packages(),
-    description='pipeline_prototype: Intelligent Steerable Pipelines on HPC',
+    packages=find_packages(include=('colmena',)),
+    description='colmena: Intelligent Steerable Pipelines on HPC',
     install_requires=install_requires,
     python_requires=">=3.6.*",
     classifiers=[
@@ -31,10 +31,9 @@ setup(
         "HPC",
     ],
     entry_points={'console_scripts':
-                  ['pipeline-main=pipeline_prototype.main:cli_run',
-                   'pipeline-pump=pipeline_prototype.pump:cli_run',
-                   'pipeline-pull=pipeline_prototype.pull:cli_run',
-                   ]
+                  ['colmena-main=colmena.main:cli_run',
+                   'colmena-pump=colmena.pump:cli_run',
+                   'colmena-pull=colmena.pull:cli_run']
                   },
     author="Globus Labs",
     author_email='labs@globus.org',

@@ -1,4 +1,4 @@
-from pipeline_prototype.redis.queue import RedisQueue, ClientQueues, MethodServerQueues, make_queue_pairs
+from colmena.redis.queue import RedisQueue, ClientQueues, MethodServerQueues, make_queue_pairs
 import pytest
 
 

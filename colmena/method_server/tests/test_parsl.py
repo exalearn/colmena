@@ -3,11 +3,11 @@ import parsl
 from parsl.config import Config
 from parsl import ThreadPoolExecutor
 
-from pipeline_prototype.execptions import KillSignalException, TimeoutException
-from pipeline_prototype.redis.queue import ClientQueues, make_queue_pairs
+from colmena.execptions import KillSignalException, TimeoutException
+from colmena.redis.queue import ClientQueues, make_queue_pairs
 from pydantic.validators import Tuple
 
-from pipeline_prototype.method_server.parsl import ParslMethodServer
+from colmena.method_server.parsl import ParslMethodServer
 from pytest import fixture, raises, mark
 
 

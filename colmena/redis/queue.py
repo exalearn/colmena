@@ -5,8 +5,8 @@ from typing import Optional, Any, Tuple, Dict
 
 import redis
 
-from pipeline_prototype.execptions import TimeoutException, KillSignalException
-from pipeline_prototype.models import Result
+from colmena.execptions import TimeoutException, KillSignalException
+from colmena.models import Result
 
 logger = logging.getLogger(__name__)
 

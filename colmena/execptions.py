@@ -1,4 +1,4 @@
-"""Exceptions type specific to the pipeline_prototype"""
+"""Exceptions type specific to the colmena"""
 
 
 class KillSignalException(BaseException):

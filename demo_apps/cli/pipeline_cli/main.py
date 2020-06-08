@@ -6,8 +6,8 @@ from parsl.executors import HighThroughputExecutor
 from parsl.providers import LocalProvider
 from parsl.config import Config
 
-from pipeline_prototype.redis.queue import MethodServerQueues
-from pipeline_prototype.method_server import ParslMethodServer
+from colmena.redis.queue import MethodServerQueues
+from colmena.method_server import ParslMethodServer
 
 
 # Hard code the function to be optimized

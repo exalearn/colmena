@@ -2,7 +2,7 @@ from typing import List, Callable, Optional
 import numpy as np
 
 
-# TODO (wardlt): Switch to using the active_learning library for these calls. Using simple functions for now
+# TODO (wardlt): Switch to using the active_learning library (or Dragonfly?) for these calls
 
 
 def random_selection(tasks: List[dict], count: int) -> List[dict]:

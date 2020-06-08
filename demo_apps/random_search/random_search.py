@@ -1,6 +1,6 @@
 """Launches a random-search program"""
-from pipeline_prototype.method_server import ParslMethodServer
-from pipeline_prototype.redis.queue import ClientQueues, MethodServerQueues
+from colmena.method_server import ParslMethodServer
+from colmena.redis.queue import ClientQueues, MethodServerQueues
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider
 from parsl.config import Config

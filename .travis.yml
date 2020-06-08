@@ -33,5 +33,5 @@ os:
 # command to run tests
 script:
     - pip install -r test-requirements.txt
-    - flake8 pipeline_prototype/
+    - flake8 colmena/
     - pytest

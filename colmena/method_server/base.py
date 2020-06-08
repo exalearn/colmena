@@ -3,8 +3,8 @@ from threading import Thread
 from typing import Optional
 import logging
 
-from pipeline_prototype.execptions import KillSignalException, TimeoutException
-from pipeline_prototype.redis.queue import MethodServerQueues
+from colmena.execptions import KillSignalException, TimeoutException
+from colmena.redis.queue import MethodServerQueues
 
 logger = logging.getLogger(__name__)
 

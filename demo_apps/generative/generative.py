@@ -1,8 +1,8 @@
 """Perform a multi-step AI workflow"""
 from generator_demo import Generator
 
-from pipeline_prototype.method_server import ParslMethodServer
-from pipeline_prototype.redis.queue import ClientQueues, make_queue_pairs
+from colmena.method_server import ParslMethodServer
+from colmena.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider
