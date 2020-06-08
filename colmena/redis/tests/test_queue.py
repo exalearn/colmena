@@ -19,9 +19,9 @@ def test_connect_error():
     """Test the connection detection features"""
     queue = RedisQueue('localhost')
     assert not queue.is_connected
-    with pytest.raises(ConnectionError) as exc:
+    with pytest.raises(ConnectionError):
         queue.put('test')
-    with pytest.raises(ConnectionError) as exc:
+    with pytest.raises(ConnectionError):
         queue.get()
 
 
