@@ -12,7 +12,7 @@ with open('requirements.txt') as f:
 setup(
     name='colmena',
     version=version,
-    packages=find_packages(),#include=('colmena*',)),
+    packages=find_packages(),
     include_package_data=True,
     description='colmena: Intelligent Steerable Pipelines on HPC',
     install_requires=install_requires,

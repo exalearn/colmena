@@ -21,10 +21,8 @@ def test_connect_error():
     assert not queue.is_connected
     with pytest.raises(ConnectionError) as exc:
         queue.put('test')
-    assert 'Not connected' in str(exc)
     with pytest.raises(ConnectionError) as exc:
         queue.get()
-    assert 'Not connected' in str(exc)
 
 
 def test_push_pull(queue):

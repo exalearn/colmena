@@ -3,7 +3,7 @@ from threading import Thread
 from typing import Optional
 import logging
 
-from colmena.execptions import KillSignalException, TimeoutException
+from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.redis.queue import MethodServerQueues
 
 logger = logging.getLogger(__name__)

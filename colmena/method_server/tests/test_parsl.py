@@ -3,7 +3,7 @@ import parsl
 from parsl.config import Config
 from parsl import ThreadPoolExecutor
 
-from colmena.execptions import KillSignalException, TimeoutException
+from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 from pydantic.validators import Tuple
 
