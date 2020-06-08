@@ -3,8 +3,7 @@ colmena
 
 .. py:currentmodule:: colmena
 
-.. autosummary::
-    :toctree: .
+.. toctree::
 
     colmena.method_server
     colmena.redis
