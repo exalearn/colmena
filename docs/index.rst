@@ -15,6 +15,8 @@ experimental design methods.
    :caption: Contents:
 
    installation
+   design
+   source/modules
 
 Why Colmena?
 ------------

@@ -2,7 +2,7 @@
 
 
 class KillSignalException(BaseException):
-    """Server has received a singal to stop"""
+    """Server has received a signal to stop"""
 
 
 class TimeoutException(BaseException):

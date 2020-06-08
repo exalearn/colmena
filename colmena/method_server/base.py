@@ -1,3 +1,5 @@
+"""Base class for the Method Server"""
+
 from abc import ABCMeta, abstractmethod
 from threading import Thread
 from typing import Optional

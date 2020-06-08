@@ -69,8 +69,7 @@ class ParslMethodServer(BaseMethodServer):
     Further configuration options for each method can be defined
     in the list of methods.
 
-    Technical Details
-    -----------------
+    **Technical Details**
 
     The method server stores each of the supplied methods as Parsl "PythonApp" classes.
     Tasks are launched using these PythonApps after being received on the queue.
