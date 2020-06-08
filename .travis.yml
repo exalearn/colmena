@@ -1,37 +1,17 @@
 language: python
 python:
-  - "3.6"
-  - "3.7"
-
+  - "3.8"
 services:
-  - redis-server
-
-env:
-  global:
-    - HYDRA_LAUNCHER=fork
-    - OMPI_MCA_rmaps_base_oversubscribe=yes
-    - MPI=mpich
-    - CCTOOLS_VERSION=7.0.11
-
+  - redis
 before_install:
-    - sudo apt-get update -q
-    - python$PY -m pip install Cython
-    - python$PY -m pip install numpy
-    - python$PY --version
-    - python$PY -m cython --version
-    - python$PY -c "import numpy;print(numpy.__version__)"
-
-
-# install parsl with no optional extras
+  - python$PY -m pip install Cython
+  - python$PY -m pip install numpy
+  - python$PY --version
+  - python$PY -m cython --version
+  - python$PY -c "import numpy;print(numpy.__version__)"
 install:
-    - pip install .
-
-# Os tests
-os:
-    - linux
-
-# command to run tests
+  - pip install .
 script:
     - pip install -r test-requirements.txt
     - flake8 colmena/
-    - pytest
+    - pytest colmena
