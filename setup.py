@@ -12,7 +12,8 @@ with open('requirements.txt') as f:
 setup(
     name='colmena',
     version=version,
-    packages=find_packages(include=('colmena',)),
+    packages=find_packages(include=('colmena.*',)),
+    include_package_data=True,
     description='colmena: Intelligent Steerable Pipelines on HPC',
     install_requires=install_requires,
     python_requires=">=3.6.*",
