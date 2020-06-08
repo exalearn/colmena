@@ -1,0 +1,19 @@
+name: colmena
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python==3.8.*
+  - scikit-learn==0.22.*
+  - redis==5.0.*
+  - redis-py==3.4.*
+  - sphinx
+  - sphinx_rtd_theme
+  - jupyterlab
+  - pytest
+  - flake8
+  - pip
+  - pip:
+      - -e .
+      - parsl
+      - pydantic
