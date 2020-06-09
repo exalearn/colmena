@@ -62,3 +62,7 @@ intersphinx_mapping = {
     'python': ('https://docs.python.org/', None),
     'parsl': ('https://parsl.readthedocs.io/en/stable/', None),
 }
+
+
+def setup(app):
+    app.add_css_file('static.css')
