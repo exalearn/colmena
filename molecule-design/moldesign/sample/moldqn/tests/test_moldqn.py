@@ -10,5 +10,5 @@ class FakeEstimator(BaseEstimator):
 
 
 def test_moldqn():
-    output = generate_molecules(FakeEstimator())
+    output = generate_molecules(FakeEstimator(), episodes=10)
     assert 'C' in output  # There is a (0.25)^10 chance that this will fail

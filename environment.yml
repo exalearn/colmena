@@ -3,7 +3,7 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - python==3.8.*
+  - python==3.7.*
   - scikit-learn==0.22.*
   - redis==5.0.*
   - redis-py==3.4.*
@@ -15,5 +15,5 @@ dependencies:
   - pip
   - pip:
       - -e .
-      - parsl
+      - parsl>=1.*
       - pydantic

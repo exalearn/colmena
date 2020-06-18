@@ -5,15 +5,13 @@ dependencies:
   - matplotlib>=3
   - openbabel==3.0.*
   - geometric==0.9.*
-  - qcfractal==0.13.1
-  - qcengine==0.14.0
+  - qcengine==0.14.*
   - rdkit==2019.09.3
-  - tensorflow==1.14.0
-  - keras==2.3.1
+  - tensorflow==2.1.*
   - psi4==1.4*
+  - py-cpuinfo<6
   - pip
   - pip:
       - python-git-info
       - gym
-      - parsl
       - -e .

@@ -9,13 +9,19 @@ without making installation on different HPC systems burdensome.
 
 The additional packages needed by this application are defined in `update_env.yml`
 
-Install them by activitating the pipeline environment and then calling:
+Install them by activating the colmena environment environment and then calling:
 `conda env update --file update_env.yml`
 
-Note that we currently require a [bug fix from Parsl](https://github.com/Parsl/parsl/pull/1620)
-that has yet to be published to PyPI. Given it only changes 2 lines of Parsl, I would recommend editing your
-installed Parsl version rather than cloning a development version.
-\[Hint: use `pip show parsl` to find where your Parsl is installed.\]
+Then clone the `covid-drug-design repository <https://github.com/exalearn/covid-drug-design>`_
+ to install the `molgym` package:
+
+.. code-block: bash
+   
+    git clone git@github.com:exalearn/covid-drug-design.git
+    pip install -e .
+
+Eventually, the version of this package will be fixed in the `update_env.yml` definition file. 
+We are holding off on that until the development activity on it becomes stable.
 
 ## Running
 

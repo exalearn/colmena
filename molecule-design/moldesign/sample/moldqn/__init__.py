@@ -1,16 +1,31 @@
 import logging
-from typing import Set
+import networkx as nx
+from typing import Set, List, Callable
 
 from rdkit import RDLogger
 from sklearn.base import BaseEstimator
-
-from .agents.dqn_variable_actions import DQNFinalState
-from .envs import Molecule
+from molgym.agents.preprocessing import MorganFingerprints
+from molgym.agents.moldqn import DQNFinalState
+from molgym.envs.simple import Molecule
+from molgym.envs.rewards import RewardFunction
+from molgym.utils.conversions import convert_nx_to_smiles
 
 # Set up the logger
 logger = logging.getLogger(__name__)
 rdkit_logger = RDLogger.logger()
 rdkit_logger.setLevel(RDLogger.CRITICAL)
+
+
+class _SklearnReward(RewardFunction):
+    def __init__(self, function: Callable[[List[str]], List[float]],
+                 maximize: bool = True):
+        super().__init__(maximize)
+        self.function = function
+
+    def _call(self, graph: nx.Graph) -> float:
+        if graph is None:
+            return 0
+        return self.function([convert_nx_to_smiles(graph)])[0]
 
 
 def generate_molecules(target_fn: BaseEstimator, episodes: int = 10,
@@ -29,9 +44,8 @@ def generate_molecules(target_fn: BaseEstimator, episodes: int = 10,
 
     # Make the environment
     #  We do not yet support vectorized target functions, so use this wrapper to
-    def non_vector_target_fn(smiles: str) -> float:
-        return target_fn.predict([smiles])[0]
-    env = Molecule(max_steps=n_steps, target_fn=non_vector_target_fn)
+    reward = _SklearnReward(target_fn.predict)
+    env = Molecule(reward=reward)
 
     # Run the reinforcement learning
     best_reward = 0
@@ -40,7 +54,7 @@ def generate_molecules(target_fn: BaseEstimator, episodes: int = 10,
     output = set()
 
     # Make the agent
-    agent = DQNFinalState(env, epsilon=1.0)
+    agent = DQNFinalState(env, MorganFingerprints(), epsilon=1.0, epsilon_decay=0.9995)
 
     # Keep track of the smiles strings
     for e in range(episodes):
@@ -48,7 +62,7 @@ def generate_molecules(target_fn: BaseEstimator, episodes: int = 10,
         logger.info(f'Starting episode {e+1}/{episodes}')
         for s in range(n_steps):
             # Get action based on current state
-            action = agent.action()
+            action, _, _ = agent.action()
 
             # Fix cluster action
             new_state, reward, done, _ = env.step(action)
@@ -83,4 +97,6 @@ def generate_molecules(target_fn: BaseEstimator, episodes: int = 10,
             agent.update_target_q_network()
         agent.epsilon_adj()
 
+    # Convert the outputs back to SMILES strings
+    output = set(convert_nx_to_smiles(x) for x in output)
     return output
