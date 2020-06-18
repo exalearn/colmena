@@ -10,6 +10,7 @@ dependencies:
   - tensorflow==2.1.*
   - psi4==1.4*
   - py-cpuinfo<6
+  - msgpack-python==1.*
   - pip
   - pip:
       - python-git-info
