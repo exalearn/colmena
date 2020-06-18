@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import sys
 import logging
 import os
 from datetime import datetime
@@ -10,19 +11,17 @@ from typing import List
 
 import parsl
 import numpy as np
+from qcelemental.models.procedures import QCInputSpecification, Model
+from sklearn.linear_model import BayesianRidge
+from sklearn.pipeline import Pipeline
+
+from moldesign.config import config
 from moldesign.sample.moldqn import generate_molecules
 from moldesign.score import compute_score
 from moldesign.score.group_contrib import GroupFeaturizer
 from moldesign.select import greedy_selection
 from moldesign.simulate import compute_atomization_energy, compute_reference_energy
 from moldesign.utils import get_platform_info
-from parsl.config import Config
-from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
-from parsl.providers import LocalProvider
-from qcelemental.models.procedures import QCInputSpecification, Model
-from sklearn.linear_model import BayesianRidge
-from sklearn.pipeline import Pipeline
-
 from colmena.method_server import ParslMethodServer
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 
@@ -165,25 +164,11 @@ if __name__ == '__main__':
     # Set up the logging
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                         level=logging.INFO,
-                        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log'))])
+                        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
+                                  logging.StreamHandler(sys.stdout)])
 
     # Write the configuration
-    config = Config(
-        executors=[
-            HighThroughputExecutor(
-                address="localhost",
-                label="htex",
-                max_workers=1,
-                provider=LocalProvider(
-                    init_blocks=1,
-                    max_blocks=1
-                ),
-            ),
-            ThreadPoolExecutor(label="local_threads", max_threads=4)
-        ],
-        strategy=None,
-        run_dir=os.path.join(out_dir, 'run-info')
-    )
+    config.run_dir = os.path.join(out_dir, 'run-info')
     parsl.load(config)
 
     # Save Parsl configuration
