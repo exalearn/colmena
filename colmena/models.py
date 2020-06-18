@@ -19,6 +19,7 @@ class Result(BaseModel):
                                 "is for advanced usage and is used to communicate serialized objects.")
     value: Any = Field(None, description="Output of a function")
     method: Optional[str] = Field(None, description="Name of the method to run.")
+    success: Optional[bool] = Field(None, description="Whether the task completed successfully")
 
     time_created: float = Field(None, description="Time this value object was create")
     time_input_received: float = Field(None, description="Time the inputs was received by the method server")
@@ -66,6 +67,7 @@ class Result(BaseModel):
         self.value = result
         self.time_result_completed = datetime.now().timestamp()
         self.time_running = runtime
+        self.success = True
 
     def pickle_data(self):
         """Stores the input and value fields as a pickled objects"""

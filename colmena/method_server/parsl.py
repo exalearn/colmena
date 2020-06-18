@@ -1,7 +1,11 @@
 import time
 import logging
 from functools import partial
-from typing import Any, Optional, List, Callable, Tuple, Dict, Union
+from queue import Queue
+from threading import Thread
+from concurrent.futures import wait, Future
+from time import sleep
+from typing import Any, Optional, List, Callable, Tuple, Dict, Union, Set
 
 import parsl
 from parsl import python_app
@@ -44,7 +48,57 @@ def output_result(queues: MethodServerQueues, result_obj: Result, wrapped_output
     return queues.send_result(result_obj)
 
 
-# TODO (wardlt): How do we send back errors? Errors currently cause apps to hang
+class _ErrorHandler(Thread):
+    """Keeps track of the Parsl futures and reports back errors"""
+
+    def __init__(self, future_queue: Queue, timeout: float = 5):
+        """
+        Args:
+            future_queue (Queue): A queue on which to receive
+            timeout (float): How long to wait before checking for new futures
+        """
+        super().__init__(daemon=True, name='error_handler')
+        self.future_queue = future_queue
+        self.timeout = timeout
+
+    def run(self) -> None:
+        # Initialize the list of futures
+        logger.info('Starting the error-handler thread')
+        futures: Set[Future] = set()
+
+        # Continually look for new jobs
+        while True:
+            # Pull from the queue until empty
+            #  This operation assumes we have only one thread reading from the queue
+            #  Otherwise, the queue could become empty between checking status and then pulling
+            while not self.future_queue.empty():
+                futures.add(self.future_queue.get())
+
+            # If no futures, wait for the timeout
+            if len(futures) == 0:
+                sleep(self.timeout)
+            else:
+                done, not_done = wait(futures, timeout=self.timeout)
+
+                # If there are entries that are complete, check if they have errors
+                for task in done:
+                    # Check if an exception was raised
+                    exc = task.exception()
+                    if exc is None:
+                        logger.debug(f'Task completed: {task}')
+                        continue
+                    logger.debug(f'Task {task} with an exception: {exc}')
+
+                    # Pull out the result objects
+                    queues: MethodServerQueues = task.task_def['args'][0]
+                    result_obj: Result = task.task_def['args'][1]
+                    result_obj.success = False
+                    queues.send_result(result_obj)
+
+                # Loop through the incomplete tasks
+                futures = not_done
+
+
 class ParslMethodServer(BaseMethodServer):
     """Method server based on Parsl
 
@@ -128,6 +182,11 @@ class ParslMethodServer(BaseMethodServer):
         if self.default_method_ is not None:
             logger.info(f'There is only one method, so we are using {self.default_method_} as a default')
 
+        # Create a thread to check if tasks completed successfully
+        self.task_queue = Queue()
+        self.error_checker = _ErrorHandler(self.task_queue)
+        self.error_checker.start()
+
     def process_queue(self):
         """Evaluate a single task from the queue"""
 
@@ -150,9 +209,11 @@ class ParslMethodServer(BaseMethodServer):
         #  Requires waiting on two streams: input_queue and the queues
 
         # Pass the future of that operation to the output queue
-        #  Note that we do not hold on to the future. No need to wait for them as of yet (see above TODO)
-        output_result(self.queues, result, future)
+        result_future = output_result(self.queues, result, future)
         logger.debug('Pushed task to Parsl')
+
+        # Pass the task to the "error handler"
+        self.task_queue.put(result_future)
 
     def submit_application(self, method_name, *args, **kwargs) -> AppFuture:
         """Submit an application to run via Parsl

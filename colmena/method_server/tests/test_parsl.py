@@ -1,11 +1,11 @@
 """Tests for the Parsl implementation of the method server"""
 import parsl
+from typing import Tuple
 from parsl.config import Config
 from parsl import ThreadPoolExecutor
 
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.redis.queue import ClientQueues, make_queue_pairs
-from pydantic.validators import Tuple
 
 from colmena.method_server.parsl import ParslMethodServer
 from pytest import fixture, raises, mark
@@ -26,7 +26,7 @@ parsl.load(config)
 
 
 # Make a simple method server
-@fixture
+@fixture(autouse=True)
 def server_and_queue() -> Tuple[ParslMethodServer, ClientQueues]:
     client, server = make_queue_pairs('localhost', clean_slate=True)
     return ParslMethodServer([f], server), client
@@ -57,6 +57,7 @@ def test_run_simple(server_and_queue):
     server.process_queue()
     result = queue.get_result()
     assert result.value == 2
+    assert result.success
     assert result.time_running is not None
 
 
@@ -72,3 +73,16 @@ def test_timeout(server_and_queue):
 
     # Make sure it kills the server
     server.run()
+
+
+@mark.timeout(30)
+def test_error_handling(server_and_queue):
+    server, queue = server_and_queue
+
+    # Send a result and then get the error message back
+    queue.send_inputs(None)
+    server.process_queue()
+    result = queue.get_result()
+    assert result.args == (None,)
+    assert not result.success
+    assert result.time_running is None
