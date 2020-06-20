@@ -1,6 +1,6 @@
 """Functions related to simulating molecular properties"""
 
-from typing import Dict
+from typing import Dict, Optional, Union
 
 from qcelemental.models import OptimizationInput, Molecule, AtomicInput
 from qcelemental.models.procedures import QCInputSpecification
@@ -9,6 +9,7 @@ from qcengine import compute_procedure, compute
 from openbabel import OBConformerSearch, OBForceField
 from openbabel.pybel import readstring
 from openbabel import pybel
+from qcengine.config import TaskConfig
 
 _code = 'psi4'
 
@@ -59,13 +60,15 @@ def _get_forcefield(mol: Molecule) -> OBForceField:
 
 
 def compute_atomization_energy(smiles: str, qc_config: QCInputSpecification,
-                               reference_energies: Dict[str, float]) -> float:
+                               reference_energies: Dict[str, float],
+                               compute_config: Optional[Union[TaskConfig, Dict]] = None) -> float:
     """Compute the atomization energy of a molecule given the SMILES string
 
     Args:
         smiles (str): SMILES of a molecule
         qc_config (dict): Quantum Chemistry configuration used for evaluating the energy
         reference_energies (dict): Reference energies for each element
+        compute_config (TaskConfig): Configuration for the quantum chemistry code
     Returns:
         (float): Atomization energy of this molecule
     """
@@ -77,7 +80,7 @@ def compute_atomization_energy(smiles: str, qc_config: QCInputSpecification,
     # Run the relaxation
     opt_input = OptimizationInput(input_specification=qc_config,
                                   initial_molecule=mol, keywords={'program': _code})
-    res = compute_procedure(opt_input, 'geometric', raise_error=True)
+    res = compute_procedure(opt_input, 'geometric', local_options=compute_config, raise_error=True)
 
     # Get the energy of the relaxed structure
     total_energy = res.energies[-1]
