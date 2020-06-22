@@ -27,7 +27,7 @@ redis-server &> redis.out &
 redis=$!
 
 # Run!
-python run.py
+python run.py $@
 
 # Kill the redis server
 kill $redis
