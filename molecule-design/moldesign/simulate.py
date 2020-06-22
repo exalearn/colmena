@@ -11,7 +11,7 @@ from openbabel.pybel import readstring
 from openbabel import pybel
 from qcengine.config import TaskConfig
 
-_code = 'psi4'
+_code = 'nwchem'
 
 
 def generate_atomic_coordinates(smiles) -> str:
