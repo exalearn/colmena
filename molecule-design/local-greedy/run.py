@@ -15,7 +15,7 @@ from qcelemental.models.procedures import QCInputSpecification, Model
 from sklearn.linear_model import BayesianRidge
 from sklearn.pipeline import Pipeline
 
-from moldesign.config import config
+from moldesign.config import theta_nwchem_config as config
 from moldesign.sample.moldqn import generate_molecules
 from moldesign.score import compute_score
 from moldesign.score.group_contrib import GroupFeaturizer
@@ -26,7 +26,8 @@ from colmena.method_server import ParslMethodServer
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 
 # Define the QCMethod used for the
-spec = QCInputSpecification(model=Model(method='hf', basis='sto-3g'))
+spec = QCInputSpecification(model=Model(method='hf', basis='sto-3g')) 
+compute_config = {'nnodes': 1, 'cores_per_rank': 2}
 
 
 class Thinker(Thread):
@@ -76,11 +77,12 @@ class Thinker(Thread):
 
         # Run the initial molecules
         for mol in self.initial_molecules:
-            self.queues.send_inputs(mol, spec, ref_energies, method='compute_atomization_energy')
+            self.queues.send_inputs(mol, spec, ref_energies, compute_config, method='compute_atomization_energy')
         for _ in self.initial_molecules:
             result = self.queues.get_result()
             self.database[result.args[0]] = result.value
             print(result.json(), file=output_files['simulation'])
+            output_files['simulation'].flush()
         self.logger.info(f'Computed initial population of {len(self.database)} molecules')
 
         for i in range(self.n_evals // self.n_parallel):
@@ -122,6 +124,7 @@ class Thinker(Thread):
                 output = self.queues.get_result()
                 self.database[output.args[0]] = output.value
                 print(output.json(), file=output_files['simulation'])
+                output_files['simulation'].flush()
 
 
 if __name__ == '__main__':
