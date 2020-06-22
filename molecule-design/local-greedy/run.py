@@ -80,7 +80,10 @@ class Thinker(Thread):
             self.queues.send_inputs(mol, spec, ref_energies, compute_config, method='compute_atomization_energy')
         for _ in self.initial_molecules:
             result = self.queues.get_result()
-            self.database[result.args[0]] = result.value
+            if result.success:
+                self.database[result.args[0]] = result.value
+            else:
+                logging.warning('Calculation failed! See simulation outputs and Parsl log file')
             print(result.json(), file=output_files['simulation'])
             output_files['simulation'].flush()
         self.logger.info(f'Computed initial population of {len(self.database)} molecules')
@@ -122,7 +125,10 @@ class Thinker(Thread):
             # Wait for them to return
             for _ in selections:
                 output = self.queues.get_result()
-                self.database[output.args[0]] = output.value
+                if result.success:
+                    self.database[output.args[0]] = output.value
+                else:
+                    logging.warning('Calculation failed! See simulation outputs and Parsl log file')
                 print(output.json(), file=output_files['simulation'])
                 output_files['simulation'].flush()
 
