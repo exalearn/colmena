@@ -9,7 +9,7 @@ class Test:
 @pytest.fixture
 def queue() -> RedisQueue:
     """An empty queue"""
-    q = RedisQueue('localhost')
+    q = RedisQueue('localhost', topics=['priority'])
     q.connect()
     q.flush()
     return q
@@ -28,8 +28,18 @@ def test_connect_error():
 def test_push_pull(queue):
     """Test a basic push/pull pair"""
     assert queue.is_connected
+
+    # Test without a topic
     queue.put('hello')
-    assert queue.get() == 'hello'
+    assert queue.get() == ('default', 'hello')
+
+    # Test with a specified topic
+    queue.put('hello', topic='priority')
+    assert queue.get() == ('priority', 'hello')
+
+    # Test with an unspecified topic
+    with pytest.raises(AssertionError):
+        queue.put('hello', 'not_a_topic')
 
 
 def test_flush(queue):
@@ -50,7 +60,8 @@ def test_client_method_pair():
 
     # Push inputs to method server and make sure it is received
     client.send_inputs(1)
-    task = server.get_task()
+    topic, task = server.get_task()
+    assert topic == 'default'
     assert task.args == (1,)
     assert task.time_input_received is not None
     assert task.time_created < task.time_input_received
@@ -69,7 +80,7 @@ def test_methods():
 
     # Push inputs to method server and make sure it is received
     client.send_inputs(1, method='test')
-    task = server.get_task()
+    _, task = server.get_task()
     assert task.args == (1,)
     assert task.method == 'test'
     assert task.kwargs == {}
@@ -79,7 +90,7 @@ def test_kwargs():
     """Test sending function keyword arguments"""
     client, server = make_queue_pairs('localhost')
     client.send_inputs(1, input_kwargs={'hello': 'world'})
-    task = server.get_task()
+    _, task = server.get_task()
     assert task.args == (1,)
     assert task.kwargs == {'hello': 'world'}
 
@@ -99,7 +110,7 @@ def test_pickling():
 
     # Attempt to push a non-JSONable object to the queue
     client.send_inputs(Test())
-    task = server.get_task()
+    _, task = server.get_task()
     assert task.args[0].x is None
 
     # Set the value
@@ -111,3 +122,28 @@ def test_pickling():
     result = client.get_result()
     assert result.args[0].x is None
     assert result.value.x == 1
+
+
+def test_filtering():
+    """Test filtering tasks by topic"""
+    client, server = make_queue_pairs('localhost', clean_slate=True, topics=['priority'])
+
+    # Simulate a result being sent through the method server
+    client.send_inputs("hello", topic="priority")
+    topic, task = server.get_task()
+    assert topic == "priority"
+    task.set_result(1)
+    server.send_result(task, topic)
+
+    # Make sure it does not appear if we pull only from "default"
+    output = client.get_result(timeout=1, topic='default')
+    assert output is None
+
+    # Make sure it works if we specify the topic
+    output = client.get_result(topic='priority')
+    assert output is not None
+
+    # Make sure it works if we do not specify anything
+    server.send_result(task, topic)
+    output = client.get_result()
+    assert output is not None
