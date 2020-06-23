@@ -290,7 +290,7 @@ class MethodServerQueues:
         # Return the kill signal
         if output is None:
             raise TimeoutException('Listening on task queue timed out')
-        elif output == "null":
+        elif output[1] == "null":
             raise KillSignalException('Kill signal received on task queue')
         topic, message = output
 

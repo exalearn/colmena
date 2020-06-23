@@ -35,17 +35,18 @@ def run_and_record_timing(func: Callable, *args, **kwargs) -> Tuple[Any, float]:
 
 
 @python_app(executors=['local_threads'])
-def output_result(queues: MethodServerQueues, result_obj: Result, wrapped_output: Tuple[Any, float]):
+def output_result(queues: MethodServerQueues, topic: str, result_obj: Result, wrapped_output: Tuple[Any, float]):
     """Submit the function result to the Redis queue
 
     Args:
         queues: Queues used to communicate with Redis
+        topic: Topic to assign in output queue
         result_obj: Result object containing the inputs, to be sent back with outputs
         wrapped_output: Result from invoking the function and the inputs
     """
     value, runtime = wrapped_output
     result_obj.set_result(value, runtime)
-    return queues.send_result(result_obj)
+    return queues.send_result(result_obj, topic=topic)
 
 
 class _ErrorHandler(Thread):
@@ -91,9 +92,10 @@ class _ErrorHandler(Thread):
 
                     # Pull out the result objects
                     queues: MethodServerQueues = task.task_def['args'][0]
-                    result_obj: Result = task.task_def['args'][1]
+                    topic: str = task.task_def['args'][1]
+                    result_obj: Result = task.task_def['args'][2]
                     result_obj.success = False
-                    queues.send_result(result_obj)
+                    queues.send_result(result_obj, topic=topic)
 
                 # Loop through the incomplete tasks
                 futures = not_done
@@ -193,11 +195,10 @@ class ParslMethodServer(BaseMethodServer):
         # Get a result from the queue
         # TODO (wardlt): Objects are deserialized here, serialized again and then sent to the worker.
         #  We could implement a method to still read the task but ignore serialization
-        result = self.queues.get_task(self.timeout)
-        logger.info(f'Received inputs {result}')
+        topic, result = self.queues.get_task(self.timeout)
+        logger.info(f'Received inputs {result} with topic {topic}')
 
         # Determine which method to run
-        #  TODO (wardlt): This logic is not really
         if self.default_method_ and result.method is None:
             method = self.default_method_
         else:
@@ -209,7 +210,7 @@ class ParslMethodServer(BaseMethodServer):
         #  Requires waiting on two streams: input_queue and the queues
 
         # Pass the future of that operation to the output queue
-        result_future = output_result(self.queues, result, future)
+        result_future = output_result(self.queues, topic, result, future)
         logger.debug('Pushed task to Parsl')
 
         # Pass the task to the "error handler"
