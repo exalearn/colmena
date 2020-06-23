@@ -11,12 +11,15 @@ from typing import List
 
 import parsl
 import numpy as np
+from molgym.agents.moldqn import DQNFinalState
+from molgym.agents.preprocessing import MorganFingerprints
+from molgym.envs.simple import Molecule
 from qcelemental.models.procedures import QCInputSpecification, Model
 from sklearn.linear_model import BayesianRidge
 from sklearn.pipeline import Pipeline
 
-from moldesign.config import theta_nwchem_config as config
-from moldesign.sample.moldqn import generate_molecules
+from moldesign.config import config as config
+from moldesign.sample.moldqn import generate_molecules, SklearnReward
 from moldesign.score import compute_score
 from moldesign.score.group_contrib import GroupFeaturizer
 from moldesign.select import greedy_selection
@@ -45,6 +48,7 @@ class Thinker(Thread):
             initial_molecules ([str]): Initial database of molecular property data
             n_parallel (int): Maximum number of QC calculations to perform in parallel
             queues (ClientQueues): Queues for communicating with method server
+            code (str): Which code to use for the quantum chemistr
         """
         super().__init__()
         self.database = dict()
@@ -88,6 +92,10 @@ class Thinker(Thread):
             output_files['simulation'].flush()
         self.logger.info(f'Computed initial population of {len(self.database)} molecules')
 
+        # Make the initial RL agent
+        agent = DQNFinalState(Molecule(reward=SklearnReward(None, maximize=False)), MorganFingerprints(),
+                              q_network_dense=(1024, 512, 256), epsilon_decay=0.995)
+
         for i in range(self.n_evals // self.n_parallel):
             self.logger.info(f'Starting design loop step {i}')
             # Train the machine learning model
@@ -97,13 +105,14 @@ class Thinker(Thread):
                 ('lasso', BayesianRidge(normalize=True))
             ])
             mols, atoms = zip(*self.database.items())
-            model.fit(mols, np.multiply(atoms, -1))  # negative so that the RL optimizes a positive value
+            model.fit(mols, atoms)  # negative so that the RL optimizes a positive value
             self.logger.info(f'Fit a model with {len(mols)} training points and {len(gf.known_groups_)} groups')
 
             # Use RL to generate new molecules
-            self.queues.send_inputs(model, method='generate_molecules')
+            agent.env.reward_fn.model = model
+            self.queues.send_inputs(agent, method='generate_molecules')
             result = self.queues.get_result()
-            new_molecules = result.value
+            new_molecules, agent = result.value
             self.logger.info(f'Generated {len(new_molecules)} candidate molecules')
 
             # Assign them scores
@@ -124,12 +133,12 @@ class Thinker(Thread):
 
             # Wait for them to return
             for _ in selections:
-                output = self.queues.get_result()
+                result = self.queues.get_result()
                 if result.success:
-                    self.database[output.args[0]] = output.value
+                    self.database[result.args[0]] = result.value
                 else:
                     logging.warning('Calculation failed! See simulation outputs and Parsl log file')
-                print(output.json(), file=output_files['simulation'])
+                print(result.json(), file=output_files['simulation'])
                 output_files['simulation'].flush()
 
 
@@ -140,13 +149,13 @@ if __name__ == '__main__':
                         help="Address at which the redis server can be reached")
     parser.add_argument("--redisport", default="6379",
                         help="Port on which redis is available")
-    parser.add_argument("--parallel_guesses", default=1, type=int,
+    parser.add_argument("--parallel-guesses", default=1, type=int,
                         help="Number of calculations to maintain in parallel")
-    parser.add_argument("--rl_episodes", default=100, type=int,
+    parser.add_argument("--rl-episodes", default=10, type=int,
                         help="Number of episodes to run during the reinforcement learning pipeline")
-    parser.add_argument("--search_size", default=10, type=int,
+    parser.add_argument("--search-size", default=10, type=int,
                         help="Number of new molecules to evaluate during this search")
-    parser.add_argument("--initial_count", default=10, type=int,
+    parser.add_argument("--initial-count", default=10, type=int,
                         help="Size of the initial population of molecules to draw from QM9")
 
     # Parse the arguments

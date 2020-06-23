@@ -1,6 +1,9 @@
 """Simple tests for the MolDQN system"""
 
-from moldesign.sample.moldqn import generate_molecules
+from moldesign.sample.moldqn import generate_molecules, SklearnReward
+from molgym.agents.moldqn import DQNFinalState
+from molgym.agents.preprocessing import MorganFingerprints
+from molgym.envs.simple import Molecule
 from sklearn.base import BaseEstimator
 
 
@@ -10,5 +13,6 @@ class FakeEstimator(BaseEstimator):
 
 
 def test_moldqn():
-    output = generate_molecules(FakeEstimator(), episodes=10)
+    agent = DQNFinalState(Molecule(reward=SklearnReward(FakeEstimator().predict)), MorganFingerprints())
+    output = generate_molecules(agent)
     assert 'C' in output  # There is a (0.25)^10 chance that this will fail
