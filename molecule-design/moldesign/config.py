@@ -12,6 +12,31 @@ config = Config(
         HighThroughputExecutor(
             address="localhost",
             label="htex",
+            max_workers=2,
+            provider=LocalProvider(
+                init_blocks=1,
+                max_blocks=1
+            ),
+        ),
+        ThreadPoolExecutor(label="local_threads", max_threads=4)
+    ],
+    strategy=None
+)
+
+local_interleaved_config = Config(
+    executors=[
+        HighThroughputExecutor(
+            address="localhost",
+            label="psi4",
+            max_workers=2,
+            provider=LocalProvider(
+                init_blocks=1,
+                max_blocks=1
+            ),
+        ),
+        HighThroughputExecutor(
+            address="localhost",
+            label="ml",
             max_workers=1,
             provider=LocalProvider(
                 init_blocks=1,

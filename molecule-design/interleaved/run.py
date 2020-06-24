@@ -19,7 +19,7 @@ from qcelemental.models.procedures import QCInputSpecification, Model
 from sklearn.linear_model import BayesianRidge
 from sklearn.pipeline import Pipeline
 
-from moldesign.config import config as config
+from moldesign.config import local_interleaved_config as config
 from moldesign.sample.moldqn import generate_molecules, SklearnReward
 from moldesign.score import compute_score
 from moldesign.score.group_contrib import GroupFeaturizer
@@ -66,7 +66,7 @@ class Thinker(Thread):
         self._ref_energies = None
         self._gen_done = Event()
 
-    def simulator_dispatcher(self):
+    def simulation_dispatcher(self):
         """Runs the ML loop: Generate tasks for the simulator"""
 
         # Send out the first block
@@ -92,13 +92,26 @@ class Thinker(Thread):
 
             # Get a new one from the priority queue and submit it
             (step_number, _), task = self._task_queue.get()
-            logging.info(f'Running {task} from batch {step_number}')
+            logging.info(f'Running {task} from batch {-step_number}')
             self.queues.send_inputs(task, spec, self._ref_energies, compute_config,
                                     topic='simulator',
                                     method='compute_atomization_energy')
 
-        # TODO (wardlt): wait for all tasks to complete?
-        self.logger.info('Done running new molecules')
+        # Waiting for the still-ongoing tasks to complete
+        self.logger.info('Collecting the last molecules')
+        for i in range(self.n_parallel):
+            # TODO (wardlt): Make a utility function for this
+            # Get the task and store its content
+            result = self.queues.get_result(topic='simulator')
+            self.logger.info(f'Retrieved {i+1}/{self.n_parallel} on-going tasks')
+            if result.success:
+                self.database[result.args[0]] = result.value
+            else:
+                logging.warning('Calculation failed! See simulation outputs and Parsl log file')
+            print(result.json(), file=self.output_file)
+            self.output_file.flush()
+
+        self.logger.info('Task consumer has completed')
 
     def run(self):
         # Get the reference energies
@@ -133,8 +146,7 @@ class Thinker(Thread):
                               q_network_dense=(1024, 512, 256), epsilon_decay=0.995)
 
         # Launch the "simulator" thread
-        #  Use a daemon thread so that it is killed when we are no longer generating new tasks
-        design_thread = Thread(target=self.simulator_dispatcher, daemon=True)
+        design_thread = Thread(target=self.simulation_dispatcher)
         design_thread.start()
 
         # Perform the design loop iteratively
@@ -240,9 +252,12 @@ if __name__ == '__main__':
     my_generate_molecules = update_wrapper(my_generate_molecules, generate_molecules)
 
     # Create the method server and task generator
-    doer = ParslMethodServer([my_generate_molecules, compute_score,
-                              compute_atomization_energy, compute_reference_energy],
-                             server_queues, default_executors=['htex'])
+    ml_cfg = {'executors': ['ml']}
+    dft_cfg = {'executors': ['psi4']}
+    doer = ParslMethodServer([(my_generate_molecules, ml_cfg), (compute_score, ml_cfg),
+                              (compute_atomization_energy, dft_cfg),
+                              (compute_reference_energy, dft_cfg)],
+                             server_queues)
 
     # Select a list of initial molecules
     with open('qm9-smiles.json') as fp:

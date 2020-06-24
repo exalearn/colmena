@@ -28,8 +28,30 @@ The task generator and consumer threads run on the same system.
 The task generator write to a priority queue to communicate tasks to 
 the consumer, which then writes completed results to a dictionary 
 that is shared in memory between the two threads. 
+The priority queue is sorted first so that the most-recent entries
+are pulled first and, within the most-recent batch,
+the entries that are ranked the highest.
+In this way, the method server chooses the highest-ranked
+entry from the most-recent batch. 
 
-**TBD**: Describe how we configure the distributed compute.
+The task consumer and generator both request three kinds of tasks:
+1. Compute atomization energy an initial population of molecules
+2. Generate new molecular candidates with RL
+3. Screen candidate molecules with a supervised learning model
 
+We partition our available nodes such that all but one node is available to run
+the quantum chemistry (Task 1) and the ML tasks (Tasks 2-3).
+We accomplish this by creating two different "executors" with Parsl for the quantum 
+chem and ML tasks.
+We configure the method server in Colmena to only allow the functions from each 
+type of task to use the correct partition (see the `ml_cfg` and `dft_cfg` lines and
+how they are used to create the method server). 
 
- 
+We use the "topics" feature of the Colmena queues to ensure that the consumer 
+and generator threads receive the correct tasks.
+When submitting tasks, each thread labels their task with a topic ("ML" for the generator,
+and "simulator" for the consumer). 
+When required, each thread waits for a result with the designated topic to be returned. 
+In this way, both the creator and generator threads can communicate with the same
+method server and the programmer need not write custom logic to associate task result
+with the proper thread.
