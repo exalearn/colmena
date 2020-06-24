@@ -19,7 +19,7 @@ from qcelemental.models.procedures import QCInputSpecification, Model
 from sklearn.linear_model import BayesianRidge
 from sklearn.pipeline import Pipeline
 
-from moldesign.config import local_interleaved_config as config
+from moldesign.config import theta_interleaved_config as config
 from moldesign.sample.moldqn import generate_molecules, SklearnReward
 from moldesign.score import compute_score
 from moldesign.score.group_contrib import GroupFeaturizer
@@ -252,8 +252,8 @@ if __name__ == '__main__':
     my_generate_molecules = update_wrapper(my_generate_molecules, generate_molecules)
 
     # Create the method server and task generator
-    ml_cfg = {'executors': ['ml']}
-    dft_cfg = {'executors': ['psi4']}
+    ml_cfg = {'executors': ['single_node']}
+    dft_cfg = {'executors': ['nwchem']}
     doer = ParslMethodServer([(my_generate_molecules, ml_cfg), (compute_score, ml_cfg),
                               (compute_atomization_energy, dft_cfg),
                               (compute_reference_energy, dft_cfg)],
