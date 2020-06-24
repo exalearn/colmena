@@ -208,6 +208,7 @@ class ClientQueues:
         if self.use_pickle:
             result.pickle_data()
         self.outbound.put(result.json(exclude_unset=True), topic=topic)
+        logger.info(f'Client sent a {method} task with topic {topic}')
 
     def get_result(self, timeout: Optional[int] = None, topic: Optional[str] = None) -> Optional[Result]:
         """Get a value from the MethodServer
@@ -226,13 +227,17 @@ class ClientQueues:
         # If None, return because this is a timeout
         if output is None:
             return output
-        message = output[1]
+        topic, message = output
 
         # Parse the value and mark it as complete
         result_obj = Result.parse_raw(message)
         if self.use_pickle:
             result_obj.unpickle_data()
         result_obj.mark_result_received()
+        
+        # Some logging
+        logger.info(f'Client received a {result_obj.method} result with topic {topic}')
+        
         return result_obj
 
     def send_kill_signal(self):
