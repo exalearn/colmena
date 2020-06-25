@@ -234,10 +234,10 @@ class ClientQueues:
         if self.use_pickle:
             result_obj.unpickle_data()
         result_obj.mark_result_received()
-        
+
         # Some logging
         logger.info(f'Client received a {result_obj.method} result with topic {topic}')
-        
+
         return result_obj
 
     def send_kill_signal(self):
