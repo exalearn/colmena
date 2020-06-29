@@ -20,11 +20,15 @@ Then clone the `covid-drug-design repository <https://github.com/exalearn/covid-
     git clone git@github.com:exalearn/covid-drug-design.git
     pip install -e .
 
-Eventually, the version of this package will be fixed in the `update_env.yml` definition file. 
-We are holding off on that until the development activity on it becomes stable.
+Eventually, the version of `molgym` will be fixed in the `update_env.yml` definition file. 
+We are holding off on that until the development activity on `molgym` slows down.
+
+You should also install NWChem (available as an Ubuntu package) on your system or,
+otherwise, change the default code in `moldesign/simulate.py` to `psi4`.
 
 ## Running
 
-The pipeline is currently defined in `run.py`.
+There are currently two demo apps for using Colmena for molecular design: `local-greey` and `interleaved`.
+Each are available in subdirectories of this folder and documentation for running them is available in 
+those folders.
 
-Logan is going to document it later, once I get it working reliably.
