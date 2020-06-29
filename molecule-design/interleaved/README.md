@@ -4,7 +4,19 @@ An implementation of a design loop where some workers generate new tasks while
 other workers execute tasks.
 
 *Note*: Make sure to set `OMP_NUM_THREADS=1` when running this program on local resources.
-**WARNING**: Only run once on local resources.
+
+## Running this Application
+
+First, start a Redis server on your system (`redis-server`).
+
+Then, modify `run.py` to define a Parsl configuration appropriate for your system. 
+(Documentation on that is forthcoming). 
+
+Launch the code by calling `python run.py`.
+The code is built using `argparse`, so calling `python run.py --help` will describe available options.
+
+The outcome of the run will be stored in a subdirectory of the `runs` folder and named 
+using the launch time of the application.
 
 ## Optimization Algorithm
 
