@@ -15,10 +15,10 @@ Install them by activating the colmena environment environment and then calling:
 Then clone the `covid-drug-design repository <https://github.com/exalearn/covid-drug-design>`_
  to install the `molgym` package:
 
-.. code-block: bash
-   
-    git clone git@github.com:exalearn/covid-drug-design.git
-    pip install -e .
+```bash
+git clone git@github.com:exalearn/covid-drug-design.git
+pip install -e .
+```
 
 Eventually, the version of `molgym` will be fixed in the `update_env.yml` definition file. 
 We are holding off on that until the development activity on `molgym` slows down.
