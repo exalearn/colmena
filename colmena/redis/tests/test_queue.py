@@ -71,7 +71,7 @@ def test_client_method_pair():
     server.send_result(task)
     result = client.get_result()
     assert result.value == 2
-    assert result.time_result_received > result.time_result_completed
+    assert result.time_result_received > result.time_result_sent
 
 
 def test_methods():

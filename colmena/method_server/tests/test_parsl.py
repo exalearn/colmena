@@ -59,6 +59,7 @@ def test_run_simple(server_and_queue):
     assert result.value == 2
     assert result.success
     assert result.time_running is not None
+    assert result.time_compute_started is not None
 
 
 @mark.timeout(30)

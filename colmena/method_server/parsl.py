@@ -1,5 +1,6 @@
 import time
 import logging
+from datetime import datetime
 from functools import partial
 from queue import Queue
 from threading import Thread
@@ -19,23 +20,24 @@ from colmena.models import Result
 logger = logging.getLogger(__name__)
 
 
-def run_and_record_timing(func: Callable, *args, **kwargs) -> Tuple[Any, float]:
+def run_and_record_timing(func: Callable, *args, **kwargs) -> Tuple[Any, float, float]:
     """Run a function and also return the runtime
 
     Args:
         func: Function to invoke
     Returns:
         - Output of `func(*args, **kwargs)`
-        - Runtime in seconds
+        - (float) Start time of computation as Unix UTC timestamp
+        - Runtime of the computation in seconds
     """
-    start_time = time.perf_counter()
+    start_time = datetime.utcnow()
     output = func(*args, **kwargs)
-    end_time = time.perf_counter()
-    return output, end_time - start_time
+    end_time = datetime.utcnow()
+    return output, start_time.timestamp(), (end_time - start_time).total_seconds()
 
 
 @python_app(executors=['local_threads'])
-def output_result(queues: MethodServerQueues, topic: str, result_obj: Result, wrapped_output: Tuple[Any, float]):
+def output_result(queues: MethodServerQueues, topic: str, result_obj: Result, wrapped_output: Tuple[Any, float, float]):
     """Submit the function result to the Redis queue
 
     Args:
@@ -44,7 +46,8 @@ def output_result(queues: MethodServerQueues, topic: str, result_obj: Result, wr
         result_obj: Result object containing the inputs, to be sent back with outputs
         wrapped_output: Result from invoking the function and the inputs
     """
-    value, runtime = wrapped_output
+    value, start_time, runtime = wrapped_output
+    result_obj.time_compute_started = start_time
     result_obj.set_result(value, runtime)
     return queues.send_result(result_obj, topic=topic)
 

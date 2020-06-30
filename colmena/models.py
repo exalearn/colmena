@@ -10,6 +10,7 @@ class Result(BaseModel):
 
     Each instance of this class stores the inputs and outputs to the function along with some tracking
     information allowing for performance analysis (e.g., time submitted to Queue, time received by client).
+    All times are listed as UTC Unix timestamps.
 
     The Result class also handles serialization of the data to be transmitted over a RedisQueue
     """
@@ -21,9 +22,10 @@ class Result(BaseModel):
     method: Optional[str] = Field(None, description="Name of the method to run.")
     success: Optional[bool] = Field(None, description="Whether the task completed successfully")
 
-    time_created: float = Field(None, description="Time this value object was create")
+    time_created: float = Field(None, description="Time this value object was created")
     time_input_received: float = Field(None, description="Time the inputs was received by the method server")
-    time_result_completed: float = Field(None, description="Time the value was completed")
+    time_compute_started: float = Field(None, description="Time workflow process began executing a task")
+    time_result_sent: float = Field(None, description="Time message was sent from the server")
     time_running: float = Field(None, description="Runtime of the method, if available")
     time_result_received: float = Field(None, description="Time value was received by client")
 
@@ -36,7 +38,7 @@ class Result(BaseModel):
 
         # Mark "created" only if the value is not already set
         if 'time_created' not in kwargs:
-            self.time_created = datetime.now().timestamp()
+            self.time_created = datetime.utcnow().timestamp()
 
     @property
     def args(self) -> Tuple[Any]:
@@ -48,11 +50,11 @@ class Result(BaseModel):
 
     def mark_result_received(self):
         """Mark that a completed computation was received by a client"""
-        self.time_result_received = datetime.now().timestamp()
+        self.time_result_received = datetime.utcnow().timestamp()
 
     def mark_input_received(self):
         """Mark that a method server has received a value"""
-        self.time_input_received = datetime.now().timestamp()
+        self.time_input_received = datetime.utcnow().timestamp()
 
     def set_result(self, result: Any, runtime: float = None):
         """Set the value of this computation
@@ -65,7 +67,7 @@ class Result(BaseModel):
             runtime (float): Runtime for the function
         """
         self.value = result
-        self.time_result_completed = datetime.now().timestamp()
+        self.time_result_sent = datetime.utcnow().timestamp()
         self.time_running = runtime
         self.success = True
 
@@ -89,7 +91,7 @@ class Result(BaseModel):
         if not (isinstance(self.value, str) and isinstance(self.inputs, str)):
             raise ValueError('Data is not in a serialized form. Are you sure you need to unpickle?')
 
-        # Unserialize the data
+        # Deserialize the data
         _value = self.value
         _inputs = self.inputs
         try:
