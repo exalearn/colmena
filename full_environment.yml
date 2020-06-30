@@ -1,0 +1,38 @@
+name: colmena_full
+channels:
+  - defaults
+  - conda-forge
+  - psi4/label/dev
+dependencies:
+# Core dependencies for
+  - python==3.7.*
+  - scikit-learn==0.22.*
+  - redis==5.0.*
+  - redis-py==3.4.*
+  - sphinx
+  - sphinx_rtd_theme
+  - jupyterlab
+  - pytest
+  - flake8
+  - pip
+
+# Dependencies from the GitHub
+  - matplotlib>=3
+  - openbabel==3.0.*
+  - geometric==0.9.*
+  - qcengine==0.14.*
+  - rdkit==2019.09.3
+  - tensorflow==2.1.*
+  - psi4==1.4*
+  - py-cpuinfo<6
+  - msgpack-python==1.*
+
+# Pip packages for all of them
+  - pip:
+      - -e .
+      - -e ./molecule-design/
+      - parsl>=1.*
+      - pydantic
+      - python-git-info
+      - gym
+      - git+https://github.com/exalearn/covid-drug-design.git
