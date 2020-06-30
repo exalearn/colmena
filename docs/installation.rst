@@ -18,7 +18,7 @@ development difficulties due to the early stages of this package.
 Manual Installation + Pip
 -------------------------
 
-You will need to install Python 3.8 on your machine with
+You will need to install Python 3.7 on your machine with
 all of the packages listed in ``requirements.txt``:
 
 ``pip install -e .``
