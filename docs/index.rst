@@ -16,6 +16,7 @@ experimental design methods.
 
    installation
    design
+   how-to
    source/modules
 
 Why Colmena?
