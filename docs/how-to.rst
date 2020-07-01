@@ -107,6 +107,26 @@ types of resources:
   The ``local_threads`` is required for Colmena to run output tasks,
   as described in the `design document <design.html#method-server>`_
 
+Mapping Methods to Resources
+++++++++++++++++++++++++++++
+
+The constructor of :class:`colmena.method_server.ParslMethodServer` takes a list of
+Python function objects as an input.
+Internally, the method server converts these to Parsl "apps" by calling
+:py:func:`python_app` function from Parsl.
+You can pass the keyword arguments for this function along with each function
+to map functions to specific resources.
+
+For example, the following code will place requests for the "launch_mpi_application"
+method to the "multi_node" resource and the ML task to the "single_node" resource:
+
+.. code-block:: python
+
+    server = ParslMethodServer([
+        (launch_mpi_application, {'executor': 'multi_node'}),
+        (generate_designs_with_ml, {'executor': 'single_node'})
+    ])
+
 Creating a ``main.py``
 ----------------------
 
