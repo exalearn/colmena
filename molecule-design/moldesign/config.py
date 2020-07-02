@@ -96,3 +96,43 @@ conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
     ],
     strategy=None,
 )
+
+theta_interleaved_config = Config(
+    executors=[
+        HighThroughputExecutor(
+            address=address_by_hostname(),
+            label="nwchem",
+            max_workers=int(os.environ.get("COBALT_JOBSIZE", 1)) - 1,
+            provider=LocalProvider(
+                nodes_per_block=1,
+                init_blocks=1,
+                max_blocks=1,
+                launcher=SimpleLauncher(),  # Places worker on the launch node
+                worker_init='''
+module load miniconda-3
+export PATH=~/software/psi4/bin:$PATH
+conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
+''',
+            ),
+        ),
+        HighThroughputExecutor(
+            address=address_by_hostname(),
+            label="single_node",
+            max_workers=1,
+            provider=LocalProvider(
+                nodes_per_block=1,
+                init_blocks=1,
+                max_blocks=1,
+                launcher=AprunLauncher('-d 64 --cc depth'),  # Places worker on the launch node
+                worker_init='''
+module load miniconda-3
+export PATH=~/software/psi4/bin:$PATH
+conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
+''',
+            ),
+        ),
+        ThreadPoolExecutor(label="local_threads", max_threads=4)
+    ],
+    strategy=None,
+)
+
