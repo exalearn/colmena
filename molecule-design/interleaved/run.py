@@ -19,7 +19,7 @@ from qcelemental.models.procedures import QCInputSpecification, Model
 from sklearn.linear_model import BayesianRidge
 from sklearn.pipeline import Pipeline
 
-from moldesign.config import theta_interleaved_config as config
+from moldesign.config import local_interleaved_config as config
 from moldesign.sample.moldqn import generate_molecules, SklearnReward
 from moldesign.score import compute_score
 from moldesign.score.group_contrib import GroupFeaturizer
@@ -31,6 +31,7 @@ from colmena.redis.queue import ClientQueues, make_queue_pairs
 
 # Define the QCMethod used for the
 spec = QCInputSpecification(model=Model(method='hf', basis='sto-3g')) 
+code = 'psi4'
 compute_config = {'nnodes': 1, 'cores_per_rank': 2}
 
 
@@ -60,6 +61,8 @@ class Thinker(Thread):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.output_dir = output_dir
         self.output_file = open(os.path.join(self.output_dir, 'simulation_records.jsonld'), 'w')
+        self.rl_records = open(os.path.join(self.output_dir, 'rl_records.jsonld'), 'w')
+        self.screen_records = open(os.path.join(self.output_dir, 'screening_records.jsonld'), 'w')
 
         # Synchronization between ML and QC loops
         self._task_queue = PriorityQueue(maxsize=n_parallel * 2)
@@ -161,7 +164,7 @@ class Thinker(Thread):
             ])
             database_copy = self.database.copy()
             mols, atoms = zip(*database_copy.items())
-            model.fit(mols, atoms)  # negative so that the RL optimizes a positive value
+            model.fit(mols, atoms)
             self.logger.info(f'Fit a model with {len(mols)} training points and {len(gf.known_groups_)} groups')
 
             # Use RL to generate new molecules
@@ -170,11 +173,15 @@ class Thinker(Thread):
             result = self.queues.get_result(topic='ML')
             new_molecules, agent = result.value
             self.logger.info(f'Generated {len(new_molecules)} candidate molecules')
+            print(result.json(exclude={'inputs', 'value'}), file=self.rl_records)
+            self.rl_records.flush()
 
             # Assign them scores
             self.queues.send_inputs(model, new_molecules, method='compute_score', topic='ML')
             result = self.queues.get_result(topic='ML')
             scores = result.value
+            print(result.json(exclude={'inputs'}), file=self.screen_records)
+            self.screen_records.flush()
             self.logger.info(f'Assigned scores to all molecules')
 
             # Pick a set of calculations to run
@@ -252,8 +259,8 @@ if __name__ == '__main__':
     my_generate_molecules = update_wrapper(my_generate_molecules, generate_molecules)
 
     # Create the method server and task generator
-    ml_cfg = {'executors': ['single_node']}
-    dft_cfg = {'executors': ['nwchem']}
+    ml_cfg = {'executors': ['ml']}
+    dft_cfg = {'executors': ['qc']}
     doer = ParslMethodServer([(my_generate_molecules, ml_cfg), (compute_score, ml_cfg),
                               (compute_atomization_energy, dft_cfg),
                               (compute_reference_energy, dft_cfg)],
