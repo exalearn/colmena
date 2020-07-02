@@ -28,7 +28,6 @@ otherwise, change the default code in `moldesign/simulate.py` to `psi4`.
 
 ## Running
 
-There are currently two demo apps for using Colmena for molecular design: `local-greey` and `interleaved`.
-Each are available in subdirectories of this folder and documentation for running them is available in 
-those folders.
+There are currently two demo apps for using Colmena for molecular design: `local-greedy` and `interleaved`.
+Each is available in a subdirectory of this folder, along with documentation for running them.
 
