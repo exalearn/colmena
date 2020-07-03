@@ -27,7 +27,7 @@ local_interleaved_config = Config(
     executors=[
         HighThroughputExecutor(
             address="localhost",
-            label="psi4",
+            label="qc",
             max_workers=2,
             provider=LocalProvider(
                 init_blocks=1,
@@ -101,7 +101,7 @@ theta_interleaved_config = Config(
     executors=[
         HighThroughputExecutor(
             address=address_by_hostname(),
-            label="nwchem",
+            label="qc",
             max_workers=int(os.environ.get("COBALT_JOBSIZE", 1)) - 1,
             provider=LocalProvider(
                 nodes_per_block=1,
@@ -117,7 +117,7 @@ conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
         ),
         HighThroughputExecutor(
             address=address_by_hostname(),
-            label="single_node",
+            label="ml",
             max_workers=1,
             provider=LocalProvider(
                 nodes_per_block=1,
