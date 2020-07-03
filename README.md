@@ -17,7 +17,7 @@ If you are running Linux on a system without a GPU:
 
 will install all packages needed for the colmena library and demo applications.
 
-Otherwise, consult our [Installation Guide](<https://colmena.readthedocs.io/en/latest/installation.html).
+Otherwise, consult our [Installation Guide](https://colmena.readthedocs.io/en/latest/installation.html).
 
 ## Using Colmena
 
