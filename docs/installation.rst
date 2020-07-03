@@ -46,7 +46,7 @@ Python environments on supercomputers can vary dramatically.
 We will add to our list as we deploy Colmena on more HPC systems.
 
 Theta (Cray XC40 at ALCF)
-+++++++++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You can use the environment file without modification when installing Colmena on Theta.
 We do recommend you install the environment files to the Lustre file system rather than your
