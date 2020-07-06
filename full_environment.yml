@@ -4,7 +4,7 @@ channels:
   - conda-forge
   - psi4/label/dev
 dependencies:
-# Core dependencies for
+# Core dependencies for Colmena
   - python==3.7.*
   - scikit-learn==0.22.*
   - redis==5.0.*
@@ -16,7 +16,7 @@ dependencies:
   - flake8
   - pip
 
-# Dependencies from the GitHub
+# Dependencies from the molecular design app
   - matplotlib>=3
   - openbabel==3.0.*
   - geometric==0.9.*
@@ -26,6 +26,7 @@ dependencies:
   - psi4==1.4*
   - py-cpuinfo<6
   - msgpack-python==1.*
+  - tqdm
 
 # Pip packages for all of them
   - pip:
