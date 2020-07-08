@@ -36,6 +36,61 @@ Note that we are considering an improved model where the pre- and post-processin
 be separate tasks to avoid holding on to large number of nodes
 during pre- or post-processing (see `Issue #4 <https://github.com/exalearn/colmena/issues/4>`_).
 
+Common Example: Launching MPI Applications
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We imagine many Colmena applications to use an MPI application in many of their "Methods,"
+and a recommended pattern for using MPI applications:
+
+.. code-block:: python
+
+    from subprocess import run
+    from tempfile import TemporaryDirectory
+    import os
+
+    def mpi_method(inputs, num_nodes=2, ranks_per_node=4):
+        """Run an MPI application
+
+        Args:
+            inputs (Any): Inputs to MPI application
+            num_nodes (int): Number of nodes to use for application
+            ranks_per_node (int): Number of ranks per node
+        Returns:
+            (Any) Output from the function
+        """
+
+        # Create a temporary directory for the files
+        #  (assumed to be visible on the global filesystem)
+        with TemporaryDirectory() as td:
+            # Make the input file
+            in_file = os.path.join(td, 'input.file')
+            with open(in_file, 'w') as fp:
+                print(inputs, file=fp)
+
+            # Make the path to the output file
+            out_file = os.path.join(td, 'out.file')
+
+            # Launch the application
+            with open(out_file, 'w') as fp:
+                run([
+                    'aprun', '-n', str(num_nodes * ranks_per_node), '-N', str(ranks_per_node),
+                    '/path/to/mpi_application', in_file
+                ], stdout=fp)
+
+            # Parse the outputs and return the answer
+            with open(out_file) as fp:
+                return int(re.match('Answer: (\d+)', fp.read()).group(1))
+
+This basic pattern has many points for further optimization that could be critical for some applications:
+
+1. *System-specific mpiexec command*. We hard code here for simplicity, but consider a configuration file system
+   like `QCEngine <http://docs.qcarchive.molssi.org/projects/QCEngine/en/latest/environment.html#configuration-files>`_
+   or passing a function for making the call as an argument.
+2. *Leaving Compute Nodes Idle*: The compute nodes are idle while generating the input file(s) based on the
+   input arguments and parsing the output. If writing inputs and parsing output are expensive,
+   consider using separate methods to pre- and postprocessing. We are planning to streamline this process in
+   the future (see `Issue #4 <https://github.com/exalearn/colmena/issues/4>`_).
+
 Specifying Computational Resources
 ++++++++++++++++++++++++++++++++++
 

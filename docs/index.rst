@@ -19,8 +19,8 @@ experimental design methods.
    how-to
    source/modules
 
-Why Colmena?
-------------
+Why the Name "Colmena?"
+-----------------------
 
 Colmena is Spanish for "beehive."
 Colmena applications, like their namesake,
