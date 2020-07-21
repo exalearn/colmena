@@ -182,9 +182,52 @@ method to the "multi_node" resource and the ML task to the "single_node" resourc
         (generate_designs_with_ml, {'executor': 'single_node'})
     ])
 
+Creating a "Thinker" Application
+--------------------------------
+
+Colmena is designed to support many different algorithms for creating and dispatching tasks.
+We will describe a few example explanations to illustrate how to make a Thinker applications
+that implement degrees of overlap between performing simulations and selecting the next simulation.
+
+For all of these cases, we provide a simple demonstration application in
+`the demo applications <https://github.com/exalearn/colmena/tree/master/demo_apps/thinker-examples>`_.
+
+.. TODO: Make the demo applications
+
+Batch Optimizer
++++++++++++++++
+
+A batch optimization process repeats two steps sequentially: select a batch of simulations and 
+then perform every simulation in the batch.
+Batch optimization, while simple to implement, can lead to poor utilization
+if there is a large variation between task completion times (see discussion by
+`Wozniak et al. <http://dx.doi.org/10.1186/s12859-018-2508-4>`_).
+
+.. figure:: _static/batch-utilization.png
+    :width: 75%
+    :align: center
+    :alt: Utilization over time for batch optimizer
+
+    Resources remain unused while waiting for all members of a batch to complete.
+
+
+Streaming Optimizer
++++++++++++++++++++
+
+TBD
+
+.. TODO: Reference Alex's work on Rocketsled showing how the latency increases
+
+Interleaved, Streamed Optimizer
++++++++++++++++++++++++++++++++
+
+TBD
+
+.. TODO: See if I can find any implementations of this method besides us
+
+
+
 Creating a ``main.py``
 ----------------------
 
-TBD. Discuss a typical, multi-threaded Colmena "Thinker" application
-
-
+**TODO**: Describe how to launch the application.
