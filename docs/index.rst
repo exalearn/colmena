@@ -10,6 +10,8 @@ Colmena was created to explore building applications high-throughput
 sweeps that replace human steering with Artificial Intelligence (AI)
 experimental design methods.
 
+Our code is open-source and available on GitHub: https://github.com/exalearn/colmena
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
