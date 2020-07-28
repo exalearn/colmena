@@ -20,13 +20,14 @@ dependencies:
   - matplotlib>=3
   - openbabel==3.0.*
   - geometric==0.9.*
-  - qcengine==0.14.*
+  - qcengine==0.15.*
   - rdkit==2019.09.3
   - tensorflow==2.1.*
   - qcportal==0.13.*
   - psi4==1.4*
   - py-cpuinfo<6
   - msgpack-python==1.*
+  - xtb-python
   - tqdm
 
 # Pip packages for all of them
