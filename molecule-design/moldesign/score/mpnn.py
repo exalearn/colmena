@@ -4,7 +4,28 @@ from typing import List, Dict, Tuple
 import numpy as np
 import tensorflow as tf
 from molgym.mpnn.data import convert_nx_to_dict
+from molgym.mpnn.layers import custom_objects
 from molgym.utils.conversions import convert_smiles_to_nx
+
+
+# TODO (wardlt): Make this Keras message object usable elsewhere
+class MPNNMessage:
+    """Package for sending an MPNN model over pickle"""
+
+    def __init__(self, model: tf.keras.Model):
+        """
+        Args:
+            model: Model to be sent
+        """
+
+        self.config = model.to_json()
+        # Makes a copy of the weights to ensure they are not memoryview objects
+        self.weights = [np.array(v) for v in model.get_weights()]
+
+    def get_model(self) -> tf.keras.Model:
+        model = tf.keras.models.model_from_json(self.config, custom_objects=custom_objects)
+        model.set_weights(self.weights)
+        return model
 
 
 def _merge_batch(mols: List[dict]) -> dict:
@@ -39,12 +60,12 @@ def _merge_batch(mols: List[dict]) -> dict:
     return batch
 
 
-def evaluate_mpnn(model: tf.keras.Model, smiles: List[str], atom_types: List[int], bond_types: List[str],
-                  batch_size: int = 128) -> np.ndarray:
+def evaluate_mpnn(model_msg: MPNNMessage, smiles: List[str],
+                  atom_types: List[int], bond_types: List[str], batch_size: int = 128) -> np.ndarray:
     """Run inference on a list of molecules
 
     Args:
-        model: Model to use to run inference
+        model_msg: Serialized version of the model
         smiles: List of molecules to evaluate
         atom_types: List of known atom types
         bond_types: List of known bond types
@@ -52,6 +73,10 @@ def evaluate_mpnn(model: tf.keras.Model, smiles: List[str], atom_types: List[int
     Returns:
         Predicted value for each molecule
     """
+
+    # Rebuild the model
+    tf.keras.backend.clear_session()
+    model = model_msg.get_model()
 
     # Convert all SMILES strings to batches of molecules
     # TODO (wardlt): Use multiprocessing. Could benefit from a persistent Pool to avoid loading in TF many times
@@ -119,14 +144,14 @@ class GraphLoader(tf.keras.utils.Sequence):
 
 
 # TODO (wardlt): Evaluate whether the model stays in memory after training. If so, clear graph?
-def update_mpnn(model: tf.keras.Model, database: Dict[str, float], atom_types: List[int],
-                bond_types: List[str], num_epochs: int, batch_size: int = 512,
-                validation_split: float = 0.1, random_state: int = 1)\
-        -> Tuple[tf.keras.Model, tf.keras.callbacks.History]:
+def update_mpnn(model_msg: MPNNMessage, database: Dict[str, float], num_epochs: int,
+                atom_types: List[int], bond_types: List[str], batch_size: int = 512,
+                validation_split: float = 0.1, random_state: int = 1, learning_rate: float = 1e-3)\
+        -> Tuple[List, dict]:
     """Update a model with new training sets
 
     Args:
-        model: Model to be updated
+        model_msg: Serialized version of the model
         database: Training dataset of molecule mapped to a property
         atom_types: List of known atom types
         bond_types: List of known bond types
@@ -135,10 +160,16 @@ def update_mpnn(model: tf.keras.Model, database: Dict[str, float], atom_types: L
         validation_split: Fraction of molecules used for the training/validation split
         random_state: Seed to the random number generator. Ensures entries do not move between train
             and validation set as the database becomes larger
+        learning_rate: Learning rate for the Adam optimizer
     Returns:
-        model: Model with the updated weights
+        model: Updated weights
         history: Training history
     """
+
+    # Rebuild the model
+    tf.keras.backend.clear_session()
+    model = model_msg.get_model()
+    model.compile(tf.keras.optimizers.Adam(lr=learning_rate), 'mean_absolute_error')
 
     # Separate the database into molecules and properties
     smiles, y = zip(*database.items())
@@ -161,4 +192,4 @@ def update_mpnn(model: tf.keras.Model, database: Dict[str, float], atom_types: L
     # Run the desired number of epochs
     # TODO (wardlt): Should we use callbacks to get only the "best model" based on the validation set?
     history = model.fit(train_loader, epochs=num_epochs, validation_data=val_loader, verbose=False)
-    return model, history
+    return [np.array(v) for v in model.get_weights()], history.history

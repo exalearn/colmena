@@ -7,7 +7,7 @@ from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras import Model
 import pytest
 
-from moldesign.score.mpnn import evaluate_mpnn, update_mpnn
+from moldesign.score.mpnn import evaluate_mpnn, update_mpnn, MPNNMessage
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def bond_types() -> List[str]:
 
 def test_evaluate(model, atom_types, bond_types):
     smiles = ['CC', 'CCC', 'CC=C', 'CCC']
-    output = evaluate_mpnn(model, smiles, atom_types, bond_types, batch_size=2)
+    output = evaluate_mpnn(MPNNMessage(model), smiles, atom_types, bond_types, batch_size=2)
     assert output.size == 4
     assert isclose(output[1], output[3], abs_tol=1e-6)
 
@@ -54,5 +54,7 @@ def test_training(model, atom_types, bond_types):
     smiles = ['CC', 'CCCC', 'CC=C', 'CCC']
     y = [1, 2, 3, 4]
     model.compile('adam', 'mean_squared_error')
-    _, history = update_mpnn(model, dict(zip(smiles, y)), atom_types, bond_types, 4, validation_split=0.5)
-    assert len(history.epoch) == 4
+    new_weights, history = update_mpnn(MPNNMessage(model), dict(zip(smiles, y)),
+                                       4, atom_types, bond_types, validation_split=0.5)
+    model.set_weights(new_weights)
+    assert len(history['loss']) == 4
