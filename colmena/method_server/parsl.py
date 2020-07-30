@@ -198,7 +198,7 @@ class ParslMethodServer(BaseMethodServer):
         # TODO (wardlt): Objects are deserialized here, serialized again and then sent to the worker.
         #  We could implement a method to still read the task but ignore serialization
         topic, result = self.queues.get_task(self.timeout)
-        logger.info(f'Received inputs {result} with topic {topic}')
+        logger.info(f'Received request for {result.method} with topic {topic}')
 
         # Determine which method to run
         if self.default_method_ and result.method is None:
