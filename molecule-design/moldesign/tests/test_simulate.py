@@ -9,4 +9,4 @@ def test_simple_mol():
 
 
 def test_ref_energy():
-    assert compute_reference_energy('C', qcspec) < 0
+    assert compute_reference_energy('C', qcspec, 1) < 0

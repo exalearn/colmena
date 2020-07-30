@@ -77,7 +77,7 @@ def compute_atomization_energy(smiles: str, qc_config: QCInputSpecification,
     """
 
     # Relax the structure
-    xyz, total_energy = relax_structure(smiles, qc_config, compute_config, code)
+    xyz, total_energy = relax_structure(smiles, qc_config, compute_config, code=code)
     mol = Molecule.from_data(xyz, dtype='xyz')
 
     return subtract_reference_energies(total_energy, mol, reference_energies)
