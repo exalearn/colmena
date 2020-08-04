@@ -10,7 +10,7 @@ export PATH=~/software/psi4/bin:$PATH
 export OMP_NUM_THREADS=64
 export KMP_INIT_AT_FORK=FALSE
 
-export PATH="/home/lward/software/nwchem-6.8.1/bin/LINUX64:$PATH"
+export PATH="/lus/theta-fs0/projects/CSC249ADCD08/software/nwchem-6.8.1/bin/LINUX64:$PATH"
 module load atp
 export MPICH_GNI_MAX_EAGER_MSG_SIZE=16384
 export MPICH_GNI_MAX_VSHORT_MSG_SIZE=10000
