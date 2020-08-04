@@ -13,6 +13,11 @@ Install them by calling: ``conda env create --file full_environment.yml --force`
 The installation will install the ``colmena`` and its libraries in development mode
 so that any changes you make to them are automatically available to the environment.
 
+The full environment will install two computational chemistry codes,
+Psi4 and XTB, that can be used in our applications.
+You may also want to install NWChem, which is available as an Ubuntu package
+and can be installed on OSX.
+
 System-Specific Instructions
 ----------------------------
 
@@ -42,8 +47,9 @@ We have experienced some issues around Parsl not being able to reserve ports on 
 Supercomputers
 ++++++++++++++
 
-Python environments on supercomputers can vary dramatically.
-We will add to our list as we deploy Colmena on more HPC systems.
+Python environments and availability of Quantum Chemistry applications vary dramatically
+across different supercomputers.
+Here, we describe the Colmena installation process for different supercomptuers.
 
 Theta (Cray XC40 at ALCF)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -67,3 +73,12 @@ We recommend the following procedure:
     conda deactivate  # Avoids permissions issues around editing the base environment
     conda env create --file full_environment.yml -p ./env
     conda activate ./env
+
+Our applications on Theta require a build of NWChem with Python scripting enabled.
+The version referred to in the Theta queue scripts for each application point to the proper location
+in the CSC249ADCD08 filesystem.
+Contact Logan Ward for access or, if you would like to build it on your own,
+download the `NWChem source code from GitHub
+<https://github.com/nwchemgit/nwchem/releases/download/6.8.1-release/
+nwchem-6.8.1-release.revision-v6.8-133-ge032219-src.2018-06-14.tar.bz2>`_
+and use `our build script <_static/build-nwchem-theta.sh>`_.
