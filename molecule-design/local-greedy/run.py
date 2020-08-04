@@ -18,7 +18,7 @@ from qcelemental.models.procedures import QCInputSpecification, Model
 from sklearn.linear_model import BayesianRidge
 from sklearn.pipeline import Pipeline
 
-from moldesign.config import config as config
+from moldesign.config import theta_nwchem_config as config
 from moldesign.sample.moldqn import generate_molecules, SklearnReward
 from moldesign.score import compute_score
 from moldesign.score.group_contrib import GroupFeaturizer
@@ -31,6 +31,8 @@ from colmena.redis.queue import ClientQueues, make_queue_pairs
 # Define the QCMethod used for the
 spec = QCInputSpecification(model=Model(method='hf', basis='sto-3g')) 
 compute_config = {'nnodes': 1, 'cores_per_rank': 2}
+
+multiplicity = {'H': 2, 'He': 1, 'Li': 2, 'C': 3, 'N': 4, 'O': 3, 'F': 2}
 
 
 class Thinker(Thread):
@@ -72,7 +74,7 @@ class Thinker(Thread):
         self.logger.info(f'Starting Thinker process')
         elems = ['H', 'C', 'N', 'O', 'F']
         for elem in elems:
-            self.queues.send_inputs(elem, spec, method='compute_reference_energy')
+            self.queues.send_inputs(elem, spec, multiplicity[elem], method='compute_reference_energy')
         ref_energies = {}
         for _ in elems:
             result = self.queues.get_result()

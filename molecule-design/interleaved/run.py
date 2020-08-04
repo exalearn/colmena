@@ -19,7 +19,7 @@ from qcelemental.models.procedures import QCInputSpecification, Model
 from sklearn.linear_model import BayesianRidge
 from sklearn.pipeline import Pipeline
 
-from moldesign.config import local_interleaved_config as config
+from moldesign.config import theta_interleaved_config as config
 from moldesign.sample.moldqn import generate_molecules, SklearnReward
 from moldesign.score import compute_score
 from moldesign.score.group_contrib import GroupFeaturizer
@@ -31,8 +31,10 @@ from colmena.redis.queue import ClientQueues, make_queue_pairs
 
 # Define the QCMethod used for the
 spec = QCInputSpecification(model=Model(method='hf', basis='sto-3g')) 
-code = 'psi4'
-compute_config = {'nnodes': 1, 'cores_per_rank': 2}
+code = 'nwchem'
+compute_config = {'nnodes': 2, 'cores_per_rank': 2}
+
+multiplicity = {'H': 2, 'He': 1, 'Li': 2, 'C': 3, 'N': 4, 'O': 3, 'F': 2}
 
 
 class Thinker(Thread):
@@ -56,7 +58,6 @@ class Thinker(Thread):
         self.initial_molecules = initial_molecules
         self.n_evals = n_molecules
         self.n_parallel = n_parallel
-        assert n_molecules % n_parallel == 0, "# evals must be a multiple of the number of calculations in parallel"
         self.queues = queues
         self.logger = logging.getLogger(self.__class__.__name__)
         self.output_dir = output_dir
@@ -123,7 +124,7 @@ class Thinker(Thread):
         self.logger.info(f'Starting Thinker process')
         elems = ['H', 'C', 'N', 'O', 'F']
         for elem in elems:
-            self.queues.send_inputs(elem, spec, method='compute_reference_energy')
+            self.queues.send_inputs(elem, spec, multiplicity[elem], method='compute_reference_energy')
         ref_energies = {}
         for _ in elems:
             result = self.queues.get_result()
