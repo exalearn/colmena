@@ -53,3 +53,17 @@ We do recommend you install the environment files to the Lustre file system rath
 home directory.
 For example, ``conda env create --file full_environment.yml -p ./env`` will install the environment
 files to a folder you specify rather than your home directory.
+
+We recommend the following procedure:
+
+.. code-block:: bash
+
+    # Clone colmena
+    git clone https://github.com/exalearn/colmena.git
+    cd colmena
+
+    # Build the anaconda environment
+    module load miniconda-3/latest  # Loads the ALCF-provided miniconda
+    conda deactivate  # Avoids permissions issues around editing the base environment
+    conda env create --file full_environment.yml -p ./env
+    conda activate ./env
