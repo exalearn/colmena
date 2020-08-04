@@ -182,7 +182,7 @@ export LD_LIBRARY_PATH=/opt/intel/compilers_and_libraries_2018.0.128/linux/compi
             working_dir='/homes/lward/parsl',
             worker_logdir_root='/homes/lward/parsl',
             provider=LocalProvider(
-                channel=SSHChannel('lambda5.cels.anl.gov', script_dir='/home/lward/parsl'),
+                #channel=SSHChannel('lambda5.cels.anl.gov', script_dir='/home/lward/parsl'),
                 nodes_per_block=1,
                 init_blocks=1,
                 max_blocks=1,
