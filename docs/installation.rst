@@ -33,7 +33,7 @@ OSX
 +++
 
 The latest Tensorflow binaries for OSX are available through PyPI instead of Anaconda.
-Move the ``tesnorflow`` line to the ``- pip:`` block at the end of the environment file.
+Move the ``tensorflow`` line to the ``- pip:`` block at the end of the environment file.
 
 You will also need to install redis manually.
 
