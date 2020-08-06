@@ -74,7 +74,7 @@ decide which tasks are run.
 The client communicates by either writing *task requests* to or reading *results* from
 Redis queues.
 Tasks and results are communicated as JSON objects and contain the inputs to a task,
-the outputs of the task, and and a variety of profiling data (e.g., task runtime,
+the outputs of the task, and a variety of profiling data (e.g., task runtime,
 time inputs received by method server).
 We provide a Python API for the message format, :class:`colmena.models.Result`, and
 interfacing with the Redis queues, :mod:`colmena.redis`, but the code can be
