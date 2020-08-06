@@ -27,6 +27,7 @@ from moldesign.simulate import compute_atomization_energy
 from moldesign.utils import get_platform_info
 from colmena.method_server import ParslMethodServer
 from colmena.redis.queue import ClientQueues, make_queue_pairs
+from colmena.models import Result
 
 # Define the compute setting for the system (only relevant for NWChem)
 compute_config = {'nnodes': 1, 'cores_per_rank': 2}
@@ -63,7 +64,6 @@ class Thinker(Thread):
         self.queues = queues
         self.logger = logging.getLogger(self.__class__.__name__)
         self.output_dir = output_dir
-        self.output_file = open(os.path.join(self.output_dir, 'simulation_records.jsonld'), 'w')
 
         # The ML components
         self.moldqn = initial_moldqn
@@ -72,7 +72,7 @@ class Thinker(Thread):
         # Attributes associated with quantum chemistry calculations
         # TODO (wardlt): Use QCFractal or another database system instead of fragile in-memory databases
         self.database = initial_training_set.copy()
-        self.initial_search_space = initial_search_space
+        self.search_space = initial_search_space
 
         # Attributes associated with the active learning
         self.n_evals = n_molecules + len(self.database)
@@ -82,6 +82,27 @@ class Thinker(Thread):
         # Synchronization between ML and QC loops
         self._task_queue = PriorityQueue(maxsize=n_parallel * 2)
         self._gen_done = Event()
+
+    def _write_result(self, result: Result, filename: str, keep_inputs: bool = True, keep_outputs: bool = True):
+        """Write result to a log file
+
+        Args:
+            result: Result to be written
+            filename: Name of the log file
+            keep_inputs: Whether to write the function inputs
+            keep_outputs: Whether to write the function outputs
+        """
+
+        # Determine which fields to dumb
+        exclude = set()
+        if not keep_inputs:
+            exclude.add('inputs')
+        if not keep_outputs:
+            exclude.add('value')
+
+        # Write it out
+        with open(os.path.join(self.output_dir, filename), 'a') as fp:
+            print(result.json(exclude=exclude), file=fp)
 
     def simulation_dispatcher(self):
         """Runs the ML loop: Generate tasks for the simulator"""
@@ -101,8 +122,7 @@ class Thinker(Thread):
                 self.database[result.args[0]] = result.value
             else:
                 logging.warning('Calculation failed! See simulation outputs and Parsl log file')
-            print(result.json(), file=self.output_file)
-            self.output_file.flush()
+            self._write_result(result, 'simulation_records.jsonld')
 
             # Get a new one from the priority queue and submit it
             (step_number, _), smiles = self._task_queue.get()
@@ -120,8 +140,7 @@ class Thinker(Thread):
                 self.database[result.args[0]] = result.value
             else:
                 logging.warning('Calculation failed! See simulation outputs and Parsl log file')
-            print(result.json(), file=self.output_file)
-            self.output_file.flush()
+            self._write_result(result, 'simulation_records.jsonld')
 
         self.logger.info('Task consumer has completed')
 
@@ -133,7 +152,7 @@ class Thinker(Thread):
         # Submit some initial molecules so that the simulator gets started immediately
         num_to_seed = self._task_queue.maxsize
         self.logger.info(f'Sending {num_to_seed} initial molecules')
-        for smiles in sample(self.initial_search_space, num_to_seed):
+        for smiles in sample(self.search_space, num_to_seed):
             self._task_queue.put(((1, 0), smiles))
 
         # Perform the design loop iteratively
@@ -147,19 +166,26 @@ class Thinker(Thread):
             self.logger.info(f'Updating the model with training set size {len(self.database)}')
             result = self.queues.get_result(topic='ML')
             new_weights, _ = result.value
+            self._write_result(result, 'update_records.jsonld', keep_inputs=False, keep_outputs=False)
             self.mpnn.set_weights(new_weights)
 
             # Use RL to generate new molecules
             self.moldqn.env.reward_fn.model = self.mpnn
             self.queues.send_inputs(self.moldqn, method='generate_molecules', topic='ML')
             result = self.queues.get_result(topic='ML')
+            self._write_result(result, 'generate_records.jsonld', keep_inputs=False, keep_outputs=False)
             new_molecules, self.moldqn = result.value  # Also update the RL agent
             self.logger.info(f'Generated {len(new_molecules)} candidate molecules')
+
+            # Update the list of molecules
+            self.search_space = list(set(self.search_space).union(new_molecules))
+            self.logger.info(f'Search space now includes {len(self.search_space)} molecules')
 
             # Assign them scores
             self.queues.send_inputs(MPNNMessage(self.mpnn), new_molecules, method='evaluate_mpnn', topic='ML')
             result = self.queues.get_result(topic='ML')
             scores = result.value
+            self._write_result(result, 'screen_records.jsonld', keep_inputs=False, keep_outputs=False)
             self.logger.info(f'Assigned scores to all molecules')
 
             # Pick a set of calculations to run

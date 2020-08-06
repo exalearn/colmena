@@ -1,0 +1,12 @@
+{
+  "program": "nwchem",
+  "model": {
+    "method": "b3lyp",
+    "basis": "3-21g",
+    "keywords": {
+      "dft__convergence__energy": "1e-8",
+      "dft__grid": "xfine",
+      "basis__spherical": true
+    }
+  }
+}
