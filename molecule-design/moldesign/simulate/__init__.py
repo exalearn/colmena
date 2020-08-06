@@ -131,7 +131,7 @@ def relax_structure(smiles: str,
     # Run the relaxation
     opt_input = OptimizationInput(input_specification=qc_config,
                                   initial_molecule=mol,
-                                  keywords={'program': code, 'convergence_set': 'GAU_VERYTIGHT'})
+                                  keywords={'program': code})
     res: OptimizationResult = \
         compute_procedure(opt_input, 'geometric', local_options=compute_config, raise_error=True)
     return res.final_molecule.to_string('xyz'), res.energies[-1]
