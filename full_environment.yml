@@ -27,6 +27,7 @@ dependencies:
   - psi4==1.4*
   - py-cpuinfo<6
   - msgpack-python==1.*
+  - sqlalchemy
   - xtb-python
   - psutil
   - git-lfs
@@ -36,7 +37,7 @@ dependencies:
   - pip:
       - -e .
       - -e ./molecule-design/
-      - parsl>=1.*
+      - parsl[monitoring]>=1.*
       - pydantic
       - python-git-info
       - gym
