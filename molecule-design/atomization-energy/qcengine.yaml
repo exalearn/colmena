@@ -1,0 +1,8 @@
+all:
+  hostname_pattern: "*"
+  scratch_directory: ./scratch
+  is_batch_node: True
+  mpiexec_command: "aprun -n {total_ranks} -N {ranks_per_node} -C -cc depth --env CRAY_OMP_CHECK_AFFINITY=TRUE --env OMP_NUM_THREADS={cores_per_rank} --env MKL_NUM_THREADS={cores_per_rank} -d {cores_per_rank} -j 1"
+  jobs_per_node: 1
+  ncores: 64
+  memory: 192
