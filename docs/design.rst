@@ -107,6 +107,8 @@ The :class:`colmena.method_server.ParslMethodServer` itself is a multi-threaded 
 Life-Cycle of a Task
 --------------------
 
+.. TODO (wardlt): Make a figure to illustrate the task routing
+
 We describe the life-cycle of a task to illustrate how all of the components of Colmena work together
 by illustrating a typical :class:`colmena.models.Result` object.
 
@@ -115,32 +117,45 @@ by illustrating a typical :class:`colmena.models.Result` object.
 
     {
         "inputs": [[1, 1], {"operator": "add"}],
+        "serialization_method": "pickle",
         "method": "reduce",
         "value": 2,
         "success": true,
         "time_created": 1593498015.132477,
         "time_input_received": 1593498015.13357,
         "time_compute_started": 1593498018.856764,
-        "time_running": 1.8e-05,
         "time_result_sent": 1593498018.858268,
         "time_result_received": 1593498018.860002
+        "time_running": 1.8e-05,
+        "time_serialize_inputs": 4.07e-05,
+        "time_deserialize_inputs": 4.28-05,
+        "time_serialize_results": 3.32e-05,
+        "time_deserialize_results": 3.30e-05,
     }
 
 **Launching Tasks**: A client creates a task request at ``time_created`` and adds the the input
 specification (``method`` and ``inputs``) to an "outbound" Redis queue. The task request is formatted
 in the JSON format defined above with only the ``method``, ``inputs`` and ``time_created`` fields
-populated.
+populated. The task inputs are then serialized (``time_serialize_inputs``) and send using
+the Redis Queue to the Method server.
+The serialization method is communicated along with the inputs.
 
 **Task Routing**: The method server reads the task request from the outbound queue at ``time_input_received``
 and submits the task to the distributed workflow engine.
+The method definitions in the Method Server denote on which resources they can run,
+and Parsl chooses when and to which resource to submit tasks.
 
-**Computation**: A Parsl worker starts a task at ``time_compute_started``, which requires ``time_running``
-and sends the result back to the Method server.
+**Computation**: A Parsl worker starts a task at ``time_compute_started``.
+The task inputs are deserialized (``time_deserialize_inputs``),
+the requested work is executed (``time_running``),
+and the results serialized (``time_serialize_results``).
 
 **Result Communication**: The method server adds the result to the task specification (``value``) and
-sends it back to the client in an "inbound" queue at ``time_result_sent``.
+sends it back to the client in an "inbound" queue at (``time_result_sent``).
 
-**Result Retrieval**: The client retrieves the message from the inbound queue at ``time_result_received``.
+**Result Retrieval**: The client retrieves the message from the inbound queue.
+The result is deserialized (``time_deserialize_result``) and returned
+back to the client at ``time_result_received``.
 
 The overall efficiency of the task system can be approximated by comparing the ``time_running``, which
 denotes the actual time spent executing the task on the workers, to the difference between the ``time_created``
@@ -153,3 +168,4 @@ for the Redis queues.
 For example, the inbound queue can be assessed by comparing the ``time_created`` and ``time_input_received``.
 The communication times for Parsl can be measured only when the queue length is negligible
 through the differences between ``time_inputs_received`` and ``time_compute_started``.
+The communication times related to serialization are also stored (e.g., ``time_serialize_result``).

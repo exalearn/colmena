@@ -1,3 +1,4 @@
+from colmena.models import SerializationMethod
 from colmena.redis.queue import RedisQueue, ClientQueues, MethodServerQueues, make_queue_pairs
 import pytest
 
@@ -61,6 +62,7 @@ def test_client_method_pair():
     # Push inputs to method server and make sure it is received
     client.send_inputs(1)
     topic, task = server.get_task()
+    task.deserialize()  # Method server does not deserialize automatically
     assert topic == 'default'
     assert task.args == (1,)
     assert task.time_input_received is not None
@@ -68,10 +70,16 @@ def test_client_method_pair():
 
     # Test sending the value back
     task.set_result(2)
+    task.time_deserialize_inputs = 1
+    task.time_serialize_results = 2
+
+    task.serialize()
     server.send_result(task)
     result = client.get_result()
     assert result.value == 2
     assert result.time_result_received > result.time_result_sent
+    assert result.time_serialize_inputs > 0
+    assert result.time_deserialize_results > 0
 
 
 def test_methods():
@@ -81,6 +89,7 @@ def test_methods():
     # Push inputs to method server and make sure it is received
     client.send_inputs(1, method='test')
     _, task = server.get_task()
+    task.deserialize()
     assert task.args == (1,)
     assert task.method == 'test'
     assert task.kwargs == {}
@@ -91,6 +100,7 @@ def test_kwargs():
     client, server = make_queue_pairs('localhost')
     client.send_inputs(1, input_kwargs={'hello': 'world'})
     _, task = server.get_task()
+    task.deserialize()
     assert task.args == (1,)
     assert task.kwargs == {'hello': 'world'}
 
@@ -106,11 +116,13 @@ def test_pickling_error():
 
 def test_pickling():
     """Test communicating results that need to be pickled fails without correct setting"""
-    client, server = make_queue_pairs('localhost', use_pickle=True)
+    client, server = make_queue_pairs('localhost', serialization_method=SerializationMethod.PICKLE)
 
     # Attempt to push a non-JSONable object to the queue
     client.send_inputs(Test())
     _, task = server.get_task()
+    assert isinstance(task.inputs, str)
+    task.deserialize()
     assert task.args[0].x is None
 
     # Set the value
@@ -118,6 +130,7 @@ def test_pickling():
     x = Test()
     x.x = 1
     task.set_result(x)
+    task.serialize()
     server.send_result(task)
     result = client.get_result()
     assert result.args[0].x is None
@@ -131,8 +144,10 @@ def test_filtering():
     # Simulate a result being sent through the method server
     client.send_inputs("hello", topic="priority")
     topic, task = server.get_task()
+    task.deserialize()
     assert topic == "priority"
     task.set_result(1)
+    task.serialize()
     server.send_result(task, topic)
 
     # Make sure it does not appear if we pull only from "default"
@@ -147,3 +162,17 @@ def test_filtering():
     server.send_result(task, topic)
     output = client.get_result()
     assert output is not None
+
+
+def test_clear_inputs():
+    """Test clearing the inputs after storing the result"""
+    client, server = make_queue_pairs('localhost', keep_inputs=False)
+
+    # Sent a method request
+    client.send_inputs(1)
+    _, result = server.get_task()
+    result.deserialize()
+    result.set_result(1)
+
+    # Make sure the inputs were deleted
+    assert result.args == ()

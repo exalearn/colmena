@@ -1,11 +1,10 @@
 import logging
-from datetime import datetime
 from functools import partial
 from queue import Queue
 from threading import Thread
 from concurrent.futures import wait, Future
-from time import sleep
-from typing import Any, Optional, List, Callable, Tuple, Dict, Union, Set
+from time import sleep, perf_counter
+from typing import Optional, List, Callable, Tuple, Dict, Union, Set
 
 import parsl
 from parsl import python_app
@@ -19,35 +18,44 @@ from colmena.models import Result
 logger = logging.getLogger(__name__)
 
 
-def run_and_record_timing(func: Callable, *args, **kwargs) -> Tuple[Any, float, float]:
+def run_and_record_timing(func: Callable, result: Result) -> Result:
     """Run a function and also return the runtime
 
     Args:
         func: Function to invoke
+        result: Result object describing task request
     Returns:
-        - Output of `func(*args, **kwargs)`
-        - (float) Start time of computation as Unix UTC timestamp
-        - Runtime of the computation in seconds
+        Result object with the serialized result
     """
-    start_time = datetime.utcnow()
-    output = func(*args, **kwargs)
-    end_time = datetime.utcnow()
-    return output, start_time.timestamp(), (end_time - start_time).total_seconds()
+    # Mark that compute has started on the worker
+    result.mark_compute_started()
+
+    # Unpack the inputs
+    result.time_deserialize_inputs = result.deserialize()
+
+    # Execute the function
+    start_time = perf_counter()
+    output = func(*result.args, **result.kwargs)
+    end_time = perf_counter()
+    result.set_result(output, end_time - start_time)
+
+    # Re-pack the results
+    result.time_serialize_results = result.serialize()
+
+    return result
 
 
 @python_app(executors=['local_threads'])
-def output_result(queues: MethodServerQueues, topic: str, result_obj: Result, wrapped_output: Tuple[Any, float, float]):
+def output_result(queues: MethodServerQueues, topic: str, inputs: Result, result_obj):
     """Submit the function result to the Redis queue
 
     Args:
         queues: Queues used to communicate with Redis
         topic: Topic to assign in output queue
+        inputs: [Not used by this function]
         result_obj: Result object containing the inputs, to be sent back with outputs
-        wrapped_output: Result from invoking the function and the inputs
     """
-    value, start_time, runtime = wrapped_output
-    result_obj.time_compute_started = start_time
-    result_obj.set_result(value, runtime)
+    assert inputs is not None  # Inputs are not used currently, are passed with the task for the error handler
     return queues.send_result(result_obj, topic=topic)
 
 
@@ -97,6 +105,7 @@ class _ErrorHandler(Thread):
                     topic: str = task.task_def['args'][1]
                     result_obj: Result = task.task_def['args'][2]
                     result_obj.success = False
+                    result_obj.serialize()
                     queues.send_result(result_obj, topic=topic)
 
                 # Loop through the incomplete tasks
@@ -207,7 +216,7 @@ class ParslMethodServer(BaseMethodServer):
             method = result.method
 
         # Submit the application
-        future = self.submit_application(method, *result.args, **result.kwargs)
+        future = self.submit_application(method, result)
         # TODO (wardlt): Implement "resubmit if task returns a new future."
         #  Requires waiting on two streams: input_queue and the queues
 
@@ -218,15 +227,14 @@ class ParslMethodServer(BaseMethodServer):
         # Pass the task to the "error handler"
         self.task_queue.put(result_future)
 
-    def submit_application(self, method_name, *args, **kwargs) -> AppFuture:
+    def submit_application(self, method_name: str, result: Result) -> AppFuture:
         """Submit an application to run via Parsl
 
         Args:
             method_name (str): Name of the method to invoke
-            *args: Positional arguments
-            **kwargs: Keyword arguments
+            result: Task description
         """
-        return self.methods_[method_name](*args, **kwargs)
+        return self.methods_[method_name](result)
 
     def _cleanup(self):
         """Close out any resources needed by the method server"""

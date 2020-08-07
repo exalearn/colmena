@@ -1,12 +1,12 @@
 """Wrappers for Redis queues."""
 
 import logging
-from typing import Optional, Any, Tuple, Dict, Iterable
+from typing import Optional, Any, Tuple, Dict, Iterable, Union
 
 import redis
 
 from colmena.exceptions import TimeoutException, KillSignalException
-from colmena.models import Result
+from colmena.models import Result, SerializationMethod
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,11 @@ def _error_if_unconnected(f):
     return wrapper
 
 
-def make_queue_pairs(hostname: str, port: int = 6379, name='method', use_pickle: bool = False,
-                     clean_slate: bool = True, topics: Optional[Iterable[str]] = None)\
+def make_queue_pairs(hostname: str, port: int = 6379, name='method',
+                     serialization_method: Union[str, SerializationMethod] = SerializationMethod.JSON,
+                     keep_inputs: bool = True,
+                     clean_slate: bool = True,
+                     topics: Optional[Iterable[str]] = None)\
         -> Tuple['ClientQueues', 'MethodServerQueues']:
     """Make a pair of queues for a server and client
 
@@ -28,15 +31,16 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method', use_pickle:
         hostname (str): Hostname of the Redis server
         port (int): Port on which to access Redis
         name (str): Name of the MethodServer
+        keep_inputs (bool): Whether to keep the inputs after the method has finished executing
         clean_slate (bool): Whether to flush the queues before launching
-        use_pickle (bool): Whether to use pickle to save Python objects before sending them
+        serialization_method (bool): Whether to serialize input and output objects before communicating them
         topics ([str]): List of topics used when having the client filter different types of tasks
     Returns:
         (ClientQueues, MethodServerQueues): Pair of communicators set to use the correct channels
     """
 
-    return (ClientQueues(hostname, port, name, use_pickle, topics),
-            MethodServerQueues(hostname, port, name, topics=topics, clean_slate=clean_slate, use_pickle=use_pickle))
+    return (ClientQueues(hostname, port, name, serialization_method, keep_inputs, topics),
+            MethodServerQueues(hostname, port, name, topics=topics, clean_slate=clean_slate))
 
 
 class RedisQueue(object):
@@ -162,20 +166,35 @@ class RedisQueue(object):
 
 
 class ClientQueues:
-    """Wraps communication with the MethodServer"""
+    """Provides communication of method requests and results with the method server
+
+    This queue wraps communication with the underlying Redis queue and also handles communicating
+    requests using the :class:`Result` messaging format.
+    Method requests are encoded in the Result format along with any options (e.g., serialization method)
+    for the communication and automatically serialized.
+    Results are automatically de-serialized upon receipt.
+
+    The queue also generates stores task performance results, such as the timestamp for when messages were created
+    and runtime for serialization.
+    """
 
     def __init__(self, hostname: str, port: int = 6379, name: Optional[str] = None,
-                 use_pickle: bool = False, topics: Optional[Iterable] = None):
+                 serialization_method: SerializationMethod = SerializationMethod.JSON,
+                 keep_inputs: bool = True,
+                 topics: Optional[Iterable] = None):
         """
         Args:
             hostname (str): Hostname of the Redis server
             port (int): Port on which to access Redis
             name (int): Name of the MethodServer
-            use_pickle (bool): Whether to use pickle to save Python objects before sending them
+            serialization_method (SerializationMethod): Method used to store the input
+            keep_inputs (bool): Whether to keep inputs after method results are stored
             topics ([str]): List of topics used when having the client filter different types of tasks
         """
 
-        self.use_pickle = use_pickle
+        # Store the result communication options
+        self.serialization_method = serialization_method
+        self.keep_inputs = keep_inputs
 
         # Make the queues
         self.outbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
@@ -202,11 +221,11 @@ class ClientQueues:
             input_kwargs = dict()
 
         # Create a new Result object
-        result = Result((input_args, input_kwargs), method=method)
+        result = Result((input_args, input_kwargs), method=method, keep_inputs=self.keep_inputs,
+                        serialization_method=self.serialization_method)
 
         # Push the serialized value to the method server
-        if self.use_pickle:
-            result.pickle_data()
+        result.time_serialize_inputs = result.serialize()
         self.outbound.put(result.json(exclude_unset=True), topic=topic)
         logger.info(f'Client sent a {method} task with topic {topic}')
 
@@ -231,8 +250,7 @@ class ClientQueues:
 
         # Parse the value and mark it as complete
         result_obj = Result.parse_raw(message)
-        if self.use_pickle:
-            result_obj.unpickle_data()
+        result_obj.time_deserialize_results = result_obj.deserialize()
         result_obj.mark_result_received()
 
         # Some logging
@@ -246,22 +264,21 @@ class ClientQueues:
 
 
 class MethodServerQueues:
-    """Communication wrapper for the MethodServer itself"""
+    """Communication wrapper for the method server
+
+    Handles receiving tasks
+    """
 
     def __init__(self, hostname: str, port: int = 6379, name: Optional[str] = None,
-                 clean_slate: bool = True, use_pickle: bool = False,
-                 topics: Optional[Iterable[str]] = None):
+                 clean_slate: bool = True, topics: Optional[Iterable[str]] = None):
         """
         Args:
             hostname (str): Hostname of the Redis server
             port (int): Port on which to access Redis
             name (str): Name of the MethodServer
             clean_slate (bool): Whether to flush the queues before launching
-            use_pickle (bool): Whether to use pickle to save Python objects before sending them
             topics ([str]): List of topics used when having the client filter different types of tasks
         """
-
-        self.use_pickle = use_pickle
 
         # Make the queues
         self.inbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
@@ -301,8 +318,6 @@ class MethodServerQueues:
 
         # Get the message
         task = Result.parse_raw(message)
-        if self.use_pickle:
-            task.unpickle_data()
         task.mark_input_received()
         return topic, task
 
@@ -313,6 +328,5 @@ class MethodServerQueues:
             result (Result): Result object to communicate back
             topic (str): Topic of the calculation
         """
-        if self.use_pickle:
-            result.pickle_data()
+        result.mark_result_sent()
         self.outbound.put(result.json(), topic=topic)

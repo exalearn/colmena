@@ -252,7 +252,7 @@ if __name__ == '__main__':
         print(str(config), file=fp)
 
     # Connect to the redis server
-    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport, use_pickle=True,
+    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport, serialization_method="json",
                                                     topics=['simulator', 'ML'])
 
     # Apply wrappers to function to affix static settings
