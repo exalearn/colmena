@@ -28,6 +28,8 @@ dependencies:
   - py-cpuinfo<6
   - msgpack-python==1.*
   - xtb-python
+  - psutil
+  - git-lfs
   - tqdm
 
 # Pip packages for all of them
