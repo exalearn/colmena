@@ -58,8 +58,11 @@ def test_run_simple(server_and_queue):
     result = queue.get_result()
     assert result.value == 2
     assert result.success
-    assert result.time_running is not None
+    assert result.time_running > 0
+    assert result.time_deserialize_inputs > 0
+    assert result.time_serialize_results > 0
     assert result.time_compute_started is not None
+    assert result.time_result_sent is not None
 
 
 @mark.timeout(30)

@@ -26,6 +26,7 @@ from moldesign.select import greedy_selection
 from moldesign.simulate import compute_atomization_energy, compute_reference_energy
 from moldesign.utils import get_platform_info
 from colmena.method_server import ParslMethodServer
+from colmena.models import SerializationMethod
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 
 # Define the QCMethod used for the
@@ -196,7 +197,8 @@ if __name__ == '__main__':
         print(str(config), file=fp)
 
     # Connect to the redis server
-    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport, use_pickle=True)
+    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport,
+                                                    serialization_method=SerializationMethod.PICKLE)
 
     # Apply wrappers to function to affix static settings
     my_generate_molecules = partial(generate_molecules, episodes=args.rl_episodes)
