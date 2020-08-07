@@ -125,7 +125,7 @@ by illustrating a typical :class:`colmena.models.Result` object.
         "time_input_received": 1593498015.13357,
         "time_compute_started": 1593498018.856764,
         "time_result_sent": 1593498018.858268,
-        "time_result_received": 1593498018.860002
+        "time_result_received": 1593498018.860002,
         "time_running": 1.8e-05,
         "time_serialize_inputs": 4.07e-05,
         "time_deserialize_inputs": 4.28-05,
