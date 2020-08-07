@@ -2,7 +2,7 @@
 import parsl
 from typing import Tuple
 from parsl.config import Config
-from parsl import ThreadPoolExecutor
+from parsl import ThreadPoolExecutor, HighThroughputExecutor
 
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.redis.queue import ClientQueues, make_queue_pairs
@@ -56,8 +56,8 @@ def test_run_simple(server_and_queue):
     queue.send_inputs(1)
     server.process_queue()
     result = queue.get_result()
-    assert result.value == 2
     assert result.success
+    assert result.value == 2
     assert result.time_running > 0
     assert result.time_deserialize_inputs > 0
     assert result.time_serialize_results > 0

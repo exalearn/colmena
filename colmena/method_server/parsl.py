@@ -105,7 +105,6 @@ class _ErrorHandler(Thread):
                     topic: str = task.task_def['args'][1]
                     result_obj: Result = task.task_def['args'][2]
                     result_obj.success = False
-                    result_obj.serialize()
                     queues.send_result(result_obj, topic=topic)
 
                 # Loop through the incomplete tasks
@@ -221,7 +220,7 @@ class ParslMethodServer(BaseMethodServer):
         #  Requires waiting on two streams: input_queue and the queues
 
         # Pass the future of that operation to the output queue
-        result_future = output_result(self.queues, topic, result, future)
+        result_future = output_result(self.queues, topic, result.copy(), future)
         logger.debug('Pushed task to Parsl')
 
         # Pass the task to the "error handler"

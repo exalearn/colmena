@@ -1,4 +1,5 @@
 import json
+import logging
 import pickle as pkl
 from datetime import datetime
 from enum import Enum
@@ -6,6 +7,8 @@ from time import perf_counter
 from typing import Any, Tuple, Dict, Optional, Union
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 # TODO (wardlt): Merge with FuncX's approach?
@@ -170,7 +173,8 @@ class Result(BaseModel):
         # Check that the data is actually a string
         start_time = perf_counter()
         if not (isinstance(self.value, str) and isinstance(self.inputs, str)):
-            raise ValueError('Data is not in a serialized form. Are you sure you need to unpickle?')
+            logger.warning('Data is not serialized, skipping deserialization.')
+            return perf_counter() - start_time
 
         # Deserialize the data
         _value = self.value
