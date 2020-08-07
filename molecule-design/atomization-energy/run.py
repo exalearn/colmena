@@ -20,7 +20,7 @@ from molgym.envs.rewards.mpnn import MPNNReward
 from molgym.mpnn.layers import custom_objects
 
 from moldesign.score.mpnn import evaluate_mpnn, update_mpnn, MPNNMessage
-from moldesign.config import local_interleaved_config as config
+from moldesign.config import theta_interleaved_config as config
 from moldesign.sample.moldqn import generate_molecules
 from moldesign.select import greedy_selection
 from moldesign.simulate import compute_atomization_energy
@@ -77,7 +77,6 @@ class Thinker(Thread):
         # Attributes associated with the active learning
         self.n_evals = n_molecules + len(self.database)
         self.n_parallel = n_parallel
-        assert n_molecules % n_parallel == 0, "# evals must be a multiple of the number of calculations in parallel"
 
         # Synchronization between ML and QC loops
         self._task_queue = PriorityQueue(maxsize=n_parallel * 2)
