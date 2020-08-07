@@ -2,7 +2,7 @@
 import parsl
 from typing import Tuple
 from parsl.config import Config
-from parsl import ThreadPoolExecutor, HighThroughputExecutor
+from parsl import ThreadPoolExecutor
 
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.redis.queue import ClientQueues, make_queue_pairs
