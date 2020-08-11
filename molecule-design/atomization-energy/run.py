@@ -221,7 +221,7 @@ if __name__ == '__main__':
                         help="Number of calculations to maintain in parallel")
     parser.add_argument("--rl-episodes", default=10, type=int,
                         help="Number of episodes to run ing the reinforcement learning pipeline")
-    parser.add_argument("--search-size", default=10, type=int,
+    parser.add_argument("--search-size", default=1000, type=int,
                         help="Number of new molecules to evaluate during this search")
 
     # Parse the arguments

@@ -7,6 +7,7 @@ from parsl.config import Config
 from parsl.launchers import AprunLauncher, SimpleLauncher
 from parsl.providers import LocalProvider, CobaltProvider
 from parsl.channels import SSHChannel
+from parsl.monitoring import MonitoringHub
 
 config = Config(
     executors=[
@@ -134,6 +135,12 @@ conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
         ),
         ThreadPoolExecutor(label="local_threads", max_threads=4)
     ],
+    monitoring=MonitoringHub(
+       hub_address=address_by_hostname(),
+       hub_port=55055,
+       monitoring_debug=False,
+       resource_monitoring_interval=10,
+    ),
     strategy=None,
 )
 
