@@ -51,7 +51,7 @@ def compute_frequencies(hessian: np.ndarray, molecule: Molecule,
     eig = np.linalg.eigvals(mass_hessian)
     freq = np.sign(eig) * np.sqrt(np.abs(eig))
     conv = np.sqrt(constants.conversion_factor(f'{units} / amu', 'Hz ** 2'))
-    freq *= conv
+    freq *= conv / np.pi / 2  # Converts from angular to ordinary frequency too
     return freq
 
 
@@ -62,7 +62,7 @@ def compute_zpe(hessian: np.ndarray, molecule: Molecule,
     Args:
         hessian: Hessian matrix
         molecule: Molecule object
-        scaling: How much to scale frequnecies before computing ZPE
+        scaling: How much to scale frequencies before computing ZPE
         units: Units for the Hessian matrix
     Returns:
         (float) Energy for the system in Hartree
