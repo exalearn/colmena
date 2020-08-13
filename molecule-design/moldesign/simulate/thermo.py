@@ -79,8 +79,12 @@ def compute_zpe(hessian: np.ndarray, molecule: Molecule,
     neg_freqs = freqs[freqs < 0]
     if len(neg_freqs) > 0:
         wavenumbers = neg_freqs / c
-        output = ' '.join(f'{x:.2f}' for x in wavenumbers.to("1/cm").magnitude)
-        logger.warning(f'{molecule.name} has {len(neg_freqs)} negative components: [{output}] cm^-1')
+
+        # Remove those with a wavenumber less than 80 cm^-1 (basically zero)
+        wavenumbers = wavenumbers[wavenumbers.to("1/cm").magnitude < -80]
+        if len(wavenumbers) > 0:
+            output = ' '.join(f'{x:.2f}' for x in wavenumbers.to("1/cm").magnitude)
+            logger.warning(f'{molecule.name} has {len(neg_freqs)} negative components. Largest: [{output}] cm^-1')
 
     #  Convert the frequencies to characteristic temps
     freqs = constants.ureg.Quantity(freqs, 'Hz')
