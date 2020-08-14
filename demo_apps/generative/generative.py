@@ -140,7 +140,7 @@ if __name__ == '__main__':
 
     # Connect to the redis server
     client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport,
-                                                    clean_slate=True, use_pickle=True)
+                                                    clean_slate=True, serialization_method='pickle')
 
     # Create the method server and task generator
     doer = ParslMethodServer([

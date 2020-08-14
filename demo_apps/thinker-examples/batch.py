@@ -143,7 +143,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Connect to the redis server
-    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport, use_pickle=False)
+    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport, serialization_method='json')
 
     # Make the output directory
     out_dir = os.path.join('runs',
