@@ -2,8 +2,10 @@
 
 from typing import Dict, Optional, Union, Tuple
 
+from uuid import uuid4
+from moldesign.simulate.thermo import compute_zpe
 from qcelemental.molutil import guess_connectivity
-from qcelemental.models import OptimizationInput, Molecule, AtomicInput, OptimizationResult
+from qcelemental.models import OptimizationInput, Molecule, AtomicInput, OptimizationResult, AtomicResult
 from qcelemental.models.procedures import QCInputSpecification
 from qcengine import compute_procedure, compute
 
@@ -63,7 +65,9 @@ def _get_forcefield(mol: Molecule) -> OBForceField:
 def compute_atomization_energy(smiles: str, qc_config: QCInputSpecification,
                                reference_energies: Dict[str, float],
                                compute_config: Optional[Union[TaskConfig, Dict]] = None,
-                               code: str = _code) -> float:
+                               restart: bool = True,
+                               compute_hessian: bool = True,
+                               code: str = _code) -> Tuple[float, OptimizationResult, Optional[AtomicResult]]:
     """Compute the atomization energy of a molecule given the SMILES string
 
     Args:
@@ -74,13 +78,34 @@ def compute_atomization_energy(smiles: str, qc_config: QCInputSpecification,
         code (str): Which QC code to use for the evaluation
     Returns:
         (float): Atomization energy of this molecule
+        (OptimizationResult): Output from the relaxation calculation
+        (AtomicResult): Hessian calculation
     """
 
-    # Relax the structure
-    xyz, total_energy = relax_structure(smiles, qc_config, compute_config, code=code)
-    mol = Molecule.from_data(xyz, dtype='xyz')
+    # If needed, make a restart name
+    if restart:
+        qc_config = qc_config.copy()
+        qc_config.keywords['restart_name'] = f"{smiles}_{str(uuid4())}"
 
-    return subtract_reference_energies(total_energy, mol, reference_energies)
+    # Relax the structure
+    relax_result, total_energy = relax_structure(smiles, qc_config, compute_config, code=code)
+
+    if compute_hessian:
+        # Compute the Hessian
+        input_spec = AtomicInput(molecule=relax_result.final_molecule, driver="hessian",
+                                 **qc_config.dict(exclude={'driver'}))
+        result = compute(input_spec, program=code, local_options=compute_config, raise_error=True)
+
+        # Compute the atomization energy
+        zpe = compute_zpe(result.return_result, result.molecule)
+        u0 = result.properties.return_energy + zpe
+        u0_atom = subtract_reference_energies(u0, result.molecule, reference_energies)
+        return u0_atom, relax_result, result
+    else:
+        u0 = total_energy
+        u0_atom = subtract_reference_energies(u0, relax_result.final_molecule, reference_energies)
+
+        return u0_atom, relax_result, None
 
 
 def subtract_reference_energies(total_energy: float, mol: Molecule, reference_energies: Dict[str, float]) -> float:
@@ -106,7 +131,7 @@ def relax_structure(smiles: str,
                     qc_config: QCInputSpecification,
                     compute_config: Optional[Union[TaskConfig, Dict]] = None,
                     compute_connectivity: bool = False,
-                    code: str = _code) -> Tuple[str, float]:
+                    code: str = _code) -> Tuple[OptimizationResult, float]:
     """Compute the atomization energy of a molecule given the SMILES string
 
     Args:
@@ -121,7 +146,7 @@ def relax_structure(smiles: str,
     """
     # Generate 3D coordinates by minimizing MMFF forcefield
     xyz = generate_atomic_coordinates(smiles)
-    mol = Molecule.from_data(xyz, dtype='xyz')
+    mol = Molecule.from_data(xyz, molecular_charge=1, dtype='xyz')
 
     # Generate connectivity, if needed
     if compute_connectivity:
@@ -132,9 +157,10 @@ def relax_structure(smiles: str,
     opt_input = OptimizationInput(input_specification=qc_config,
                                   initial_molecule=mol,
                                   keywords={'program': code})
-    res: OptimizationResult = \
-        compute_procedure(opt_input, 'geometric', local_options=compute_config, raise_error=True)
-    return res.final_molecule.to_string('xyz'), res.energies[-1]
+    res: OptimizationResult = compute_procedure(
+        opt_input, 'geometric', local_options=compute_config, raise_error=True
+    )
+    return res, res.energies[-1]
 
 
 def compute_reference_energy(element: str, qc_config: QCInputSpecification,
@@ -144,7 +170,7 @@ def compute_reference_energy(element: str, qc_config: QCInputSpecification,
     Args:
         element (str): Symbol of the element
         qc_config (QCInputSpecification): Quantum Chemistry configuration used for evaluating he energy
-        mult (int): Number of open atomic orbitals
+        n_open (int): Number of open atomic orbitals
         code (str): Which QC code to use for the evaluation
     Returns:
         (float): Energy of the isolated atom
@@ -155,7 +181,7 @@ def compute_reference_energy(element: str, qc_config: QCInputSpecification,
     mol = Molecule.from_data(xyz, dtype='xyz', molecular_multiplicity=n_open, molecular_charge=0)
 
     # Run the atomization energy calculation
-    input_spec = AtomicInput(molecule=mol, driver='energy', model=qc_config.model, keywords=qc_config.keywords)
+    input_spec = AtomicInput(molecule=mol, driver='energy', **qc_config.dict(exclude={'driver'}))
     result = compute(input_spec, code, raise_error=True)
 
     return result.return_result
