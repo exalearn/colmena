@@ -20,7 +20,7 @@ from molgym.envs.rewards.mpnn import MPNNReward
 from molgym.mpnn.layers import custom_objects
 
 from moldesign.score.mpnn import evaluate_mpnn, update_mpnn, MPNNMessage
-from moldesign.config import theta_interleaved_config as config
+from moldesign.config import local_interleaved_config
 from moldesign.sample.moldqn import generate_molecules
 from moldesign.select import greedy_selection
 from moldesign.simulate import compute_atomization_energy
@@ -109,7 +109,7 @@ class Thinker(Thread):
         self.logger.info('Simulation dispatcher waiting for work')
         for i in range(self.n_parallel):
             _, smiles = self._task_queue.get(block=True)
-            self.queues.send_inputs(smiles, topic='simulator', method='compute_atomization_energy')
+            self.queues.send_inputs(smiles, topic='simulator', method='compute_atomization_energy', keep_inputs=True)
         self.logger.info('Sent out first set of tasks')
 
         # As they come back submit new ones
@@ -118,16 +118,18 @@ class Thinker(Thread):
             result = self.queues.get_result(topic='simulator')
             self.logger.info('QC task completed')
             if result.success:
-                self.database[result.args[0]] = result.value
+                # Store the result in the database
+                self.database[result.args[0]] = result.value[0]  # First arg is the energy
+
+                result.value = result.value[0]  # Do not store the full results in the database
             else:
                 logging.warning('Calculation failed! See simulation outputs and Parsl log file')
-            self._write_result(result, 'simulation_records.jsonld')
+            self._write_result(result, 'simulation_records.jsonld', keep_outputs=False)
 
             # Get a new one from the priority queue and submit it
             (step_number, _), smiles = self._task_queue.get()
             logging.info(f'Running {smiles} from batch {-step_number}')
-            self.queues.send_inputs(smiles, topic='simulator',
-                                    method='compute_atomization_energy')
+            self.queues.send_inputs(smiles, topic='simulator', method='compute_atomization_energy', keep_inputs=True)
 
         # Waiting for the still-ongoing tasks to complete
         self.logger.info('Collecting the last molecules')
@@ -139,7 +141,7 @@ class Thinker(Thread):
                 self.database[result.args[0]] = result.value
             else:
                 logging.warning('Calculation failed! See simulation outputs and Parsl log file')
-            self._write_result(result, 'simulation_records.jsonld')
+            self._write_result(result, 'simulation_records.jsonld', keep_outputs=False)
 
         self.logger.info('Task consumer has completed')
 
@@ -189,7 +191,7 @@ class Thinker(Thread):
 
             # Pick a set of calculations to run
             #   Greedy selection for now
-            task_options = [{'smiles': s, 'pred_atom': e} for s, e in zip(new_molecules, scores)]
+            task_options = [{'smiles': s, 'pred_atom': e} for s, e in zip(self.search_space, scores)]
             selections = greedy_selection(task_options, self.n_parallel, lambda x: -x['pred_atom'])
             self.logger.info(f'Selected {len(selections)} new molecules')
 
@@ -269,13 +271,23 @@ if __name__ == '__main__':
         json.dump(host_info, fp, indent=2)
 
     # Set up the logging
+    handlers = [logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
+                logging.StreamHandler(sys.stdout)]
+
+    class ParslFilter(logging.Filter):
+        """Filter out Parsl debug logs"""
+
+        def filter(self, record):
+            return not (record.levelno == logging.DEBUG and '/parsl/' in record.pathname)
+
+    for h in handlers:
+        h.addFilter(ParslFilter())
+
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        level=logging.INFO,
-                        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
-                                  logging.StreamHandler(sys.stdout)])
+                        level=logging.INFO, handlers=handlers)
 
     # Write the configuration
-    config.run_dir = os.path.join(out_dir, 'run-info')
+    config = local_interleaved_config(2, 1, os.path.join(out_dir, 'run-info'))
     parsl.load(config)
 
     # Save Parsl configuration
@@ -283,8 +295,9 @@ if __name__ == '__main__':
         print(str(config), file=fp)
 
     # Connect to the redis server
-    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport, serialization_method="pickle",
-                                                    topics=['simulator', 'ML'])
+    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport,
+                                                    serialization_method="pickle",
+                                                    topics=['simulator', 'ML'], keep_inputs=False)
 
     # Apply wrappers to functions to affix static settings
     #  Update wrapper changes the __name__ field, which is used by the Method Server
@@ -292,7 +305,7 @@ if __name__ == '__main__':
     my_generate_molecules = partial(generate_molecules, episodes=args.rl_episodes)
     my_generate_molecules = update_wrapper(my_generate_molecules, generate_molecules)
 
-    my_compute_atomization = partial(compute_atomization_energy,
+    my_compute_atomization = partial(compute_atomization_energy, compute_hessian=False,
                                      qc_config=qc_spec, reference_energies=ref_energies,
                                      compute_config=compute_config, code=code)
     my_compute_atomization = update_wrapper(my_compute_atomization, compute_atomization_energy)
