@@ -127,6 +127,7 @@ if __name__ == "__main__":
     arg_parser.add_argument('--batch-size', help='Batch size when training the NN', default=32, type=int)
     arg_parser.add_argument('--no-backtrack', action='store_true', help='Disallow bond removal')
     arg_parser.add_argument('--initial-molecule', type=str, default=None, help='Starting molecule')
+    arg_parser.add_argument('--max-size', type=int, default=None, help='Maximum size of the molecule')
 
     # Parse the arguments
     args = arg_parser.parse_args()
@@ -158,7 +159,7 @@ if __name__ == "__main__":
     run_params['maximize'] = reward.maximize
 
     # Set up environment
-    action_space = MoleculeActions(elements, allow_removal=not args.no_backtrack)
+    action_space = MoleculeActions(elements, allow_removal=not args.no_backtrack, max_molecule_size=args.max_size)
     init_mol = args.initial_molecule
     if init_mol is not None:
         init_mol = convert_smiles_to_nx(init_mol)
