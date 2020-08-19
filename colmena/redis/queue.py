@@ -206,23 +206,32 @@ class ClientQueues:
 
     def send_inputs(self, *input_args: Any, method: str = None,
                     input_kwargs: Optional[Dict[str, Any]] = None,
-                    topic: str = 'default'):
+                    keep_inputs: Optional[bool] = None,
+                    topic: str = 'default',
+                    task_info: Optional[Dict[str, Any]] = None):
         """Send inputs to be computed
 
         Args:
             *input_args (Any): Positional arguments to a function
             method (str): Name of the method to run. Optional
             input_kwargs (dict): Any keyword arguments for the function being run
+            keep_inputs (bool): Whether to override the
             topic (str): Topic for the queue, which sets the topic for the result.
+            task_info (dict): Any information used for task tracking
         """
 
         # Make fake kwargs, if needed
         if input_kwargs is None:
             input_kwargs = dict()
 
+        # Determine whether to override the default "keep_inputs"
+        _keep_inputs = self.keep_inputs
+        if keep_inputs is not None:
+            _keep_inputs = keep_inputs
+
         # Create a new Result object
-        result = Result((input_args, input_kwargs), method=method, keep_inputs=self.keep_inputs,
-                        serialization_method=self.serialization_method)
+        result = Result((input_args, input_kwargs), method=method, keep_inputs=_keep_inputs,
+                        serialization_method=self.serialization_method, task_info=task_info)
 
         # Push the serialized value to the method server
         result.time_serialize_inputs = result.serialize()

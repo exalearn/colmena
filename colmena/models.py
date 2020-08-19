@@ -73,6 +73,10 @@ class Result(BaseModel):
     method: Optional[str] = Field(None, description="Name of the method to run.")
     success: Optional[bool] = Field(None, description="Whether the task completed successfully")
 
+    # Store task information
+    task_info: Optional[Dict[str, Any]] = Field(None, description="Task tracking information to be transmitted "
+                                                                  "along with inputs and results")
+
     # Performance tracking
     time_created: float = Field(None, description="Time this value object was created")
     time_input_received: float = Field(None, description="Time the inputs was received by the method server")

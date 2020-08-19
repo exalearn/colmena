@@ -176,3 +176,28 @@ def test_clear_inputs():
 
     # Make sure the inputs were deleted
     assert result.args == ()
+
+    # Make sure we can override it, if desired
+    client.send_inputs(1, keep_inputs=True)
+    _, result = server.get_task()
+    result.deserialize()
+    result.set_result(1)
+
+    assert result.args == (1,)
+
+
+def test_task_info():
+    """Make sure task info gets passed along"""
+    client, server = make_queue_pairs('localhost', keep_inputs=False)
+
+    # Sent a method request
+    client.send_inputs(1, task_info={'id': 'test'})
+    _, result = server.get_task()
+    result.deserialize()
+    result.set_result(1)
+
+    # Send it back
+    result.serialize()
+    server.send_result(result)
+    result = client.get_result()
+    assert result.task_info == {'id': 'test'}
