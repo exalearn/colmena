@@ -60,12 +60,12 @@ def _merge_batch(mols: List[dict]) -> dict:
     return batch
 
 
-def evaluate_mpnn(model_msg: MPNNMessage, smiles: List[str],
+def evaluate_mpnn(model_msg: List[MPNNMessage], smiles: List[str],
                   atom_types: List[int], bond_types: List[str], batch_size: int = 128) -> np.ndarray:
     """Run inference on a list of molecules
 
     Args:
-        model_msg: Serialized version of the model
+        model_msg: List of MPNNs to evaluate
         smiles: List of molecules to evaluate
         atom_types: List of known atom types
         bond_types: List of known bond types
@@ -76,7 +76,7 @@ def evaluate_mpnn(model_msg: MPNNMessage, smiles: List[str],
 
     # Rebuild the model
     tf.keras.backend.clear_session()
-    model = model_msg.get_model()
+    models = [m.get_model() for m in model_msg]
 
     # Convert all SMILES strings to batches of molecules
     # TODO (wardlt): Use multiprocessing. Could benefit from a persistent Pool to avoid loading in TF many times
@@ -85,8 +85,11 @@ def evaluate_mpnn(model_msg: MPNNMessage, smiles: List[str],
     batches = [_merge_batch(c) for c in chunks]
 
     # Feed the batches through the MPNN
-    outputs = [model.predict_on_batch(b) for b in batches]
-    return np.vstack(outputs)
+    all_outputs = []
+    for model in models:
+        outputs = [model.predict_on_batch(b) for b in batches]
+        all_outputs.append(np.vstack(outputs))
+    return np.hstack(all_outputs)
 
 
 # TODO (wardlt): Move to the MPNN library?

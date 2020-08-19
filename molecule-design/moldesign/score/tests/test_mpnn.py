@@ -1,10 +1,10 @@
 """Test out the MPNN models"""
-from math import isclose
 from typing import List
 
 from molgym.mpnn.layers import Squeeze, GraphNetwork
 from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras import Model
+import numpy as np
 import pytest
 
 from moldesign.score.mpnn import evaluate_mpnn, update_mpnn, MPNNMessage
@@ -45,9 +45,9 @@ def bond_types() -> List[str]:
 
 def test_evaluate(model, atom_types, bond_types):
     smiles = ['CC', 'CCC', 'CC=C', 'CCC']
-    output = evaluate_mpnn(MPNNMessage(model), smiles, atom_types, bond_types, batch_size=2)
-    assert output.size == 4
-    assert isclose(output[1], output[3], abs_tol=1e-6)
+    output = evaluate_mpnn([MPNNMessage(model), MPNNMessage(model)], smiles, atom_types, bond_types, batch_size=2)
+    assert output.shape == (4, 2)
+    assert np.isclose(output[1, :], output[3, :], atol=1e-6).all()
 
 
 def test_training(model, atom_types, bond_types):
