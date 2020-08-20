@@ -75,7 +75,7 @@ def local_interleaved_config(qc_workers: int, ml_workers: int, log_dir: str) -> 
 
 
 def theta_nwchem_config(ml_workers: int, log_dir: str, nodes_per_nwchem: int = 2,
-                        total_nodes: int = os.environ.get("COBALT_JOBSIZE", None)) -> Config:
+                        total_nodes: int = int(os.environ.get("COBALT_JOBSIZE", 1))) -> Config:
     """Theta configuration where QC workers sit on the launch node (to be able to aprun)
     and ML workers are placed on compute nodes
 
@@ -130,7 +130,7 @@ conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
             monitoring_debug=False,
             resource_monitoring_interval=10,
             logdir=log_dir,
-            logging_endpoint=f'sqllite:///{os.path.join(log_dir, "monitoring.db")}'
+            logging_endpoint=f'sqlite:///{os.path.join(log_dir, "monitoring.db")}'
         ),
         run_dir=log_dir,
         strategy=None,
@@ -138,7 +138,7 @@ conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
 
 
 def theta_xtb_config(ml_workers: int, log_dir: str, xtb_per_node: int = 1,
-                     total_nodes: int = os.environ.get("COBALT_JOBSIZE", None)):
+                     total_nodes: int = int(os.environ.get("COBALT_JOBSIZE", 1))):
     """Theta configuration where QC tasks and ML tasks run on separate nodes.
     Designed to support XTB computations, which are single-node.
 
@@ -194,7 +194,7 @@ conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
             monitoring_debug=False,
             resource_monitoring_interval=10,
             logdir=log_dir,
-            logging_endpoint=f'sqllite:///{os.path.join(log_dir, "monitoring.db")}'
+            logging_endpoint=f'sqlite:///{os.path.join(log_dir, "monitoring.db")}'
         ),
         run_dir=log_dir,
         strategy=None,
