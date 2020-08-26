@@ -5,16 +5,18 @@ import json
 import sys
 import logging
 import os
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from random import sample, choice, shuffle, random
 from datetime import datetime
 from functools import partial, update_wrapper
 from queue import Queue, Empty
-from threading import Thread, Event
+from threading import Thread, Event, Lock
 from typing import List, Dict
 
 import parsl
-import numpy as np
 import tensorflow as tf
+from pydantic import BaseModel
 from qcelemental.models.procedures import QCInputSpecification
 from molgym.agents.moldqn import DQNFinalState
 from molgym.envs.rewards.mpnn import MPNNReward
@@ -43,6 +45,7 @@ class Thinker(Thread):
                  initial_mpnns: List[tf.keras.Model],
                  output_dir: str,
                  n_parallel: int = 1,
+                 n_parallel_updating: int = 1,
                  n_molecules: int = 10,
                  queue_length: int = None,
                  random_frac: float = 0.1,
@@ -53,9 +56,10 @@ class Thinker(Thread):
             initial_training_set: List of molecules and atomization energies from the original search
             initial_search_space: List of molecules to use in the initial search space
             initial_moldqn: Pre-trained version of the MolDQN agent
-            initial_mpnn: Pre-trained version of the MolDQN agent
+            initial_mpnns: An ensemble of pre-trained MPNNs
             output_dir (str): Path to the run directory
             n_parallel (int): Maximum number of QC calculations to perform in parallel
+            n_parallel_updating (int): Maximum number of model updates to perform in parallel
             n_molecules: Number of molecules to evaluate
             queue_length (int): Number of tasks to store in the queue at most
             random_frac: Number of molecules to pick at random
@@ -81,18 +85,20 @@ class Thinker(Thread):
         self.database = initial_training_set.copy()
         self.search_space = initial_search_space
 
-        # Attributes associated with the active learning
+        # Attributes associated with the parallelism/problem size
         self.n_evals = n_molecules + len(self.database)
         self.n_parallel = n_parallel
+        self.n_parallel_updating = n_parallel_updating
 
-        # Synchronization between ML and QC loops
+        # Synchronization between the threads
         if queue_length is None:
             queue_length = n_parallel * 2
         self.queue_length = queue_length
         self._task_queue = Queue(maxsize=queue_length)
+        self._update_lock = Lock()  # Prevent models from being used while updating one
         self._gen_done = Event()
 
-    def _write_result(self, result: Result, filename: str, keep_inputs: bool = True, keep_outputs: bool = True):
+    def _write_result(self, result: BaseModel, filename: str, keep_inputs: bool = True, keep_outputs: bool = True):
         """Write result to a log file
 
         Args:
@@ -171,73 +177,106 @@ class Thinker(Thread):
 
         self.logger.info('Task consumer has completed')
 
-    def run(self):
-        # Launch the "simulator" thread
-        design_thread = Thread(target=self.simulation_dispatcher)
-        design_thread.start()
+    def model_updater(self):
+        """Handle updating the ML models"""
 
+        # Randomly order the MPNNs
+        ready_to_retrain = list(range(len(self.mpnns)))
+        shuffle(ready_to_retrain)
+        ready_to_retrain = deque(ready_to_retrain)
+
+        # Launch the first models to be updated
+        for _ in range(self.n_parallel_updating):
+            ind = ready_to_retrain.popleft()
+            mpnn = self.mpnns[ind]
+            self.queues.send_inputs(MPNNMessage(mpnn), self.database, 4,
+                                    method='update_mpnn', topic='update', task_info={'index': ind})
+            self.logger.info(f'Submitted model {ind} to be updated')
+
+        # Continually wait for new models to come back
+        while not self._gen_done.is_set():
+            # Wait for a model to be returned
+            result = self.queues.get_result(topic='update')
+
+            # Submit another model to be updated
+            ind = ready_to_retrain.popleft()
+            mpnn = self.mpnns[ind]
+            self.queues.send_inputs(MPNNMessage(mpnn), self.database, 4,
+                                    method='update_mpnn', topic='update', task_info={'index': ind})
+            self.logger.info(f'Submitted model {ind} to be updated')
+
+            # Update the weights
+            complted_ind = result.task_info['index']
+            new_weights, _ = result.value
+            with self._update_lock:
+                self.mpnns[complted_ind].set_weights(new_weights)
+            self.logger.info(f'Updated weights for model {complted_ind}')
+
+            # Mark the model as ready to be updated again
+            ready_to_retrain.append(complted_ind)
+
+            # Save the results
+            self._write_result(result, 'update_records.jsonld', keep_inputs=False, keep_outputs=False)
+
+    def task_generator(self):
+        """Run RL to generate new candidates and use MPNNs to screen them"""
         # Submit some initial molecules so that the simulator gets started immediately
         num_to_seed = self.queue_length
         self.logger.info(f'Sending {num_to_seed} initial molecules')
         for smiles in sample(self.search_space, num_to_seed):
             # We send: (rank info), smiles, task_info
-            self._task_queue.put((smiles, {'reason': 'initial', 'batch': 0, 'smiles': smiles}))
+            self._task_queue.put((smiles, {'reason': 'initial', 'batch': -1, 'smiles': smiles}))
 
         # Perform the design loop iteratively
         step_number = 0
         self.logger.info(f'Running until database has {self.n_evals} entries')
-        while len(self.database) < self.n_evals:
+        while len(self.database) < self.n_evals and not self._gen_done.is_set():
             self.logger.info(f'Generating new molecules')
 
-            # Update the MPNNs
-            for i, mpnn in enumerate(self.mpnns):
-                self.queues.send_inputs(MPNNMessage(mpnn), self.database, 4,
-                                        method='update_mpnn', topic='ML', task_info={'index': i})
-            self.logger.info(f'Updating the model with training set size {len(self.database)}')
-            
-            for _ in range(len(self.mpnns)):
-                result = self.queues.get_result(topic='ML')
-                new_weights, _ = result.value
-                self.mpnns[result.task_info['index']].set_weights(new_weights)
-                self._write_result(result, 'update_records.jsonld', keep_inputs=False, keep_outputs=False)
-
             # Use RL to generate new molecules
-            self.moldqn.env.reward_fn.model = choice(self.mpnns)
-            self.queues.send_inputs(self.moldqn, method='generate_molecules', topic='ML')
-            result = self.queues.get_result(topic='ML')
+            with self._update_lock:
+                self.moldqn.env.reward_fn.model = choice(self.mpnns)
+                self.queues.send_inputs(self.moldqn, method='generate_molecules', topic='generate')
+            result = self.queues.get_result(topic='generate')
             self._write_result(result, 'generate_records.jsonld', keep_inputs=False, keep_outputs=False)
             new_molecules, self.moldqn = result.value  # Also update the RL agent
             self.logger.info(f'Generated {len(new_molecules)} candidate molecules')
 
             # Update the list of molecules
-            self.search_space = list(set(self.search_space).union(new_molecules))
+            self.search_space = list(set(self.search_space).union(new_molecules).difference(self.database.keys()))
             self.logger.info(f'Search space now includes {len(self.search_space)} molecules')
 
             # Assign them scores
-            self.queues.send_inputs([MPNNMessage(m) for m in self.mpnns],
-                                    new_molecules, method='evaluate_mpnn', topic='ML')
-            result = self.queues.get_result(topic='ML')
+            with self._update_lock:
+                self.queues.send_inputs([MPNNMessage(m) for m in self.mpnns],
+                                        self.search_space, method='evaluate_mpnn', topic='generate')
+            result = self.queues.get_result(topic='generate')
             scores = result.value
             self._write_result(result, 'screen_records.jsonld', keep_inputs=False, keep_outputs=False)
-            self.logger.info(f'Assigned scores to all molecules')
+            self.logger.info(f'Assigned scores to all {len(scores)} molecules')
 
             # Assign scores to each SMILES
             mean_score = scores.mean(axis=1)
             std_score = scores.std(axis=1)
-            task_options = [{'smiles': s, 'pred': float(m), 'pred_std': float(u), 'batch': step_number} 
+            task_options = [{'smiles': s, 'pred': float(m), 'pred_std': float(u), 'batch': step_number}
                             for s, m, u in zip(self.search_space, mean_score, std_score)]
-            
+
             # Rank according to different metrics. Best at the right end (so .pop works)
             random_selections = task_options.copy()
             shuffle(random_selections)
             greedy_selections = sorted(task_options, key=lambda x: -x['pred'])
             uq_selections = sorted(task_options, key=lambda x: x['pred_std'])
-            self.logger.info('Sorted molecules by greedy, random and uncertainty selection')
-            
+            self.logger.info('Sorted molecules by greedy, random and uncertainty selection.')
+
             # Pick enough to fill the queue
             already_picked = set()
             selections = []
             while len(already_picked) < self.queue_length:
+                # Make sure none of the lists are empty
+                if min(map(len, [greedy_selections, random_selections, uq_selections])) == 0:
+                    self.logger.info('Ran out of molecules to select from')
+                    break
+                
                 # Pick a task
                 r = random()
                 if r < self.greedy_frac:
@@ -249,13 +288,13 @@ class Thinker(Thread):
                 else:
                     task = uq_selections.pop()
                     task['reason'] = 'uq'
-                    
+
                 # If it is not yet selected
                 if task['smiles'] not in already_picked:
                     already_picked.add(task['smiles'])
                     selections.append(task)
             self.logger.info(f'Selected {len(selections)} new molecules')
-            
+
             # Clear out the queue
             while not self._task_queue.empty():
                 try:
@@ -272,6 +311,22 @@ class Thinker(Thread):
 
         self.logger.info('No longer generating new candidates')
         self._gen_done.set()
+
+    def run(self):
+        threads = []
+        functions = [self.simulation_dispatcher, self.task_generator, self.model_updater]
+        with ThreadPoolExecutor(max_workers=len(functions)) as executor:
+            # Submit all of the worker threads
+            for f in functions:
+                threads.append(executor.submit(f))
+            self.logger.info(f'Launched all {len(functions)} functions')
+
+            # Wait until any one completes, then set the "gen_done" event to
+            #  signal all remaining threads to finish after completing their work
+            finished = next(as_completed(threads))
+            self.logger.info('One of the threads has exited')
+            self._gen_done.set()
+            finished.result()
 
 
 if __name__ == '__main__':
@@ -292,6 +347,8 @@ if __name__ == '__main__':
     parser.add_argument('--qc-spec', help='Path to the QC specification', required=True)
     parser.add_argument("--parallel-guesses", default=1, type=int,
                         help="Number of calculations to maintain in parallel")
+    parser.add_argument("--parallel-updating", default=1, type=int,
+                        help="Number of model retraining to perform in parallel")
     parser.add_argument("--rl-episodes", default=10, type=int,
                         help="Number of episodes to run ing the reinforcement learning pipeline")
     parser.add_argument("--search-size", default=1000, type=int,
@@ -341,6 +398,8 @@ if __name__ == '__main__':
         json.dump(run_params, fp, indent=2)
     with open(os.path.join(out_dir, 'qc_spec.json'), 'w') as fp:
         print(qc_spec.json(), file=fp)
+    with open(os.path.join(out_dir, 'environment.json'), 'w') as fp:
+        json.dump(dict(os.environ), fp, indent=2)
 
     # Save the platform information to disk
     host_info = get_platform_info()
@@ -364,7 +423,7 @@ if __name__ == '__main__':
                         level=logging.INFO, handlers=handlers)
 
     # Write the configuration
-    config = theta_xtb_config(1, os.path.join(out_dir, 'run-info'), xtb_per_node=2)
+    config = theta_xtb_config(1, os.path.join(out_dir, 'run-info'), xtb_per_node=16, ml_tasks_per_node=2)
     parsl.load(config)
 
     # Save Parsl configuration
@@ -374,7 +433,8 @@ if __name__ == '__main__':
     # Connect to the redis server
     client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport,
                                                     serialization_method="pickle",
-                                                    topics=['simulator', 'ML'], keep_inputs=False)
+                                                    topics=['simulator', 'update', 'generate'],
+                                                    keep_inputs=False)
 
     # Apply wrappers to functions to affix static settings
     #  Update wrapper changes the __name__ field, which is used by the Method Server
@@ -384,7 +444,7 @@ if __name__ == '__main__':
 
     my_compute_atomization = partial(compute_atomization_energy, compute_hessian=False,
                                      qc_config=qc_spec, reference_energies=ref_energies,
-                                     compute_config=compute_config, code=code)
+                                     compute_config={'ncores': 4}, code=code)
     my_compute_atomization = update_wrapper(my_compute_atomization, compute_atomization_energy)
 
     my_evaluate_mpnn = partial(evaluate_mpnn, atom_types=atom_types, bond_types=bond_types)
@@ -408,6 +468,7 @@ if __name__ == '__main__':
                       mpnns,
                       output_dir=out_dir,
                       n_parallel=args.parallel_guesses,
+                      n_parallel_updating=args.parallel_updating,
                       n_molecules=args.search_size,
                       queue_length=args.queue_length,
                       random_frac=args.random_frac,
