@@ -138,7 +138,7 @@ conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
 
 
 def theta_xtb_config(ml_workers: int, log_dir: str, xtb_per_node: int = 1,
-                     total_nodes: int = int(os.environ.get("COBALT_JOBSIZE", 1))):
+                     ml_tasks_per_node: int = 1, total_nodes: int = int(os.environ.get("COBALT_JOBSIZE", 1))):
     """Theta configuration where QC tasks and ML tasks run on separate nodes.
     Designed to support XTB computations, which are single-node.
 
@@ -147,6 +147,7 @@ def theta_xtb_config(ml_workers: int, log_dir: str, xtb_per_node: int = 1,
     Args:
         ml_workers: Number of nodes dedicated to ML tasks
         xtb_per_node: Number of XTB calculations
+        ml_tasks_per_node: Number of ML tasks to place on each node
         log_dir: Path to store monitoring DB and parsl logs
         total_nodes: Total number of nodes available. Default: COBALT_JOBSIZE
     Returns:
@@ -160,6 +161,7 @@ def theta_xtb_config(ml_workers: int, log_dir: str, xtb_per_node: int = 1,
                 address=address_by_hostname(),
                 label="qc",
                 max_workers=xtb_per_node,
+                cpu_affinity='block',
                 provider=LocalProvider(
                     nodes_per_block=xtb_nodes,
                     init_blocks=1,
@@ -174,7 +176,8 @@ conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
             HighThroughputExecutor(
                 address=address_by_hostname(),
                 label="ml",
-                max_workers=1,
+                max_workers=ml_tasks_per_node,
+                cpu_affinity='block',
                 provider=LocalProvider(
                     nodes_per_block=ml_workers,
                     init_blocks=1,
