@@ -25,7 +25,6 @@ xtb_dir = os.path.join('..', '..', '..', 'notebooks', 'xtb')
 # Parse input arguments
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--out-file', help='Output path for the results', default='xtb-random-search.jsonld', type=str)
-arg_parser.add_argument('--run-size', help='Number of molecules to add. -1 to add all', default=1, type=int)
 arg_parser.add_argument('--limit', help='Total number of molecules to run', default=1, type=int)
 arg_parser.add_argument('--gdb13', help='Path to the gdb13 data file',
                         default=os.path.join('..', '..', '..', '..', 'search-spaces', 'G13.csv.gz'))
@@ -34,7 +33,7 @@ args = arg_parser.parse_args()
 # Pick some molecules by random selection
 with gzip.open(args.gdb13, 'rt') as fp:
     count = 0
-    for _ in tqdm(zip(fp, range(1000))):
+    for _ in tqdm(zip(fp)):
         count += 1
 print(f'Found {count} molecules in search space')
 rng = np.random.RandomState(2)
@@ -75,16 +74,17 @@ config = Config(
         HighThroughputExecutor(
             address=address_by_hostname(),
             label="qc",
-            max_workers=4,
+            max_workers=32,
+            cpu_affinity="block",
             provider=CobaltProvider(
                 cmd_timeout=120,
-                nodes_per_block=8,
+                nodes_per_block=4,
                 account='CSC249ADCD08',
-                queue='debug-cache-quad',
+                queue='debug-flat-quad',
                 walltime="1:00:00",
                 init_blocks=1,
                 max_blocks=1,
-                launcher=AprunLauncher(overrides='-d 64 -j 1'),  # Places worker on the launch node
+                launcher=AprunLauncher(overrides='-d 64 --cc depth'),  # Places worker on the launch node
                 scheduler_options='#COBALT --attrs enable_ssh=1',
                 worker_init='''
 module load miniconda-3
@@ -105,8 +105,12 @@ with open(os.path.join(xtb_dir, 'ref_energies.json')) as fp:
     ref_energies = json.load(fp)
 func = PythonApp(
     partial(compute_atomization_energy, qc_config=qc_config, reference_energies=ref_energies,
-            compute_hessian=False, code='xtb')
+            compute_config={'ncores': 2}, compute_hessian=False, code='xtb')
 )
+
+# Shuffle the molecules. Otherwise there is a correlation 
+#  between run order and length (parsl works better with random)
+rng.shuffle(mols)
 
 # Submit all of the molecules to be run
 jobs = [func(m) for m in mols]
