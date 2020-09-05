@@ -206,7 +206,7 @@ For all of these cases, we provide a simple demonstration application in
 Batch Optimizer
 +++++++++++++++
 
-Source code: `batch.py <https://github.com/exalearn/colmena/blob/master/demo_apps/thinker-examples/batch.py>`_
+*Source code*: `batch.py <https://github.com/exalearn/colmena/blob/master/demo_apps/thinker-examples/batch.py>`_
 
 A batch optimization process repeats two steps sequentially: select a batch of simulations and 
 then perform every simulation in the batch.
@@ -244,6 +244,8 @@ with a single task queue:
 
 Streaming Optimizer
 +++++++++++++++++++
+
+*Source code*: `streaming.py <https://github.com/exalearn/colmena/blob/master/demo_apps/thinker-examples/streaming.py>`_
 
 A streaming or "on-line" optimizer selects a new task immediately after any task completes.
 The streaming optimizer is particularly beneficial when the time to select a new task
