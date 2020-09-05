@@ -162,6 +162,15 @@ types of resources:
   The ``local_threads`` is required for Colmena to run output tasks,
   as described in the `design document <design.html#method-server>`_
 
+
+Note that we use ``LocalProvider`` classes to define how Parsl accesses resources.
+The :class:`parsl.providers.LocalProvider` class assumes that resources are already
+accessible to the application in contrast to providers like
+:class:`parsl.providers.CobaltProvider` which request resources
+on behalf of the application (e.g., from an HPC job scheduler).
+An application created with this configuration must be launched from within an
+HPC job and does not take advantage of Parsl's ability to interface with schedulers.
+
 Mapping Methods to Resources
 ++++++++++++++++++++++++++++
 
