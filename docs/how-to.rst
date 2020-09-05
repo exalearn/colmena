@@ -206,6 +206,8 @@ For all of these cases, we provide a simple demonstration application in
 Batch Optimizer
 +++++++++++++++
 
+Source code: `batch.py <https://github.com/exalearn/colmena/blob/master/demo_apps/thinker-examples/batch.py>`_
+
 A batch optimization process repeats two steps sequentially: select a batch of simulations and 
 then perform every simulation in the batch.
 Batch optimization, while simple to implement, can lead to poor utilization
@@ -219,13 +221,71 @@ if there is a large variation between task completion times (see discussion by
 
     Resources remain unused while waiting for all members of a batch to complete.
 
+The core logic for each loop can be expressed using a single thread communicating
+with a single task queue:
+
+.. code-block:: python
+
+    while not stop_condition:
+        # Use the current state of the optimizer to choose new tasks
+        tasks = generate_tasks(database, batch_size)
+
+        # Send out tasks on the input queue
+        for task in tasks:
+            queues.send_inputs(task)
+
+        # Collect the tasks, and update the database
+        for _ in range(batch_size):
+            result = queues.get_result()
+
+            # Save the inputs (args) and output (value)
+            database.append((results.args, results.value))
+
 
 Streaming Optimizer
 +++++++++++++++++++
 
-TBD
+A streaming or "on-line" optimizer selects a new task immediately after any task completes.
+The streaming optimizer is particularly beneficial when the time to select a new task
+is much shorter than the rate at which new tasks complete.
+As evidenced by codes such as `Rocketsled <https://hackingmaterials.lbl.gov/rocketsled/>`_,
+streaming optimizers are an excellent choice for lengthy tasks run with modest batch sizes.
+However, the utilization of a computational resource can break down when the rate of task
+completion becomes comparable to the rate at which new tasks can be generated.
 
-.. TODO: Reference Alex's work on Rocketsled showing how the latency increases
+.. python streaming.py --runtime 2 --runtime-var 0.5 --opt-delay 4 --num-guesses 20
+.. figure:: _static/streaming-utilization.png
+    :width: 75%
+    :align: center
+    :alt: Utilization for a streaming optimizer
+
+    Utilization limited by task generation rate
+
+
+A streaming optimizer can also be realized by a single Thinker process and a single
+task queue.
+
+.. code-block:: python
+
+    # Create as many parallel tasks as worker slots
+    tasks = generate_tasks(database, batch_size)
+    for task in tasks:
+        queues.send_inputs(task)
+
+    # As new tasks complete immediately generate a single new task
+    while not stop_condition:
+        # Wait until a task completes, pull it from queue
+        result = queues.get_result()
+
+        # Add it to the database
+        database.append((results.args, results.value))
+
+        # Generate a new task, using the latest results
+        task = generate_tasks(database, 1)[0]
+
+        # Sent new task to the queue
+        queues.send_inputs(task)
+
 
 Interleaved, Streamed Optimizer
 +++++++++++++++++++++++++++++++
