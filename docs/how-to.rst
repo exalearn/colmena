@@ -201,8 +201,6 @@ that implement degrees of overlap between performing simulations and selecting t
 For all of these cases, we provide a simple demonstration application in
 `the demo applications <https://github.com/exalearn/colmena/tree/master/demo_apps/thinker-examples>`_.
 
-.. TODO: Make the demo applications
-
 Batch Optimizer
 +++++++++++++++
 
@@ -232,7 +230,7 @@ with a single task queue:
 
         # Send out tasks on the input queue
         for task in tasks:
-            queues.send_inputs(task)
+            queues.send_inputs(task, method="simulate")
 
         # Collect the tasks, and update the database
         for _ in range(batch_size):
@@ -272,7 +270,7 @@ task queue.
     # Create as many parallel tasks as worker slots
     tasks = generate_tasks(database, batch_size)
     for task in tasks:
-        queues.send_inputs(task)
+        queues.send_inputs(task, method="simulate")
 
     # As new tasks complete immediately generate a single new task
     while not stop_condition:
@@ -286,19 +284,101 @@ task queue.
         task = generate_tasks(database, 1)[0]
 
         # Sent new task to the queue
-        queues.send_inputs(task)
+        queues.send_inputs(task, method="simulate")
 
 
-Interleaved, Streamed Optimizer
-+++++++++++++++++++++++++++++++
 
-TBD
+Interleaved Optimizer
++++++++++++++++++++++
 
-.. TODO: See if I can find any implementations of this method besides us
+*Source code*: `interleaved.py <https://github.com/exalearn/colmena/blob/master/demo_apps/thinker-examples/interleaved.py>`_
 
+An "interleaved" optimizer continually updates a queue
+of next simulations while new simulations are running.
+A new task is started from a task queue as soon as a simulation task completes.
+The task queue is maintained by a separate thread that continually updates
+the task generator and re-prioritizes the task queue.
+Full system utilization can be achieved as long as the task queue is sufficiently long.
+The challenge instead is to minimize the time between new data received
+and the task queue being updated with this new data.
+
+.. figure:: _static/interleaved-utilization.png
+    :width: 75%
+    :align: center
+    :alt: Utilization for an interleaved optimizer
+
+    Caching a prioritized list of tasks prevents under-utilization
+
+Creating an interleaved optimizer in Colmena can be achieved best using two separate
+threads that each use their own task queues.
+
+The first thread is a simulation dispatcher.
+It shares a task list, result database, and a `Lock <https://docs.python.org/3/library/threading.html#lock-objects>`_
+with the other thread.
+We use an `Event <https://docs.python.org/3/library/threading.html#event-objects>`_, ``done``,
+to signal both threads that the optimization loop has completed.
+We denote tasks associated the simulation dispatcher with the topic "doer."
+
+.. code-block:: python
+
+    # Send out the initial tasks
+    for _ in range(batch_size):
+        queues.send_inputs(task_queue.pop(), method='simulate', topic='doer')
+
+    # Pull and re-submit
+    while not done.is_set():
+        # Get a result
+        result = queues.get_result(topic='doer')
+
+        # Immediately send out a new task
+        with queue_lock:
+            queues.send_inputs(task_queue.pop(), method='simulate', topic='doer')
+
+        # Add the old task to the database
+        database.append((result.args, result.value))
+
+The second thread is a task generator and prioritizer.
+Its tasks are labeled with the "thinker" topic.
+
+.. code-block:: python
+
+    # Create some tasks
+    tasks = generate_tasks(database, queue_length)
+
+    while not done.is_set():
+        # Send out an update task, which generates
+        #  a new priority order for the tasks
+        with self.queue_lock:
+            self.queues.send_inputs(database, tasks,
+                                    method='reprioritize_queue',
+                                    topic='thinker')
+
+        # Wait until it is complete
+        result = self.queues.get_result(topic='thinker')
+        new_order = result.value
+
+        # Update the queue (requires locking)
+        with self.queue_lock:
+            # Copy out the old values
+            current_queue = self.task_queue.copy()
+            self.task_queue.clear()
+
+            # Note how many of the tasks have been started
+            num_started = len(new_order) - len(current_queue)
+
+            # Compute the new position of tasks
+            #  Noting that the first items in the queue are gone
+            new_order -= num_started
+
+            # Re-submit tasks to the queue
+            for i in new_order:
+                if i < 0:  # Task has already been sent out
+                    continue
+                self.task_queue.append(current_queue[i])
 
 
 Creating a ``main.py``
 ----------------------
 
-**TODO**: Describe how to launch the application.
+**TODO**: Describe how to launch the application, and a brief introduction to current design patterns
+for Thinker processes
