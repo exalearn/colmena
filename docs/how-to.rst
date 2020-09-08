@@ -348,20 +348,20 @@ Its tasks are labeled with the "thinker" topic.
     while not done.is_set():
         # Send out an update task, which generates
         #  a new priority order for the tasks
-        with self.queue_lock:
-            self.queues.send_inputs(database, tasks,
-                                    method='reprioritize_queue',
-                                    topic='thinker')
+        with queue_lock:
+            queues.send_inputs(database, tasks,
+                               method='reprioritize_queue',
+                               topic='thinker')
 
         # Wait until it is complete
-        result = self.queues.get_result(topic='thinker')
+        result = queues.get_result(topic='thinker')
         new_order = result.value
 
         # Update the queue (requires locking)
-        with self.queue_lock:
+        with queue_lock:
             # Copy out the old values
-            current_queue = self.task_queue.copy()
-            self.task_queue.clear()
+            current_queue = task_queue.copy()
+            task_queue.clear()
 
             # Note how many of the tasks have been started
             num_started = len(new_order) - len(current_queue)
@@ -374,7 +374,7 @@ Its tasks are labeled with the "thinker" topic.
             for i in new_order:
                 if i < 0:  # Task has already been sent out
                     continue
-                self.task_queue.append(current_queue[i])
+                task_queue.append(current_queue[i])
 
 
 Creating a ``main.py``
