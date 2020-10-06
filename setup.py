@@ -8,6 +8,9 @@ version = version_ns['VERSION']
 
 with open('requirements.txt') as f:
     install_requires = f.readlines()
+    
+with open('README.md') as f:
+    long_desc = f.read()
 
 setup(
     name='colmena',
@@ -15,6 +18,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     description='colmena: Intelligent Steerable Pipelines on HPC',
+    long_description=long_desc,
     install_requires=install_requires,
     python_requires=">=3.6.*",
     classifiers=[
@@ -27,17 +31,12 @@ setup(
         "Topic :: Scientific/Engineering"
     ],
     keywords=[
-        "funcX",
+        "parsl",
         "pipeline",
         "HPC",
     ],
-    entry_points={'console_scripts':
-                  ['colmena-main=colmena.main:cli_run',
-                   'colmena-pump=colmena.pump:cli_run',
-                   'colmena-pull=colmena.pull:cli_run']
-                  },
     author="Globus Labs",
     author_email='labs@globus.org',
     license="Apache License, Version 2.0",
-    url="https://github.com/funcx-faas/funcx"
+    url="https://github.com/exalearn/colmena"
 )
