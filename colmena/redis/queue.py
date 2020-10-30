@@ -87,6 +87,7 @@ class RedisQueue:
         # If you find the RedisClient placeholder,
         #  attempt to reconnect
         if self.redis_client == 'connected':
+            self.redis_client = None
             self.connect()
 
     def __getstate__(self):

@@ -29,8 +29,9 @@ def test_connect_error():
 
 def test_pickle_queue(queue):
     msg = pkl.dumps(queue)
-    queue_copy = pkl.loads(msg)
+    queue_copy: RedisQueue = pkl.loads(msg)
     assert queue_copy.is_connected
+    queue_copy.redis_client.ping()
 
 
 def test_push_pull(queue):
