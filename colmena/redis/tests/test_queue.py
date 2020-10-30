@@ -1,5 +1,6 @@
 from colmena.models import SerializationMethod
 from colmena.redis.queue import RedisQueue, ClientQueues, MethodServerQueues, make_queue_pairs
+import pickle as pkl
 import pytest
 
 
@@ -24,6 +25,12 @@ def test_connect_error():
         queue.put('test')
     with pytest.raises(ConnectionError):
         queue.get()
+
+
+def test_pickle_queue(queue):
+    msg = pkl.dumps(queue)
+    queue_copy = pkl.loads(msg)
+    assert queue_copy.is_connected
 
 
 def test_push_pull(queue):

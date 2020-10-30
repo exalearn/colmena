@@ -43,7 +43,7 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
             MethodServerQueues(hostname, port, name, topics=topics, clean_slate=clean_slate))
 
 
-class RedisQueue(object):
+class RedisQueue:
     """A basic redis queue for communications used by the method server
 
     A queue is defined by its prefix and a "topic" designation.
@@ -81,6 +81,23 @@ class RedisQueue(object):
         assert not any('_' in t for t in topics), "Topic names may not contain underscores"
         self._all_queues = [f'{prefix}_{t}' for t in topics]
 
+    def __setstate__(self, state):
+        self.__dict__ = state
+
+        # If you find the RedisClient placeholder,
+        #  attempt to reconnect
+        if self.redis_client == 'connected':
+            self.connect()
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+
+        # If connected, remove the unpicklable RedisClient and
+        #  put a placeholder instead
+        if self.is_connected:
+            state['redis_client'] = 'connected'
+        return state
+
     def connect(self):
         """Connect to the Redis server"""
         try:
@@ -91,6 +108,12 @@ class RedisQueue(object):
         except redis.exceptions.ConnectionError:
             logger.warning(f"ConnectionError while trying to connect to Redis@{self.hostname}:{self.port}")
             raise
+
+    def disconnect(self):
+        """Disconnet from the server
+
+        Useful if sending the connection object to another process"""
+        self.redis_client = None
 
     @_error_if_unconnected
     def get(self, timeout: int = None, topic: Optional[str] = None) -> Optional[Tuple[str, str]]:
