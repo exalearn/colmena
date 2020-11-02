@@ -285,7 +285,6 @@ if __name__ == '__main__':
         strategy=None,
     )
     config.run_dir = os.path.join(out_dir, 'run-info')
-    parsl.load(config)
 
     # Create the method server and task generator
     my_ackley = partial(ackley, mean_rt=args.runtime, std_rt=args.runtime_var)
@@ -295,7 +294,7 @@ if __name__ == '__main__':
     update_wrapper(my_rep, reprioritize_queue)
     doer = ParslMethodServer([(my_ackley, {'executors': ['simulation']}),
                               (my_rep, {'executors': ['task_generator']})],
-                             server_queues)
+                             server_queues, config)
     thinker = Thinker(client_queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
                       batch_size=args.num_parallel)
     logging.info('Created the method server and task generator')

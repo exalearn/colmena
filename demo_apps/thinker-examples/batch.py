@@ -13,7 +13,6 @@ from datetime import datetime
 import numpy as np
 import argparse
 import logging
-import parsl
 import json
 import sys
 import os
@@ -181,12 +180,11 @@ if __name__ == '__main__':
         strategy=None,
     )
     config.run_dir = os.path.join(out_dir, 'run-info')
-    parsl.load(config)
 
     # Create the method server and task generator
     my_ackley = partial(ackley, mean_rt=np.log(args.runtime), std_rt=np.log(args.runtime_var))
     update_wrapper(my_ackley, ackley)
-    doer = ParslMethodServer([my_ackley], server_queues, default_executors=['htex'])
+    doer = ParslMethodServer([my_ackley], server_queues, config, default_executors=['htex'])
     thinker = Thinker(client_queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
                       batch_size=args.num_parallel)
     logging.info('Created the method server and task generator')

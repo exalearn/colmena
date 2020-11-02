@@ -252,6 +252,7 @@ class ParslMethodServer(BaseMethodServer):
     def run(self) -> None:
         # Launch the Parsl workflow engine
         parsl.load(self.config)
+        logger.info("Launched Parsl DFK")
 
         # Start the loop
         super().run()
