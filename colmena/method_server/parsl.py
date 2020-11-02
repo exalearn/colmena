@@ -8,6 +8,7 @@ from typing import Optional, List, Callable, Tuple, Dict, Union, Set
 
 import parsl
 from parsl import python_app
+from parsl.config import Config
 from parsl.app.python import PythonApp
 from parsl.dataflow.futures import AppFuture
 
@@ -147,7 +148,9 @@ class ParslMethodServer(BaseMethodServer):
     """
 
     def __init__(self, methods: List[Union[Callable, Tuple[Callable, Dict]]],
-                 queues: MethodServerQueues, timeout: Optional[int] = None,
+                 queues: MethodServerQueues,
+                 config: Config,
+                 timeout: Optional[int] = None,
                  default_executors: Union[str, List[str]] = 'all'):
         """
 
@@ -158,10 +161,14 @@ class ParslMethodServer(BaseMethodServer):
                 the Parsl ParslApp see `Parsl documentation
                 <https://parsl.readthedocs.io/en/stable/stubs/parsl.app.app.python_app.html#parsl.app.app.python_app>`_.
             queues (MethodServerQueues): Queues for the method server
+            config: Parsl configuration
             timeout (int): Timeout, if desired
             default_executors: Executor or list of executors to use by default.
         """
         super().__init__(queues, timeout)
+
+        # Store the Parsl configuration
+        self.config = config
 
         # Assemble the list of methods
         self.methods_ = {}
@@ -190,7 +197,7 @@ class ParslMethodServer(BaseMethodServer):
         logger.info(f'Defined {len(self.methods_)} methods: {", ".join(self.methods_.keys())}')
 
         # If only one method, store a default method
-        self.default_method_ = list(self.methods_.keys())[0] if len(self.methods_) else None
+        self.default_method_ = list(self.methods_.keys())[0] if len(self.methods_) == 1 else None
         if self.default_method_ is not None:
             logger.info(f'There is only one method, so we are using {self.default_method_} as a default')
 
@@ -241,3 +248,10 @@ class ParslMethodServer(BaseMethodServer):
         dfk = parsl.dfk()
         dfk.wait_for_current_tasks()
         logger.info(f"All tasks have completed for {self.__class__.__name__} on {self.ident}")
+
+    def run(self) -> None:
+        # Launch the Parsl workflow engine
+        parsl.load(self.config)
+
+        # Start the loop
+        super().run()

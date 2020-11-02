@@ -1,7 +1,7 @@
 """Base class for the Method Server"""
 
 from abc import ABCMeta, abstractmethod
-from threading import Thread
+from multiprocessing import Process
 from typing import Optional
 import logging
 
@@ -11,7 +11,7 @@ from colmena.redis.queue import MethodServerQueues
 logger = logging.getLogger(__name__)
 
 
-class BaseMethodServer(Thread, metaclass=ABCMeta):
+class BaseMethodServer(Process, metaclass=ABCMeta):
     """Abstract class that executes requests across distributed resources.
 
     Clients submit requests to the server by pushing them to a Redis queue,
@@ -19,7 +19,8 @@ class BaseMethodServer(Thread, metaclass=ABCMeta):
 
     Different implementations vary in how the queue is processed.
 
-    Start the method server by first instantiating it and then calling :meth:`start`.
+    Start the method server by first instantiating it and then calling :meth:`start`
+    to launch the server in a separate process.
 
     The method server is shutdown by pushing a ``None`` to the inputs queue,
     signaling that no new tests will be incoming. The remaining tasks will
