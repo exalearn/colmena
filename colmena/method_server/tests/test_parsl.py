@@ -27,8 +27,11 @@ config = Config(
 # Make a simple method server
 @fixture(autouse=True)
 def server_and_queue() -> Tuple[ParslMethodServer, ClientQueues]:
-    client, server = make_queue_pairs('localhost', clean_slate=True)
-    return ParslMethodServer([f], server, config), client
+    client_q, server_q = make_queue_pairs('localhost', clean_slate=True)
+    server = ParslMethodServer([f], server_q, config)
+    yield server, client_q
+    if server.is_alive():
+        server.terminate()
 
 
 @mark.timeout(30)
@@ -52,12 +55,11 @@ def test_run_simple(server_and_queue):
     """Make sure the run and stop """
     server, queue = server_and_queue
 
-    # Load the parsl DFK manually
-    parsl.load(config)
+    # Start the service
+    server.start()
 
     # Send a result and then check results
     queue.send_inputs(1)
-    server.process_queue()
     result = queue.get_result()
     assert result.success
     assert result.value == 2
@@ -66,9 +68,6 @@ def test_run_simple(server_and_queue):
     assert result.time_serialize_results > 0
     assert result.time_compute_started is not None
     assert result.time_result_sent is not None
-
-    # Remove the DFK
-    parsl.clear()
 
 
 @mark.timeout(30)
@@ -90,16 +89,12 @@ def test_timeout(server_and_queue):
 def test_error_handling(server_and_queue):
     server, queue = server_and_queue
 
-    # Manually start the DFK
-    parsl.load()
+    # Start the server
+    server.start()
 
     # Send a result and then get the error message back
     queue.send_inputs(None)
-    server.process_queue()
     result = queue.get_result()
     assert result.args == (None,)
     assert not result.success
     assert result.time_running is None
-
-    # Clear the DFK
-    parsl.clear()

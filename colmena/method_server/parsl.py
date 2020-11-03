@@ -72,6 +72,7 @@ class _ErrorHandler(Thread):
         super().__init__(daemon=True, name='error_handler')
         self.future_queue = future_queue
         self.timeout = timeout
+        self.kill = False
 
     def run(self) -> None:
         # Initialize the list of futures
@@ -79,7 +80,7 @@ class _ErrorHandler(Thread):
         futures: Set[Future] = set()
 
         # Continually look for new jobs
-        while True:
+        while not self.kill:
             # Pull from the queue until empty
             #  This operation assumes we have only one thread reading from the queue
             #  Otherwise, the queue could become empty between checking status and then pulling
@@ -202,9 +203,8 @@ class ParslMethodServer(BaseMethodServer):
             logger.info(f'There is only one method, so we are using {self.default_method_} as a default')
 
         # Create a thread to check if tasks completed successfully
-        self.task_queue = Queue()
-        self.error_checker = _ErrorHandler(self.task_queue)
-        self.error_checker.start()
+        self.task_queue: Optional[Queue] = None
+        self.error_checker: Optional[_ErrorHandler] = None
 
     def process_queue(self):
         """Evaluate a single task from the queue"""
@@ -249,10 +249,18 @@ class ParslMethodServer(BaseMethodServer):
         dfk.wait_for_current_tasks()
         logger.info(f"All tasks have completed for {self.__class__.__name__} on {self.ident}")
 
+        logger.info("Shutting down the error handling thread")
+        self.error_checker.kill = True
+
     def run(self) -> None:
         # Launch the Parsl workflow engine
         parsl.load(self.config)
         logger.info("Launched Parsl DFK")
+
+        # Create the error checker
+        self.task_queue = Queue()
+        self.error_checker = _ErrorHandler(self.task_queue)
+        self.error_checker.start()
 
         # Start the loop
         super().run()
