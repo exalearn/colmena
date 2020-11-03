@@ -1,5 +1,4 @@
 """Tests for the Parsl implementation of the method server"""
-import parsl
 from typing import Tuple
 from parsl.config import Config
 from parsl import ThreadPoolExecutor
