@@ -1,11 +1,13 @@
 """Base classes for 'thinking' applictions that respond to tasks completing"""
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import Process
-from threading import Event
+from threading import Event, local
 from traceback import TracebackException
 from typing import Optional, Callable, List
 
 import logging
+
+from colmena.redis.queue import ClientQueues
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,44 @@ def agent(func):
     return func
 
 
+def _launch_agent(func: Callable, worker: 'BaseThinker'):
+    """Shim function for launching an agent
+
+    Sets the thread-local variables for a class, such as its name and default topic
+    """
+
+    # Set the thread-local options for this agent
+    name = func.__name__
+    worker.local_details.name = name
+    worker.local_details.logger = worker.make_logger(name)
+
+    # Mark that this thread has launched
+    worker.logger.info(f'{name} started')
+
+    # Launch it
+    func(worker)
+
+    # Mark that the thread has crashed
+    worker.logger.info(f'{name} completed')
+
+
+class AgentData(local):
+    """Data local to a certain agent thread
+
+    Attributes:
+        logger: Logger for this thread
+        name (str): Name of the thread
+    """
+
+    def __init__(self, logger: logging.Logger):
+        """
+        Args:
+            logger: Logger to use for this thread
+        """
+        self.logger = logger
+        self.name: Optional[str] = None
+
+
 class BaseThinker(Process):
     """Base class for steering applications
 
@@ -25,22 +65,27 @@ class BaseThinker(Process):
          done (threading.Event): Event used to mark that a thread has completed
     """
 
-    logger: logging.Logger  # Base logger for the class
-
-    def __init__(self, **kwargs):
+    def __init__(self, queues: ClientQueues, **kwargs):
         super().__init__(**kwargs)
 
         # Create the base logger
-        self.logger = self._make_logger()
+        self.queues = queues
 
         # Create some basic events and locks
-        self.done = Event()
+        self.done: Event = Event()
 
-    def _make_logging_handler(self) -> logging.Handler:
+        # Thread-local stuff, like the default queue and name
+        self.local_details = AgentData(self.make_logger())
+
+    @property
+    def logger(self) -> logging.Logger:
+        return self.local_details.logger
+
+    def _make_logging_handler(self) -> Optional[logging.Handler]:
         """Create the logging handler for your class"""
-        return logging.StreamHandler()
+        return None
 
-    def _make_logger(self, name: Optional[str] = None):
+    def make_logger(self, name: Optional[str] = None):
         """Make a sub-logger for our application
 
         Args:
@@ -58,7 +103,8 @@ class BaseThinker(Process):
         # Assign the handler to the root logger
         if name is None:
             hnd = self._make_logging_handler()
-            new_logger.addHandler(hnd)
+            if hnd is not None:
+                new_logger.addHandler(hnd)
         return new_logger
 
     @classmethod
@@ -78,7 +124,7 @@ class BaseThinker(Process):
         with ThreadPoolExecutor(max_workers=len(functions)) as executor:
             # Submit all of the worker threads
             for f in functions:
-                threads.append(executor.submit(f, self))
+                threads.append(executor.submit(_launch_agent, f, self))
             self.logger.info(f'Launched all {len(functions)} functions')
 
             # Wait until any one completes, then set the "gen_done" event to
@@ -97,4 +143,3 @@ class BaseThinker(Process):
                 t.result()
 
         self.logger.info(f"{self.__class__.__name__} completed")
-

@@ -1,6 +1,9 @@
 """Test the Thinker class"""
 import logging
 
+from pytest import fixture
+
+from colmena.redis.queue import make_queue_pairs
 from colmena.thinker import BaseThinker, agent
 
 
@@ -8,9 +11,12 @@ class ExampleThinker(BaseThinker):
 
     @agent
     def function(self):
-        my_logger = self._make_logger('function')
-        my_logger.info('Started function')
         return True
+
+
+@fixture()
+def queues():
+    return make_queue_pairs('localhost')
 
 
 def test_detection():
@@ -19,13 +25,15 @@ def test_detection():
     assert ExampleThinker.list_agents()[0].__name__ == 'function'
 
 
-def test_run(caplog):
-    th = ExampleThinker()
+def test_run(queues, caplog):
+    # Make the server
+    client, server = queues
+    th = ExampleThinker(client)
     with caplog.at_level(logging.INFO):
         th.run()
 
     # Check the messages from the end
-    assert 'ExampleThinker.function'.lower() == caplog.record_tuples[-4][0]
+    assert 'ExampleThinker.function'.lower() == caplog.record_tuples[-5][0]
     assert 'Launched all 1 functions' in caplog.messages[-3]
     assert 'Thread completed without' in caplog.messages[-2]
     assert 'ExampleThinker completed' in caplog.messages[-1]
