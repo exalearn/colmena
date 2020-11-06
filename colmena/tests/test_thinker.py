@@ -31,6 +31,7 @@ def test_run(queues, caplog):
     th = ExampleThinker(client)
     with caplog.at_level(logging.INFO):
         th.run()
+    assert th.done.is_set()
 
     # Check the messages from the end
     assert 'ExampleThinker.function'.lower() == caplog.record_tuples[-5][0]
