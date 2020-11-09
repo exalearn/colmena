@@ -1,8 +1,8 @@
 Design
 ======
 
-Colmena is a library on which you can build other applications and
-is not a tool for steering ensembles of simulations on its own.
+Colmena is a library on which you can build applications to steer
+ensembles of simulations running on HPC resources.
 This portion of the documentation discuss the components of Colmena
 and illustrate how they work together.
 
@@ -51,7 +51,7 @@ and follows a very specific pattern.
 "Thinker" applications make requests to the method server for computations
 and receive the results in no particular order.
 
-.. Need to check my nomenclature with a distributed computing person
+.. TODO (wardlt): Need to check my nomenclature with a distributed computing person
 
 Implementation
 --------------
@@ -88,7 +88,7 @@ workflows in Python.
 We create :class:`parsl.app.PythonApp` for each of the methods available in the method server,
 which allows us to use them as part of Parsl workflows and execute them on distributed resources.
 
-The :class:`colmena.method_server.ParslMethodServer` itself is a multi-threaded Python application:
+The :class:`colmena.method_server.ParslMethodServer` itself is a multi-process, multi-threaded Python application:
 
 1. *Intake Thread*: The intake thread reads task requests from the input Redis queue(s), deserializes
    them and submits the appropriate tasks to Parsl. Submitting a task to Parsl involves calling
@@ -96,8 +96,8 @@ The :class:`colmena.method_server.ParslMethodServer` itself is a multi-threaded 
    such that the result from the method will be sent back to the queue.
 2. *Parsl Threads*: Parsl is a multi-threaded application which handles launching and communicating
    with worker processes. These workers can reside on other systems (e.g., compute or launch nodes on HPC).
-3. *Output Threads*: Each task is defined as a two-step workflow in Parsl: "perform task" followed by
-   "output results". The "output task" step in the workflow is performed on a collection of threads
+3. *Output Process*: Each task is defined as a two-step workflow in Parsl: "perform task" followed by
+   "output results". The "output results" step in the workflow is performed on a collection of porcesses
    managed by Parsl.
 4. *Error Collection Thread*: Tasks which fail to run are periodically sent back to the client
    over the Redis queue. The Error thread captures errors reported from Parsl and adds them to the Redis queue.
@@ -110,7 +110,7 @@ Each Colmena application has at least two queues: an "inputs" queue for task
 requests and a "results" queue for results.
 By default, operations will pull from these two default queues.
 Colmena also supports creating "topical" queues for tasks for special categories
-(e.g., tasks associated with active learning).
+(e.g., tasks associated with active learning vs simulations).
 Client processes can filter to only read from these topical queues, which simplifies
 breaking a "Thinker" application in multiple sub-agents.
 

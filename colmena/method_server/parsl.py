@@ -7,7 +7,7 @@ from time import sleep, perf_counter
 from typing import Optional, List, Callable, Tuple, Dict, Union, Set
 
 import parsl
-from parsl import python_app, ThreadPoolExecutor, HighThroughputExecutor
+from parsl import python_app, HighThroughputExecutor
 from parsl.config import Config
 from parsl.app.python import PythonApp
 from parsl.dataflow.futures import AppFuture

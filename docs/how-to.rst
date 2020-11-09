@@ -1,10 +1,12 @@
-Building Colmena Applications
-=============================
+Building a Colmena Application
+==============================
 
-Creating a new application with Colmena requires defining the methods to be
-deployed on HPC and an application to request those methods.
-(See `Design <./design.html>`_ for further details on Colmena architecture).
-We describe each of these topics separately.
+Creating a new application with Colmena involves building a "method server" to
+that deploys expensive functions and a "thinker" application that
+decides which methods to invoke with what inputs.
+We describe each topic separately.
+
+See `Design <./design.html>`_ for details on Colmena architecture.
 
 Configuring a Method Server
 ---------------------------
@@ -39,8 +41,10 @@ during pre- or post-processing (see `Issue #4 <https://github.com/exalearn/colme
 Common Example: Launching MPI Applications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We imagine many Colmena applications to use an MPI application in many of their "Methods,"
-and a recommended pattern for using MPI applications:
+We imagine many Colmena applications will define methods that
+require launching an external executable that runs on more than one node.
+Our recommended pattern for using MPI applications is to write a single Python function
+that handles writing inputs, launching the function and parsing outputs:
 
 .. code-block:: python
 
@@ -94,7 +98,7 @@ This basic pattern has many points for further optimization that could be critic
 Specifying Computational Resources
 ++++++++++++++++++++++++++++++++++
 
-We use `Parsl's resource resource configuration <https://parsl.readthedocs.io/en/stable/userguide/configuring.html>`_
+Colmena uses `Parsl's resource configuration <https://parsl.readthedocs.io/en/stable/userguide/configuring.html>`_
 to define available resources for Colmena methods.
 We use an complex example that specifies running a mix of single-node and multi-node tasks on
 `Theta <https://www.alcf.anl.gov/support-center/theta>`_  to illustrate:
@@ -135,14 +139,12 @@ We use an complex example that specifies running a mix of single-node and multi-
     conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
     ''',
                 ),
-            ),
-            ThreadPoolExecutor(label="local_threads", max_threads=4)
+            )
         ],
         strategy=None,
     )
 
-The overall configuration is broken into 3 types of "executors," which each define different
-types of resources:
+The overall configuration is broken into two types of "executors:"
 
 ``multi_node``
   The ``multi_node`` executor provides resources for applications that use multiple nodes.
@@ -158,18 +160,12 @@ types of resources:
   launcher, as required by Theta. Each node spawns 2 workers and can therefore perform
   two tasks concurrently.
 
-``local_threads``
-  The ``local_threads`` is required for Colmena to run output tasks,
-  as described in the `design document <design.html#method-server>`_
-
 
 Note that we use ``LocalProvider`` classes to define how Parsl accesses resources.
 The :class:`parsl.providers.LocalProvider` class assumes that resources are already
 accessible to the application in contrast to providers like
-:class:`parsl.providers.CobaltProvider` which request resources
+:class:`parsl.providers.CobaltProvider` that request resources
 on behalf of the application (e.g., from an HPC job scheduler).
-An application created with this configuration must be launched from within an
-HPC job and does not take advantage of Parsl's ability to interface with schedulers.
 
 Mapping Methods to Resources
 ++++++++++++++++++++++++++++
@@ -194,17 +190,84 @@ method to the "multi_node" resource and the ML task to the "single_node" resourc
 Creating a "Thinker" Application
 --------------------------------
 
-Colmena is designed to support many different algorithms for creating and dispatching tasks.
+Colmena is designed to support many different algorithms for creating tasks and
+responding to results.
+Such "thinking" applications take the form of threads that send and receive results
+to/from the method server(s) using the Redis queues.
+Colmena provides as :class:`colmena.thinker.BaseThinker` class to simplify creating
+multi-threaded applications.
+
+Working with ``BaseThinker``
+++++++++++++++++++++++++++++
+
+Creating a new ``BaseThinker`` subclass involves defining different "agents"
+that interact with each other and the method server.
+The class itself provides a template for defining information shared between agents
+and a mechanism for launching them as separate threads.
+
+A minimal Thinker is as follows:
+
+.. code-block:: python
+
+    class Thinker(BaseThinker):
+
+        @agent
+        def operation(self):
+            self.queues.send_inputs(4)
+            result = self.queues.get_result()
+            self.output = result.value
+
+    thinker = Thinker(queues)
+    thinker.run()
+    print(f'Simulation result {result.value}')
+
+The example shows us a few key concepts:
+
+1. You communicate with the method server using ``self.queues``, which provides
+   `a wrapper over the Redis queues <https://colmena.readthedocs.io/en/latest/source/colmena.redis.html#colmena.redis.queue.ClientQueues>`_.
+2. Operations within the a Thinker are marked with the ``@agent`` decorator.
+3. Calling ``thinker.run()`` launches all agent threads within that class
+   and runs until all complete.
+
+Submitting Tasks
+~~~~~~~~~~~~~~~~
+
+:class:`colmena.redis.queue.ClientQueues` provides communication to the method server
+and is available as the ``self.queues`` class attribute.
+
+Submit requests to the method server with the ``send_inputs`` function.
+Besides the input arguments and method name, the function also accepts a
+"topic" for the method queue used when filtering the output results.
+
+The ``get_result`` function retrieves the next result from the method server
+as a :class:`colmena.models.Result` object.
+The ``Result`` object contains the output task and the performance information
+(e.g., how long communication to the client required).
+``get_result`` accepts a "topic" to only pull tasks sent with a certain topic to the queue.
+
+Inter-agent Communication
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Agents in a thinking application are run as separate Python threads.
+Accordingly, you can share objects between agents.
+We recommend versing yourself in Python's rich library of
+`threading objects <https://docs.python.org/3/library/threading.html>`_
+and `queue objects <https://docs.python.org/3/library/queue.html>`_
+to communicate information between agents.
+
+Example Applications
+++++++++++++++++++++
+
 We will describe a few example explanations to illustrate how to make a Thinker applications
 that implement degrees of overlap between performing simulations and selecting the next simulation.
 
 For all of these cases, we provide a simple demonstration application in
-`the demo applications <https://github.com/exalearn/colmena/tree/master/demo_apps/thinker-examples>`_.
+`the demo applications <https://github.com/exalearn/colmena/tree/master/demo_apps/optimizer-examples>`_.
 
 Batch Optimizer
-+++++++++++++++
+~~~~~~~~~~~~~~~
 
-*Source code*: `batch.py <https://github.com/exalearn/colmena/blob/master/demo_apps/thinker-examples/batch.py>`_
+*Source code*: `batch.py <https://github.com/exalearn/colmena/blob/master/demo_apps/optimizer-examples/batch.py>`_
 
 A batch optimization process repeats two steps sequentially: select a batch of simulations and 
 then perform every simulation in the batch.
@@ -241,9 +304,9 @@ with a single task queue:
 
 
 Streaming Optimizer
-+++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~
 
-*Source code*: `streaming.py <https://github.com/exalearn/colmena/blob/master/demo_apps/thinker-examples/streaming.py>`_
+*Source code*: `streaming.py <https://github.com/exalearn/colmena/blob/master/demo_apps/optimizer-examples/streaming.py>`_
 
 A streaming or "on-line" optimizer selects a new task immediately after any task completes.
 The streaming optimizer is particularly beneficial when the time to select a new task
@@ -289,9 +352,9 @@ task queue.
 
 
 Interleaved Optimizer
-+++++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~~~
 
-*Source code*: `interleaved.py <https://github.com/exalearn/colmena/blob/master/demo_apps/thinker-examples/interleaved.py>`_
+*Source code*: `interleaved.py <https://github.com/exalearn/colmena/blob/master/demo_apps/optimizer-examples/interleaved.py>`_
 
 An "interleaved" optimizer continually updates a queue
 of next simulations while new simulations are running.
@@ -380,5 +443,54 @@ Its tasks are labeled with the "thinker" topic.
 Creating a ``main.py``
 ----------------------
 
-**TODO**: Describe how to launch the application, and a brief introduction to current design patterns
-for Thinker processes
+The script used to launch a Colmena application must create the Redis queues and
+launch the method server and thinking application.
+
+A common pattern is as follows:
+
+.. code-block:: python
+
+    from colmena.method_server import ParslMethodServer
+    from colmena.redis.queue import make_queue_pairs
+
+    if __name__ == "__main__":
+        # [ ... Create the Parsl configuration, list of functions, ... ]
+
+        # Generate the queue pairs
+        client_queues, server_queues = make_queue_pairs('localhost', serialization_method='json')
+
+        # Instantiate the method server and thinker
+        method_server = ParslMethodServer(functions, server_queues, config)
+        thinker = Thinker(client_queues)
+
+        try:
+            # Launch the servers
+            doer.start()
+            thinker.start()
+
+            # Wait for the thinking application to complete
+            thinker.join()
+        finally:
+            # Send a shutdown signal to the method server
+            client_queues.send_kill_signal()
+
+        # Wait for the method server to complete
+        doer.join()
+
+The above script can be run as any other python code (e.g., ``python run.py``)
+once you have started Redis (e.g., calling ``redis-server``).
+
+We have described configuration options for method server and thinker applications earlier.
+The key options to discuss here are those of the communication queues.
+
+The :meth:`colmena.redis.queue.create_queue_pairs` function creates Redis queues with matching options
+for the thinking application (client) and method server.
+These options include the network address of the Redis server,
+a list of "topics" that define separate queues for certain types of tasks,
+and a few communication options, such as:
+
+- ``serialization_method``: Whether to use JSON or Pickle to serialize inputs and outputs.
+  Either may produce smaller objects or provide faster conversion depending on your data types.
+- ``keep_inputs``: Whether to retain inputs in ``Result`` object after task has completed.
+  Removing inputs could speed communication but may complicate debugging.
+
