@@ -172,10 +172,14 @@ class ParslMethodServer(BaseMethodServer):
         """
         super().__init__(queues, timeout)
 
-        # Insert output
+        # Insert _output_workers to the thread count
         executors = config.executors.copy()
         executors.append(HighThroughputExecutor(label='_output_workers', max_workers=num_output_workers))
         config.executors = executors
+
+        # Get a list of default executors that _does not_ include the output workers
+        if default_executors == 'all':
+            default_executors = [e.label for e in executors if e.label != "_output_workers"]
 
         # Store the Parsl configuration
         self.config = config
@@ -191,9 +195,6 @@ class ParslMethodServer(BaseMethodServer):
             else:
                 function = method
                 options = {'executors': default_executors}
-                if default_executors == 'all':
-                    logger.warning(f'Method {function.__name__} may run on the method server\'s local threads.'
-                                   ' Consider specifying default_executors')
 
             # Make the Parsl app
             name = function.__name__
