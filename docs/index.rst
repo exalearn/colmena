@@ -37,6 +37,7 @@ illustrate how to implement different thinking applications that solve optimizat
    :caption: Contents:
 
    installation
+   quickstart
    design
    how-to
    source/modules

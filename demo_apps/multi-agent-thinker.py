@@ -20,35 +20,6 @@ def task_generator(best_to_date: float) -> float:
     return best_to_date + random() - 0.5
 
 
-class Thinker(BaseThinker):
-
-    def __init__(self, queue):
-        super().__init__(queue)
-        self.remaining_guesses = 10
-        self.parallel_guesses = 4
-        self.best_guess = 10
-        self.best_result = inf
-
-    @agent
-    def consumer(self):
-        for _ in range(self.remaining_guesses):
-            # Update the current guess with the
-            result = self.queues.get_result(topic='simulate')
-            if result.value < self.best_result:
-                self.best_result = result.value
-                self.best_guess = result.args[0]
-
-    @agent
-    def producer(self):
-        while not self.done.is_set():
-            # Make a new guess
-            self.queues.send_inputs(self.best_guess, method='task_generator', topic='generate')
-
-            # Get the result, push new task to queue
-            result = self.queues.get_result(topic='generate')
-            self.queues.send_inputs(result.value, method='target_function', topic='simulate')
-
-
 if __name__ == "__main__":
     # Set up the logging
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -63,6 +34,37 @@ if __name__ == "__main__":
     config = Config(executors=[HighThroughputExecutor()])
 
     doer = ParslMethodServer([target_function, task_generator], server_queues, config)
+
+    # Define the thinker
+    class Thinker(BaseThinker):
+
+        def __init__(self, queue):
+            super().__init__(queue)
+            self.remaining_guesses = 10
+            self.parallel_guesses = 4
+            self.best_guess = 10
+            self.best_result = inf
+
+        @agent
+        def consumer(self):
+            for _ in range(self.remaining_guesses):
+                # Update the current guess with the
+                result = self.queues.get_result(topic='simulate')
+                if result.value < self.best_result:
+                    self.best_result = result.value
+                    self.best_guess = result.args[0]
+
+        @agent
+        def producer(self):
+            while not self.done.is_set():
+                # Make a new guess
+                self.queues.send_inputs(self.best_guess, method='task_generator', topic='generate')
+
+                # Get the result, push new task to queue
+                result = self.queues.get_result(topic='generate')
+                self.logger.info(f'Created a new guess: {result.value:.2f}')
+                self.queues.send_inputs(result.value, method='target_function', topic='simulate')
+
     thinker = Thinker(client_queues)
     logging.info('Created the method server and task generator')
 

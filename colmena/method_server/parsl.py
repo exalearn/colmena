@@ -1,3 +1,4 @@
+"""Parsl method server and related utilities"""
 import logging
 from functools import partial
 from queue import Queue
