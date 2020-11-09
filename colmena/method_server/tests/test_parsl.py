@@ -15,17 +15,19 @@ def f(x):
 
 
 # Make the Parsl configuration. Use LocalThreads for Mac and Windows compatibility
-config = Config(
-    executors=[
-        ThreadPoolExecutor(label="local_threads", max_threads=4)
-    ],
-    strategy=None,
-)
+@fixture()
+def config():
+    return Config(
+        executors=[
+            ThreadPoolExecutor(label="local_threads", max_threads=4)
+        ],
+        strategy=None,
+    )
 
 
 # Make a simple method server
 @fixture(autouse=True)
-def server_and_queue() -> Tuple[ParslMethodServer, ClientQueues]:
+def server_and_queue(config) -> Tuple[ParslMethodServer, ClientQueues]:
     client_q, server_q = make_queue_pairs('localhost', clean_slate=True)
     server = ParslMethodServer([f], server_q, config)
     yield server, client_q

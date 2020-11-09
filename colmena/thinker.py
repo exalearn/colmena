@@ -93,7 +93,6 @@ class BaseThinker(Thread):
         t.join()  # Wait until work completes
 
     Attributes:
-         logger (logging.Logger): Base logger for general log messages
          done (threading.Event): Event used to mark that a thread has completed
     """
 
@@ -101,7 +100,8 @@ class BaseThinker(Thread):
         """
         Args:
             queue: Queue wrapper used to communicate with
-            **kwargs:
+            daemon: Whether to launch this as a daemon thread
+            **kwargs: Options passed to :class:`Thread`
         """
         super().__init__(daemon=daemon, **kwargs)
 
@@ -116,6 +116,7 @@ class BaseThinker(Thread):
 
     @property
     def logger(self) -> logging.Logger:
+        """Get the logger for the active thread"""
         return self.local_details.logger
 
     def make_logging_handler(self) -> Optional[logging.Handler]:
@@ -147,6 +148,11 @@ class BaseThinker(Thread):
 
     @classmethod
     def list_agents(cls) -> List[Callable]:
+        """List all functions that map to operations within the thinker application
+
+        Returns:
+            List of methods that define agent threads
+        """
         agents = []
         for n in dir(cls):
             o = getattr(cls, n)
@@ -155,6 +161,13 @@ class BaseThinker(Thread):
         return agents
 
     def run(self):
+        """Launch all operation threads and wait until all complete
+
+        Sets the ``done`` flag when a thread completes, then waits for all other flags to finish.
+
+        Does not raise exceptions if a thread exits with an exception. Exception and traceback information
+        are printed using logging at the ``WARNING`` level.
+        """
         self.logger.info(f"{self.__class__.__name__} started")
 
         threads = []

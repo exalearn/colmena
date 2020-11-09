@@ -7,7 +7,7 @@ from time import sleep, perf_counter
 from typing import Optional, List, Callable, Tuple, Dict, Union, Set
 
 import parsl
-from parsl import python_app
+from parsl import python_app, ThreadPoolExecutor, HighThroughputExecutor
 from parsl.config import Config
 from parsl.app.python import PythonApp
 from parsl.dataflow.futures import AppFuture
@@ -46,7 +46,7 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     return result
 
 
-@python_app(executors=['local_threads'])
+@python_app(executors=['_output_workers'])
 def output_result(queues: MethodServerQueues, topic: str, inputs: Result, result_obj):
     """Submit the function result to the Redis queue
 
@@ -116,23 +116,24 @@ class _ErrorHandler(Thread):
 class ParslMethodServer(BaseMethodServer):
     """Method server based on Parsl
 
-    Create a Parsl method server by first configuring Parsl following
+    Create a Parsl method server by first creating a resource configuration following
     the recommendations in `the Parsl documentation
     <https://parsl.readthedocs.io/en/stable/userguide/configuring.html>`_.
-    Then instantiate a method server with a list of functions and
-    configurations defining on which Parsl executors each function can run.
+    Then instantiate a method server with a list of functions,
+    configurations defining on which Parsl executors each function can run,
+    and the Parsl resource configuration.
     The executor(s) for each function can be defined with a combination
     of per method specifications
 
     .. code-block:: python
 
-        ParslMethodServer([(f, {'executors': ['a']})])
+        ParslMethodServer([(f, {'executors': ['a']})], queues, config)
 
     and also using a default executor
 
     .. code-block:: python
 
-        ParslMethodServer([f], default_executors=['a'])
+        ParslMethodServer([f], queues, config, default_executors=['a'])
 
     Further configuration options for each method can be defined
     in the list of methods.
@@ -152,7 +153,8 @@ class ParslMethodServer(BaseMethodServer):
                  queues: MethodServerQueues,
                  config: Config,
                  timeout: Optional[int] = None,
-                 default_executors: Union[str, List[str]] = 'all'):
+                 default_executors: Union[str, List[str]] = 'all',
+                 num_output_workers: int = 4):
         """
 
         Args:
@@ -165,8 +167,15 @@ class ParslMethodServer(BaseMethodServer):
             config: Parsl configuration
             timeout (int): Timeout, if desired
             default_executors: Executor or list of executors to use by default.
+            num_output_workers: Maximum number of output workers push results to the Redis queue. Will not create
+                more workers than CPUs
         """
         super().__init__(queues, timeout)
+
+        # Insert output
+        executors = config.executors.copy()
+        executors.append(HighThroughputExecutor(label='_output_workers', max_workers=num_output_workers))
+        config.executors = executors
 
         # Store the Parsl configuration
         self.config = config
