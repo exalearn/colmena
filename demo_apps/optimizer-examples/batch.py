@@ -191,8 +191,6 @@ if __name__ == '__main__':
 
     try:
         # Launch the servers
-        #  The method server is a Thread, so that it can access the Parsl DFK
-        #  The task generator is a Thread, so that all debugging methods get cast to screen
         doer.start()
         thinker.start()
         logging.info('Launched the servers')

@@ -11,13 +11,13 @@ with Artificial Intelligence (AI) experimental design methods.
 
 ## Installation
 
-If you are running Linux on a system without a GPU:
+We use Anaconda to define an environments:
 
-``conda env create --file full_environment.yml --force``
+``conda env create --file environment.yml --force``
 
 will install all packages needed for the colmena library and demo applications.
 
-Otherwise, consult our [Installation Guide](https://colmena.readthedocs.io/en/latest/installation.html).
+Consult our [Installation Guide](https://colmena.readthedocs.io/en/latest/installation.html).
 
 ## Using Colmena
 
