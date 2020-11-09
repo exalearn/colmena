@@ -65,7 +65,7 @@ class BaseThinker(Thread):
     an "operation" or "agent" that will run as a thread.
 
     Each agent communicates with others via `queues <https://docs.python.org/3/library/queue.html>`_
-    or other <threading objects <https://docs.python.org/3/library/threading.html#>`_ and
+    or other `threading objects <https://docs.python.org/3/library/threading.html#>`_ and
     the Colmena method server via the :class:`ClientQueues`.
     The only communication method available by default is a class attribute named ``done``
     that is used to signal that the program should terminate.
@@ -90,8 +90,7 @@ class BaseThinker(Thread):
 
         t = ExampleThinker(queue)
         t.start()
-        t.join()
-
+        t.join()  # Wait until work completes
 
     Attributes:
          logger (logging.Logger): Base logger for general log messages

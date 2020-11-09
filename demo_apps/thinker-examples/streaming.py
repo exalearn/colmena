@@ -1,4 +1,7 @@
-"""Perform GPR Active Learning where simulations are sent in batches"""
+"""Perform GPR Active Learning where Bayesian optimization is used to select a new
+calculation as soon as one calculation completes"""
+
+from colmena.thinker import BaseThinker, agent
 from colmena.method_server import ParslMethodServer
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
@@ -8,13 +11,11 @@ from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider
 from functools import partial, update_wrapper
 from parsl.config import Config
-from threading import Thread
 from datetime import datetime
 from time import sleep
 import numpy as np
 import argparse
 import logging
-import parsl
 import json
 import sys
 import os
@@ -54,7 +55,7 @@ def ackley(x: np.ndarray, a=20, b=0.2, c=2 * np.pi, mean_rt=0, std_rt=0.1) -> np
     return y[0]
 
 
-class Thinker(Thread):
+class Thinker(BaseThinker):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
     def __init__(self, queues: ClientQueues,  output_dir: str, dim: int = 2,
@@ -68,16 +69,16 @@ class Thinker(Thread):
             queues (ClientQueues): Queues for communicating with method server
             opt_delay (float): Minimum runtime for the optimizer algorithm
         """
-        super().__init__(daemon=True)
+        super().__init__(queues)
         self.n_guesses = n_guesses
         self.queues = queues
         self.batch_size = batch_size
         self.dim = dim
-        self.logger = logging.getLogger(self.__class__.__name__)
         self.output_path = os.path.join(output_dir, 'results.json')
         self.opt_delay = opt_delay
 
-    def run(self):
+    @agent
+    def operate(self):
         """Connects to the Redis queue with the results and pulls them"""
 
         # Make a random guesses to start

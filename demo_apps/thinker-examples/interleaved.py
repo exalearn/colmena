@@ -1,24 +1,23 @@
-"""Perform GPR Active Learning where simulations are sent in batches"""
+"""Perform GPR Active Learning where one threads continually re-prioritizes a list of
+simulations to run and a second thread sebmits """
 
 
+from colmena.thinker import BaseThinker, agent
 from colmena.method_server import ParslMethodServer
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
-from concurrent.futures.thread import ThreadPoolExecutor as PTPE
-from concurrent.futures import as_completed
 from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.providers import LocalProvider
 from functools import partial, update_wrapper
 from parsl.config import Config
-from threading import Thread, Lock, Event
+from threading import Lock, Event
 from datetime import datetime
 from typing import List, Tuple
 import numpy as np
 import argparse
 import logging
-import parsl
 import json
 import sys
 import os
@@ -90,7 +89,7 @@ def reprioritize_queue(database: List[Tuple[np.ndarray, float]],
     return np.argsort(-1 * ei)
 
 
-class Thinker(Thread):
+class Thinker(BaseThinker):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
     def __init__(self, queues: ClientQueues,  output_dir: str, dim: int = 2,
@@ -104,12 +103,11 @@ class Thinker(Thread):
             n_guesses (int): Number of guesses the Thinker can make
             queues (ClientQueues): Queues for communicating with method server
         """
-        super().__init__(daemon=True)
+        super().__init__(queues)
         self.n_guesses = n_guesses
         self.queues = queues
         self.batch_size = batch_size
         self.dim = dim
-        self.logger = logging.getLogger(self.__class__.__name__)
         self.output_path = os.path.join(output_dir, 'results.json')
         self.opt_delay = opt_delay
 
@@ -123,6 +121,7 @@ class Thinker(Thread):
         self.queue_lock = Lock()
         self.done = Event()
 
+    @agent
     def simulation_worker(self):
         """Dispatch tasks and update"""
         # Send out the initial tasks
@@ -153,6 +152,7 @@ class Thinker(Thread):
             # Mark that we have some data now
             self.has_data.set()
 
+    @agent
     def thinker_worker(self):
         """Reprioritize task list"""
 
@@ -197,27 +197,6 @@ class Thinker(Thread):
                         continue
                     self.task_queue.append(current_queue[i])
                 logging.info(f'New queue contains {len(self.task_queue)} tasks')
-
-    def run(self):
-        """Launches the two sub-threads, watches for either to die"""
-
-        # Make a task executor
-        with PTPE(max_workers=2) as tpe:
-            futures = [tpe.submit(self.simulation_worker), tpe.submit(self.thinker_worker)]
-
-            # Wait for either one of the threads to finish
-            for thr in as_completed(futures):
-                # Clear any blocks, if they are still set
-                self.done.set()
-                self.has_data.set()
-
-                # Check if we ended cleanly
-                exc = thr.exception()
-                if exc is None:
-                    logging.info(f'Thread {thr} completed without incident')
-                else:
-                    logging.info(f'Thread {thr} completed with an exception')
-                    raise exc
 
 
 if __name__ == '__main__':
