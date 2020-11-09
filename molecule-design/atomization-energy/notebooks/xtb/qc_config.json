@@ -1,9 +1,0 @@
-{
-  "program": "xtb",
-  "model": {
-    "method": "GFN2-xTB",
-    "keywords": {
-      "accuracy": 0.05
-    }
-  }
-}
