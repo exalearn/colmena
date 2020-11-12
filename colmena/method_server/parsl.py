@@ -40,7 +40,7 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     success = True
     try:
         output = func(*result.args, **result.kwargs)
-    except BaseException as e:
+    except Exception as e:
         output = None
         success = False
         if result.task_info is None:
