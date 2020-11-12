@@ -23,3 +23,6 @@ Consult our [Installation Guide](https://colmena.readthedocs.io/en/latest/instal
 
 We are gradually building ``demo_apps`` which illustrate different approaches to using the prototype.
 
+## Acknowledgements 
+
+This project was supported in part by the Exascale Computing Project (17-SC-20-SC) of the U.S. Department of Energy (DOE) and by DOE’s Advanced Scientific Research Office (ASCR) under contract DE-AC02-06CH11357.
