@@ -97,5 +97,7 @@ def test_error_handling(server_and_queue):
     queue.send_inputs(None)
     result = queue.get_result()
     assert result.args == (None,)
+    assert result.value is None
     assert not result.success
-    assert result.time_running is None
+    assert 'exception' in result.task_info
+    assert result.time_running is not None

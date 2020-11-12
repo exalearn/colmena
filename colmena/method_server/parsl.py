@@ -37,9 +37,22 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Execute the function
     start_time = perf_counter()
-    output = func(*result.args, **result.kwargs)
-    end_time = perf_counter()
+    success = True
+    try:
+        output = func(*result.args, **result.kwargs)
+    except BaseException as e:
+        output = None
+        success = False
+        if result.task_info is None:
+            result.task_info = {}
+        result.task_info['exception'] = str(e)
+    finally:
+        end_time = perf_counter()
+
+    # Store the results
     result.set_result(output, end_time - start_time)
+    if not success:
+        result.success = False
 
     # Re-pack the results
     result.time_serialize_results = result.serialize()
