@@ -1,4 +1,5 @@
 """Parsl method server and related utilities"""
+import os
 import logging
 from functools import partial
 from queue import Queue
@@ -122,6 +123,10 @@ class _ErrorHandler(Thread):
                     result_obj: Result = task.task_def['args'][2]
                     result_obj.success = False
                     queues.send_result(result_obj, topic=topic)
+
+                # Display run information
+                if len(done) > 0:
+                    logger.debug(f'Cleared {len(done)} futures from Parsl task queue')
 
                 # Loop through the incomplete tasks
                 futures = not_done
@@ -279,7 +284,7 @@ class ParslMethodServer(BaseMethodServer):
     def run(self) -> None:
         # Launch the Parsl workflow engine
         parsl.load(self.config)
-        logger.info("Launched Parsl DFK")
+        logger.info(f"Launched Parsl DFK. Process id: {os.getpid()}")
 
         # Create the error checker
         self.task_queue = Queue()

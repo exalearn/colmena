@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Event, local, Thread
 from traceback import TracebackException
 from typing import Optional, Callable, List
+import os
 
 import logging
 
@@ -168,7 +169,7 @@ class BaseThinker(Thread):
         Does not raise exceptions if a thread exits with an exception. Exception and traceback information
         are printed using logging at the ``WARNING`` level.
         """
-        self.logger.info(f"{self.__class__.__name__} started")
+        self.logger.info(f"{self.__class__.__name__} started. Process id: {os.getpid()}")
 
         threads = []
         functions = self.list_agents()
