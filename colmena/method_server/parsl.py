@@ -62,16 +62,14 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
 
 @python_app(executors=['_output_workers'])
-def output_result(queues: MethodServerQueues, topic: str, inputs: Result, result_obj):
+def output_result(queues: MethodServerQueues, topic: str, result_obj):
     """Submit the function result to the Redis queue
 
     Args:
         queues: Queues used to communicate with Redis
         topic: Topic to assign in output queue
-        inputs: [Not used by this function]
         result_obj: Result object containing the inputs, to be sent back with outputs
     """
-    assert inputs is not None  # Inputs are not used currently, are passed with the task for the error handler
     return queues.send_result(result_obj, topic=topic)
 
 
@@ -120,7 +118,8 @@ class _ErrorHandler(Thread):
                     # Pull out the result objects
                     queues: MethodServerQueues = task.task_def['args'][0]
                     topic: str = task.task_def['args'][1]
-                    result_obj: Result = task.task_def['args'][2]
+                    method_task = task.task_def['depends'][0]
+                    result_obj: Result = method_task.task_def['args'][1]
                     result_obj.success = False
                     queues.send_result(result_obj, topic=topic)
 
@@ -256,7 +255,7 @@ class ParslMethodServer(BaseMethodServer):
         #  Requires waiting on two streams: input_queue and the queues
 
         # Pass the future of that operation to the output queue
-        result_future = output_result(self.queues, topic, result.copy(), future)
+        result_future = output_result(self.queues, topic, future)
         logger.debug('Pushed task to Parsl')
 
         # Pass the task to the "error handler"
