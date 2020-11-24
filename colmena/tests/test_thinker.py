@@ -35,6 +35,6 @@ def test_run(queues, caplog):
 
     # Check the messages from the end
     assert 'ExampleThinker.function'.lower() == caplog.record_tuples[-5][0]
-    assert 'Launched all 1 functions' in caplog.messages[-3]
+    assert 'Launched all 1 functions' in caplog.messages[-4]
     assert 'Thread completed without' in caplog.messages[-2]
     assert 'ExampleThinker completed' in caplog.messages[-1]

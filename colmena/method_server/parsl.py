@@ -9,7 +9,7 @@ from time import sleep, perf_counter
 from typing import Optional, List, Callable, Tuple, Dict, Union, Set
 
 import parsl
-from parsl import python_app, HighThroughputExecutor
+from parsl import python_app, ThreadPoolExecutor
 from parsl.config import Config
 from parsl.app.python import PythonApp
 from parsl.dataflow.futures import AppFuture
@@ -193,7 +193,7 @@ class ParslMethodServer(BaseMethodServer):
 
         # Insert _output_workers to the thread count
         executors = config.executors.copy()
-        executors.append(HighThroughputExecutor(label='_output_workers', max_workers=num_output_workers))
+        executors.append(ThreadPoolExecutor(label='_output_workers', max_threads=num_output_workers))
         config.executors = executors
 
         # Get a list of default executors that _does not_ include the output workers
