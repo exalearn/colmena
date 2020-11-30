@@ -181,17 +181,13 @@ class BaseThinker(Thread):
 
             # Wait until any one completes, then set the "gen_done" event to
             #  signal all remaining threads to finish after completing their work
-            finished = next(as_completed(threads))
-            self.done.set()
-            exc = finished.exception()
-            if exc is None:
-                self.logger.info('Thread completed without problems')
-            else:
-                tb = TracebackException.from_exception(exc)
-                self.logger.warning(f'Thread failed: {exc}.\nTraceback: {"".join(tb.format())}')
-
-            # Cycle through the threads until all exit
-            for t in as_completed(threads):
-                t.result()
+            for finished in as_completed(threads):
+                self.done.set()
+                exc = finished.exception()
+                if exc is None:
+                    self.logger.info('Thread completed without problems')
+                else:
+                    tb = TracebackException.from_exception(exc)
+                    self.logger.warning(f'Thread failed: {exc}.\nTraceback: {"".join(tb.format())}')
 
         self.logger.info(f"{self.__class__.__name__} completed")
