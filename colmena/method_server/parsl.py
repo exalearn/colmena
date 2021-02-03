@@ -18,6 +18,7 @@ from parsl.dataflow.futures import AppFuture
 from colmena.method_server.base import BaseMethodServer
 from colmena.redis.queue import MethodServerQueues
 from colmena.models import Result
+from colmena.value_server import dereference
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +38,15 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     # Unpack the inputs
     result.time_deserialize_inputs = result.deserialize()
 
+    # WIP: value server
+    args = dereference(result.args)
+    kwargs = dereference(result.kwargs)
+
     # Execute the function
     start_time = perf_counter()
     success = True
     try:
-        output = func(*result.args, **result.kwargs)
+        output = func(*args, **kwargs)
     except Exception as e:
         output = None
         success = False
