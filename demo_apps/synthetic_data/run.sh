@@ -11,15 +11,22 @@ module load miniconda-3/latest
 conda activate colmena
 
 # Start the redis server
-port=59465
-#63${RANDOM::2}
-redis-server --port $port --protected-mode no &> redis.out &
-redis=$!
+PORT=59465
+redis-server --port $PORT --protected-mode no &> redis.out &
+REDIS=$!
 
-echo "Redis started on $HOSTNAME:$port"
+echo "Redis started on $HOSTNAME:$PORT"
 
-python synthetic.py --config $CONFIG --redis-host $HOSTNAME --redis-port $port
+python synthetic.py \
+	--redis-host $HOSTNAME \
+	--redis-port $PORT \
+	--task-input-size 100 \
+	--task-output-size 0 \
+	--task-interval 1 \
+	--task-count 100 \
+	--use-value-server \
+	#--config $CONFIG
 
 # Kill the redis server
-kill $redis
+kill $REDIS
 
