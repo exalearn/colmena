@@ -21,18 +21,18 @@ class ValueServerReference:
     Manages metadata about an object in the value server and acts as an
     indicator to Colmena that in input/output to a function is found in the
     value server. ValueServerReference objects are created by
-    `ValueServer.put()` and can be passed to `ValueServer.get()` or 
-    `dereference()` to get the value back. 
+    `ValueServer.put()` and can be passed to `ValueServer.get()` or
+    `dereference()` to get the value back.
 
-    Colmena will automatically parse inputs to a `target_function` for 
+    Colmena will automatically parse inputs to a `target_function` for
     `ValueServerReference` instances and use the references to get the true
     value that needs to be passed to the `target_function`. The dereferencing
     is performed in `run_and_record_timing()`, the wrapper for functions
     executed on workers.
     """
-    def __init__(self, 
-                 value: Any, 
-                 key: Optional[str] = None, 
+    def __init__(self,
+                 value: Any,
+                 key: Optional[str] = None,
                  serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE):
         """
         Args:
@@ -63,7 +63,7 @@ class ValueServer:
         value = self.redis_client.get(ref.key)
         return SerializationMethod.deserialize(ref.serialization_method, value)
 
-    def put(self, value: Any, 
+    def put(self, value: Any,
             key: str = None,
             serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
             ) -> ValueServerReference:
@@ -73,7 +73,7 @@ class ValueServer:
         return ref
 
 
-def init_value_server(hostname: Optional[str] = None, 
+def init_value_server(hostname: Optional[str] = None,
                       port: Optional[int] = None) -> None:
     """Attempt to establish a Redis client connection to the value server
 
@@ -99,8 +99,6 @@ def init_value_server(hostname: Optional[str] = None,
         else:
             # Note: for now we just assume if the env var is not set that is
             # because we are not using the value server
-            #raise ValueError('The value server hostname must be passed as '
-            #                 'an argument or set as an environment variable')
             return
 
     if port is None:
@@ -108,7 +106,7 @@ def init_value_server(hostname: Optional[str] = None,
             port = int(os.environ.get(VALUE_SERVER_PORT_ENV_VAR))
         else:
             return
-    
+
     _server = ValueServer(hostname, port)
 
 
@@ -139,12 +137,12 @@ def dereference(possible_references: Union[object, list, tuple, dict]) -> Any:
 
     if isinstance(possible_references, list):
         return [get_if_reference(obj) for obj in possible_references]
-    
+
     if isinstance(possible_references, tuple):
         return tuple([get_if_reference(obj) for obj in possible_references])
 
     if isinstance(possible_references, dict):
-        return {key: get_if_reference(value) 
+        return {key: get_if_reference(value)
                 for key, value in possible_references.items()}
 
     return get_if_reference(possible_references)
@@ -173,4 +171,3 @@ def put(value: Any,
         raise RuntimeError('Value server is not initialized')
 
     return _server.put(value, key, serialization_method)
-
