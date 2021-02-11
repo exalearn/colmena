@@ -87,6 +87,7 @@ class Result(BaseModel):
     time_running: float = Field(None, description="Runtime of the method, if available")
     time_serialize_inputs: float = Field(None, description="Time required to serialize inputs on client")
     time_deserialize_inputs: float = Field(None, description="Time required to deserialize inputs on worker")
+    time_dereference_inputs: float = Field(None, description="Time required to dereference inputs from value server")
     time_serialize_results: float = Field(None, description="Time required to serialize results on worker")
     time_deserialize_results: float = Field(None, description="Time required to deserialize results on client")
 

@@ -7,6 +7,7 @@ import time
 
 import numpy as np
 
+from datetime import datetime
 from typing import Any
 
 from parsl import HighThroughputExecutor
@@ -44,6 +45,8 @@ def get_args():
                         help='Workers to use if --local-host')
     parser.add_argument('--use-value-server', action='store_true', default=False,
                         help='Use the value server for sending data to worker')
+    parser.add_argument('--output-dir', type=str, default='runs',
+                        help='output dir')
 
     args = parser.parse_args()
 
@@ -64,7 +67,8 @@ def empty_array(size: int) -> np.ndarray:
 
 
 def target_function(data: np.ndarray, output_size: int) -> np.ndarray:
-    return empty_array(output_size)
+    import numpy as np
+    return np.empty(int(1000 * output_size / 4), dtype=np.float32)
 
 
 class Thinker(BaseThinker):
@@ -99,6 +103,7 @@ class Thinker(BaseThinker):
     def consumer(self):
         for _ in range(self.task_count):
             result = self.queues.get_result(topic='generate')
+            self.logger.info('Got result: {}'.format(str(result).replace('\n', ' ')))
             self.data_received += sys.getsizeof(result.value)
 
         self.logger.info(
@@ -122,15 +127,21 @@ class Thinker(BaseThinker):
 
 
 if __name__ == "__main__":
+    args = get_args()
+
+    out_dir = os.path.join(args.output_dir, 
+            datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S'))
+    os.makedirs(out_dir, exist_ok=True)
+
     # Set up the logging
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         level=logging.INFO,
-        handlers=[logging.FileHandler('runtime.log'),
+        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
                   logging.StreamHandler(sys.stdout)]
     )
 
-    args = get_args()
+    logging.info('Args: {}'.format(args))
 
     # Make the queues
     client_queues, server_queues = make_queue_pairs(
@@ -170,7 +181,7 @@ if __name__ == "__main__":
             ),
         ]
 
-    config = Config(executors=executors)
+    config = Config(executors=executors, run_dir=out_dir)
 
     doer = ParslMethodServer([target_function], server_queues, config)
 

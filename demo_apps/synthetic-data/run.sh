@@ -22,8 +22,9 @@ python synthetic.py \
 	--redis-port $PORT \
 	--task-input-size 100 \
 	--task-output-size 0 \
-	--task-interval 1 \
+	--task-interval 0.1 \
 	--task-count 100 \
+    --output-dir runs/value_vs_no_value_100x100MB_v2 \
 	--use-value-server \
 	#--config $CONFIG
 

@@ -5,7 +5,7 @@ from functools import partial
 from queue import Queue
 from threading import Thread
 from concurrent.futures import wait, Future
-from time import sleep, perf_counter
+from time import sleep, perf_counter, time
 from typing import Optional, List, Callable, Tuple, Dict, Union, Set
 from traceback import TracebackException
 
@@ -39,8 +39,10 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     result.time_deserialize_inputs = result.deserialize()
 
     # WIP: value server
+    start = time()
     args = dereference(result.args)
     kwargs = dereference(result.kwargs)
+    result.time_dereference_inputs = time() - start
 
     # Execute the function
     start_time = perf_counter()
