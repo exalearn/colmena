@@ -1,8 +1,12 @@
+from __future__ import annotations
+
+import copy
 import logging
 import os
 import redis
 
-from typing import Any, Optional, Union
+from typing import Any, Dict, Optional, Union
+from wrapt import ObjectProxy
 
 from colmena.models import SerializationMethod
 
@@ -12,28 +16,32 @@ logger = logging.getLogger(__name__)
 VALUE_SERVER_HOST_ENV_VAR = 'COLMENA_VALUE_SERVER_HOST'
 VALUE_SERVER_PORT_ENV_VAR = 'COLMENA_VALUE_SERVER_PORT'
 
-_server = None
+value_server = None
 
 
-class ValueServerReference:
-    """Reference to a value in the value server
+def _self_get_wrapped(self):
+    if self._self_wrapped_obj is None:
+        self._self_wrapped_obj = value_server.get(self)
+    return self._self_wrapped_obj
 
-    Manages metadata about an object in the value server and acts as an
-    indicator to Colmena that in input/output to a function is found in the
-    value server. ValueServerReference objects are created by
-    `ValueServer.put()` and can be passed to `ValueServer.get()` or
-    `dereference()` to get the value back.
 
-    Colmena will automatically parse inputs to a `target_function` for
-    `ValueServerReference` instances and use the references to get the true
-    value that needs to be passed to the `target_function`. The dereferencing
-    is performed in `run_and_record_timing()`, the wrapper for functions
-    executed on workers.
+#ObjectProxy.__wrapped__ = property(_self_get_wrapped)
+
+
+class ObjectDelegate(ObjectProxy):
+    """
+    
+    TODO(gpauloski):
+      - async_get() function that will asynchrously get the wrapped object
+        from the value store. We can let self._self_wrapped_obj be a future
+        in this case that _self_get_wrapped() can look for
     """
     def __init__(self,
-                 value: Any,
+                 obj: Any,
                  key: Optional[str] = None,
-                 serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE):
+                 serialization_method: Union[str, SerializationMethod] =
+                        SerializationMethod.PICKLE
+        ) -> None:
         """
         Args:
             value: value being stored in the value server
@@ -42,10 +50,58 @@ class ValueServerReference:
             serialization_method (str): serialization method used for
                 storing the value in the value server.
         """
-        # TODO(gpauloski): in the future we want a more robust way of getting
-        # a unique key for an object to use at its value server reference.
-        self.key = str(id(value)) if key is None else key
-        self.serialization_method = serialization_method
+        try:
+            # This will raise an exception because ObjectProxy.__init__()
+            # will attempt to set self.__wrapper__ to obj; however we
+            # have manually set __wrapper__ to _self_get_wrapped
+            super(ObjectDelegate, self).__init__(obj)
+        except AttributeError:
+            pass
+        self._self_wrapped_obj = obj
+        self._self_key = str(id(obj)) if key is None else key
+        self._self_serialization_method = serialization_method
+        self.__wrapped__ = property(_self_get_wrapped)
+
+        if not value_server.exists(self):
+            value_server.put(self)
+
+    def __copy__(self) -> ObjectDelegate:
+        return ObjectDelegate(
+            copy.copy(self.__wrapped__),
+            copy.copy(self._self_key),
+            copy.copy(self._self_serialization_method)
+        )
+
+    def __deepcopy__(self) -> ObjectDelegate:
+        return ObjectDelegate(
+            copy.deepcopy(self.__wrapped__),
+            copy.deepcopy(self._self_key),
+            copy.deepcopy(self._self_serialization_method)
+        )
+
+    #def __getstate__(self):
+    #    return (self._self_key, self._self_serialization_method)     
+
+    #def __setstate__(self, state) -> None:
+    #    self._self_key = state[0]
+    #    self._self_serialization_method = state[1]
+
+    def __reduce__(self):
+        return (
+            ObjectDelegate,
+            (None, self._self_key, self._self_serialization_method)
+        )
+
+    def __reduce_ex__(self, protocol):
+        return (
+            ObjectDelegate,
+            (None, self._self_key, self._self_serialization_method),
+        )
+
+    def reference(self) -> ObjectDelegate:
+        obj = self.__deepcopy__()
+        obj._self_wrapped_obj = None
+        return obj
 
 
 class ValueServer:
@@ -59,18 +115,38 @@ class ValueServer:
         self.redis_client = redis.StrictRedis(
             host=hostname, port=port, decode_responses=True)
 
-    def get(self, ref: ValueServerReference) -> Any:
-        value = self.redis_client.get(ref.key)
-        return SerializationMethod.deserialize(ref.serialization_method, value)
+    def exists(self, obj: ObjectDelegate) -> bool:
+        return self.redis_client.exists(obj._self_key)
 
-    def put(self, value: Any,
+    def get(self, obj: ObjectDelegate) -> Any:
+        value = self.redis_client.get(self.key(obj))
+        return SerializationMethod.deserialize(
+                self.serialization_method(obj), value)
+    
+    def key(self, obj: ObjectDelegate) -> str:
+        return obj._self_key
+
+    def put(self,
+            obj: ObjectDelegate,
             key: str = None,
-            serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
-            ) -> ValueServerReference:
-        ref = ValueServerReference(value, key, serialization_method)
-        value = SerializationMethod.serialize(ref.serialization_method, value)
-        self.redis_client.set(ref.key, value)
-        return ref
+            serialization_method: Optional[Union[str, SerializationMethod]] = None
+        ) -> None:
+
+        if key is None:
+            key = self.key(obj)
+        if serialization_method is None:
+            serialization_method = self.serialization_method(obj)
+
+        value = self.wrapped_obj(obj)
+        value = SerializationMethod.serialize(serialization_method, value)
+
+        self.redis_client.set(key, value)
+
+    def serialization_method(self, obj: ObjectDelegate) -> SerializationMethod:
+        return obj._self_serialization_method
+
+    def wrapped_obj(self, obj: ObjectDelegate) -> Any:
+        return obj._self_wrapped_obj
 
 
 def init_value_server(hostname: Optional[str] = None,
@@ -88,9 +164,9 @@ def init_value_server(hostname: Optional[str] = None,
         hostname (str): optional Redis server hostname for the value server
         port (int): optional Redis server port for the value server
     """
-    global _server
+    global value_server
 
-    if _server is not None:
+    if value_server is not None:
         return
 
     if hostname is None:
@@ -107,67 +183,5 @@ def init_value_server(hostname: Optional[str] = None,
         else:
             return
 
-    _server = ValueServer(hostname, port)
+    value_server = ValueServer(hostname, port)
 
-
-def dereference(possible_references: Union[object, list, tuple, dict]) -> Any:
-    """Dereference ValueServerReference objects
-
-    Scans all arguments for any ValueServerReference objects and retrieves
-    the corresponding values from the value server. If the value server
-    is not available, the arguments are returned as is.
-
-    Args:
-        possible_references (object, list, tuple, dict): possible object or
-            iterable of objects that may be ValueServerReference objects
-    Returns:
-        An object or iterable of objects in the same format as the arguments
-        with all ValueServerReference objects replaced with the corresponding
-        values from the value server
-    """
-    init_value_server()
-
-    if _server is None:
-        return possible_references
-
-    def get_if_reference(obj: Any) -> Any:
-        if isinstance(obj, ValueServerReference):
-            return _server.get(obj)
-        return obj
-
-    if isinstance(possible_references, list):
-        return [get_if_reference(obj) for obj in possible_references]
-
-    if isinstance(possible_references, tuple):
-        return tuple([get_if_reference(obj) for obj in possible_references])
-
-    if isinstance(possible_references, dict):
-        return {key: get_if_reference(value)
-                for key, value in possible_references.items()}
-
-    return get_if_reference(possible_references)
-
-
-def put(value: Any,
-        key: Optional[str] = None,
-        serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
-        ) -> ValueServerReference:
-    """Put an object in the value server
-
-    Args:
-        value: object to place in value server
-        key (str): optionally specify the key to use with this object
-        serialization_method (str): serialization method to use
-    Returns:
-        ValueServerReference: reference object that can be given to
-        `dereference()` to get the original value back
-    Raises:
-        RuntimeError if the value server is not (or unable to be) initialized
-    """
-
-    init_value_server()
-
-    if _server is None:
-        raise RuntimeError('Value server is not initialized')
-
-    return _server.put(value, key, serialization_method)
