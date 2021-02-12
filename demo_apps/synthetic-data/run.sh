@@ -24,9 +24,9 @@ python synthetic.py \
 	--task-output-size 0 \
 	--task-interval 1 \
 	--task-count 100 \
-    --output-dir runs/unique_data_async \
-	--use-value-server \
-    #--reuse-data \
+    --output-dir runs/reuse_data \
+    --reuse-data \
+	#--use-value-server \
 	#--config $CONFIG
 
 # Kill the redis server

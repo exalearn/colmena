@@ -71,7 +71,7 @@ def empty_array(size: int) -> np.ndarray:
 def target_function(data: np.ndarray, output_size: int) -> np.ndarray:
     import numpy as np
     # Check that ObjectProxy acts as the wrapped np object
-    assert isinstance(data, np.ndarray)
+    assert isinstance(data, np.ndarray), 'got type {}'.format(type(data))
     return np.empty(int(1000 * output_size / 4), dtype=np.float32)
 
 
@@ -126,10 +126,12 @@ class Thinker(BaseThinker):
                 input_data = empty_array(self.task_input_size)
             if self.use_value_server:
                 start = time.time()
-                input_data = value_server.to_proxy(input_data)
+                input_obj = value_server.to_proxy(input_data)
                 self.logger.info('to_proxy_time={}'.format(time.time() - start))
-            self.data_sent += sys.getsizeof(input_data)
-            self.queues.send_inputs(input_data, 
+            else:
+                input_obj = input_data
+            self.data_sent += sys.getsizeof(input_obj)
+            self.queues.send_inputs(input_obj,
                     self.task_output_size, method='target_function',
                     topic='generate')
             self.count += 1

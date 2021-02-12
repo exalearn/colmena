@@ -5,7 +5,7 @@ from functools import partial
 from queue import Queue
 from threading import Thread
 from concurrent.futures import wait, Future
-from time import sleep, perf_counter, time
+from time import sleep, perf_counter
 from typing import Optional, List, Callable, Tuple, Dict, Union, Set
 from traceback import TracebackException
 
@@ -15,9 +15,10 @@ from parsl.config import Config
 from parsl.app.python import PythonApp
 from parsl.dataflow.futures import AppFuture
 
+from colmena.models import Result
 from colmena.method_server.base import BaseMethodServer
 from colmena.redis.queue import MethodServerQueues
-from colmena.models import Result
+#from colmena.value_server import async_get_args
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,10 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Unpack the inputs
     result.time_deserialize_inputs = result.deserialize()
+
+    # TODO(gpauloski): asynchronously retrieve objects in the value store
+    # async_get_args(result.args)
+    # async_get_args(result.kwargs)
 
     # Execute the function
     start_time = perf_counter()

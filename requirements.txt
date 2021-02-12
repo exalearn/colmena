@@ -1,3 +1,4 @@
 parsl>=1
 pydantic==1.*
 redis==3.4.*
+lazy-object-proxy

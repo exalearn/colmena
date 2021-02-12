@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import copy
 import logging
 import os
 import redis
 
-from typing import Any, Dict, Optional, Union
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Optional, Union
 from lazy_object_proxy import Proxy
 
 from colmena.models import SerializationMethod
@@ -17,15 +17,16 @@ VALUE_SERVER_HOST_ENV_VAR = 'COLMENA_VALUE_SERVER_HOST'
 VALUE_SERVER_PORT_ENV_VAR = 'COLMENA_VALUE_SERVER_PORT'
 
 value_server = None
+default_pool = ThreadPoolExecutor()
 
+count = 0
 
 class Factory():
     """Factory class for retrieving objects from the value server"""
     def __init__(self,
                  key: str,
-                 serialization_method: Union[str, SerializationMethod] = 
-                    SerializationMethod.PICKLE
-        ):
+                 serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
+    ) -> None:
         """
         Args:
             key (str): key used to retrive object from value server
@@ -34,18 +35,29 @@ class Factory():
         """
         self.key = key
         self.serialization_method = serialization_method
+        self.async_get_future = None
 
     def __call__(self):
         """Retrive object from value server
-        
-        Note: 
+        Note:
             `__call__` is generally only called once by the ObjectProxy
             unless ObjectProxy.reset_proxy() is called.
         """
+        if value_server is None:
+            init_value_server()
+
+        if self.async_get_future is not None:
+            return self.async_get_future.result()
+
         return value_server.get(self.key)
 
     def async_get(self):
-        pass
+        """Asynchrously get the object for the next call to `__call__`"""
+        if value_server is None:
+            init_value_server()
+
+        self.async_get_future = default_pool.submit(
+                value_server.get, self.key)
 
 
 class ObjectProxy(Proxy):
@@ -74,11 +86,10 @@ class ObjectProxy(Proxy):
         and not the object itself to reduce size of the pickle.
         """
         return ObjectProxy, (self.__factory__,)
-    
+
     def async_resolve_proxy(self) -> None:
-        raise NotImplementedError()
-        #self.__factory__.async_get()
-    
+        self.__factory__.async_get()
+
     def reset_proxy(self) -> None:
         """Reset wrapped object so that the factory is called on next access"""
         if hasattr(self, '__target__'):
@@ -87,23 +98,47 @@ class ObjectProxy(Proxy):
 
 def to_proxy(obj: Any,
              key=None,
-             serialization_method: Union[str, SerializationMethod] =
-                SerializationMethod.PICKLE
-    ):
+             serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
+) -> None:
     """Put object in value server and return proxy object
 
     Args:
         obj (object)
         key (str, optional): key to use for value server
         serialization_method (SerializationMethod): serialization method
-    
+
     Returns:
         ObjectProxy
     """
     if key is None:
         key = str(id(obj))
-    value_server.put(obj, key, serialization_method)
+    if not value_server.exists(key):
+        value_server.put(obj, key, serialization_method)
     return ObjectProxy(Factory(key, serialization_method))
+
+
+def async_get_args(args: Union[object, list, tuple, dict]) -> None:
+    """Dereference ValueServerReference objects
+    Scans all arguments for any ValueServerReference objects and retrieves
+    the corresponding values from the value server. If the value server
+    is not available, the arguments are returned as is.
+    Args:
+        possible_references (object, list, tuple, dict): possible object or
+            iterable of objects that may be ValueServerReference objects
+    Returns:
+        An object or iterable of objects in the same format as the arguments
+        with all ValueServerReference objects replaced with the corresponding
+        values from the value server
+    """
+    def async_get_if_proxy(obj: Any) -> Any:
+        if isinstance(obj, ObjectProxy):
+            obj.async_resolve_proxy()
+
+    if isinstance(args, list) or isinstance(args, tuple):
+        map(async_get_if_proxy, args)
+
+    if isinstance(args, dict):
+        map(async_get_if_proxy, args.values())
 
 
 class ValueServer:
@@ -130,9 +165,8 @@ class ValueServer:
 
     def get(self,
             key: str,
-            serialization_method: Union[str, SerializationMethod] =
-                SerializationMethod.PICKLE
-        ) -> Any:
+            serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
+    ) -> Any:
         """Get object by key from value server
 
         Args:
@@ -149,9 +183,8 @@ class ValueServer:
     def put(self,
             obj: Any,
             key: str,
-            serialization_method: Union[str, SerializationMethod] =
-                SerializationMethod.PICKLE
-        ) -> None:
+            serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
+    ) -> None:
         """Put object in value server
 
         Args:
@@ -199,4 +232,3 @@ def init_value_server(hostname: Optional[str] = None,
             return
 
     value_server = ValueServer(hostname, port)
-
