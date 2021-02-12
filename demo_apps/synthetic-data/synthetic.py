@@ -45,6 +45,8 @@ def get_args():
                         help='Workers to use if --local-host')
     parser.add_argument('--use-value-server', action='store_true', default=False,
                         help='Use the value server for sending data to worker')
+    parser.add_argument('--reuse-data', action='store_true', default=False,
+                        help='Send the same input to each task')
     parser.add_argument('--output-dir', type=str, default='runs',
                         help='output dir')
 
@@ -68,6 +70,8 @@ def empty_array(size: int) -> np.ndarray:
 
 def target_function(data: np.ndarray, output_size: int) -> np.ndarray:
     import numpy as np
+    # Check that ObjectProxy acts as the wrapped np object
+    assert isinstance(data, np.ndarray)
     return np.empty(int(1000 * output_size / 4), dtype=np.float32)
 
 
@@ -80,6 +84,7 @@ class Thinker(BaseThinker):
                  task_count: int,
                  task_interval: float,
                  use_value_server: bool,
+                 reuse_data: bool,
                  ):
         super().__init__(queue)
         self.task_input_size = task_input_size
@@ -87,6 +92,7 @@ class Thinker(BaseThinker):
         self.task_count = task_count
         self.task_interval = task_interval
         self.use_value_server = use_value_server
+        self.reuse_data = reuse_data
         self.count = 0
         self.data_sent = 0
         self.data_received = 0
@@ -113,10 +119,15 @@ class Thinker(BaseThinker):
 
     @agent
     def producer(self):
-        while not self.done.is_set():
+        if self.reuse_data:
             input_data = empty_array(self.task_input_size)
+        while not self.done.is_set():
+            if not self.reuse_data:
+                input_data = empty_array(self.task_input_size)
             if self.use_value_server:
+                start = time.time()
                 input_data = value_server.to_proxy(input_data)
+                self.logger.info('to_proxy_time={}'.format(time.time() - start))
             self.data_sent += sys.getsizeof(input_data)
             self.queues.send_inputs(input_data, 
                     self.task_output_size, method='target_function',
@@ -193,6 +204,7 @@ if __name__ == "__main__":
         task_count=args.task_count,
         task_interval=args.task_interval,
         use_value_server=args.use_value_server,
+        reuse_data=args.reuse_data,
     )
 
     logging.info('Created the method server and task generator')
