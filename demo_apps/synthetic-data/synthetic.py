@@ -115,11 +115,12 @@ class Thinker(BaseThinker):
     def producer(self):
         while not self.done.is_set():
             input_data = empty_array(self.task_input_size)
-            self.data_sent += sys.getsizeof(input_data)
             if self.use_value_server:
-                input_data = value_server.put(input_data)
-            self.queues.send_inputs(input_data, self.task_output_size,
-                    method='target_function', topic='generate')
+                input_data = value_server.to_proxy(input_data)
+            self.data_sent += sys.getsizeof(input_data)
+            self.queues.send_inputs(input_data, 
+                    self.task_output_size, method='target_function',
+                    topic='generate')
             self.count += 1
             if self.count >= self.task_count:
                 break

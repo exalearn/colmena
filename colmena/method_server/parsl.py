@@ -41,7 +41,7 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     start_time = perf_counter()
     success = True
     try:
-        output = func(*args, **kwargs)
+        output = func(*result.args, **result.kwargs)
     except Exception as e:
         output = None
         success = False

@@ -6,7 +6,7 @@ import os
 import redis
 
 from typing import Any, Dict, Optional, Union
-from wrapt import ObjectProxy
+from lazy_object_proxy import Proxy
 
 from colmena.models import SerializationMethod
 
@@ -19,89 +19,91 @@ VALUE_SERVER_PORT_ENV_VAR = 'COLMENA_VALUE_SERVER_PORT'
 value_server = None
 
 
-def _self_get_wrapped(self):
-    if self._self_wrapped_obj is None:
-        self._self_wrapped_obj = value_server.get(self)
-    return self._self_wrapped_obj
-
-
-#ObjectProxy.__wrapped__ = property(_self_get_wrapped)
-
-
-class ObjectDelegate(ObjectProxy):
-    """
-    
-    TODO(gpauloski):
-      - async_get() function that will asynchrously get the wrapped object
-        from the value store. We can let self._self_wrapped_obj be a future
-        in this case that _self_get_wrapped() can look for
-    """
+class Factory():
+    """Factory class for retrieving objects from the value server"""
     def __init__(self,
-                 obj: Any,
-                 key: Optional[str] = None,
-                 serialization_method: Union[str, SerializationMethod] =
-                        SerializationMethod.PICKLE
-        ) -> None:
+                 key: str,
+                 serialization_method: Union[str, SerializationMethod] = 
+                    SerializationMethod.PICKLE
+        ):
         """
         Args:
-            value: value being stored in the value server
-            key (str): optional key for the value. If the key is not specified
-                one will be generated.
-            serialization_method (str): serialization method used for
-                storing the value in the value server.
+            key (str): key used to retrive object from value server
+            serialization_method (SerializationMethod): serialization method
+                used to store object in value server
         """
-        try:
-            # This will raise an exception because ObjectProxy.__init__()
-            # will attempt to set self.__wrapper__ to obj; however we
-            # have manually set __wrapper__ to _self_get_wrapped
-            super(ObjectDelegate, self).__init__(obj)
-        except AttributeError:
-            pass
-        self._self_wrapped_obj = obj
-        self._self_key = str(id(obj)) if key is None else key
-        self._self_serialization_method = serialization_method
-        self.__wrapped__ = property(_self_get_wrapped)
+        self.key = key
+        self.serialization_method = serialization_method
 
-        if not value_server.exists(self):
-            value_server.put(self)
+    def __call__(self):
+        """Retrive object from value server
+        
+        Note: 
+            `__call__` is generally only called once by the ObjectProxy
+            unless ObjectProxy.reset_proxy() is called.
+        """
+        return value_server.get(self.key)
 
-    def __copy__(self) -> ObjectDelegate:
-        return ObjectDelegate(
-            copy.copy(self.__wrapped__),
-            copy.copy(self._self_key),
-            copy.copy(self._self_serialization_method)
-        )
+    def async_get(self):
+        pass
 
-    def __deepcopy__(self) -> ObjectDelegate:
-        return ObjectDelegate(
-            copy.deepcopy(self.__wrapped__),
-            copy.deepcopy(self._self_key),
-            copy.deepcopy(self._self_serialization_method)
-        )
 
-    #def __getstate__(self):
-    #    return (self._self_key, self._self_serialization_method)     
+class ObjectProxy(Proxy):
+    """Lazy proxy object wrapping a factory function
 
-    #def __setstate__(self, state) -> None:
-    #    self._self_key = state[0]
-    #    self._self_serialization_method = state[1]
+    An ObjectProxy transparently wraps any arbitrary object via an object
+    `Factory`. The factory is callable and returns the true object; however,
+    the factory is not called until the proxy is accessed in some way.
+    """
+    def __init__(self, factory: Factory) -> None:
+        """
+        Args:
+            factory (Factor): factory class that when called will return
+                the true object being wrapped
+        """
+        super(ObjectProxy, self).__init__(factory)
 
     def __reduce__(self):
-        return (
-            ObjectDelegate,
-            (None, self._self_key, self._self_serialization_method)
-        )
+        """See `__reduce_ex__`"""
+        return ObjectProxy, (self.__factory__,)
 
     def __reduce_ex__(self, protocol):
-        return (
-            ObjectDelegate,
-            (None, self._self_key, self._self_serialization_method),
-        )
+        """Helper method for pickling
 
-    def reference(self) -> ObjectDelegate:
-        obj = self.__deepcopy__()
-        obj._self_wrapped_obj = None
-        return obj
+        Override `Proxy.__reduce_ex__` so that we only pickle the Factory
+        and not the object itself to reduce size of the pickle.
+        """
+        return ObjectProxy, (self.__factory__,)
+    
+    def async_resolve_proxy(self) -> None:
+        raise NotImplementedError()
+        #self.__factory__.async_get()
+    
+    def reset_proxy(self) -> None:
+        """Reset wrapped object so that the factory is called on next access"""
+        if hasattr(self, '__target__'):
+            object.__delattr__(self, '__target__')
+
+
+def to_proxy(obj: Any,
+             key=None,
+             serialization_method: Union[str, SerializationMethod] =
+                SerializationMethod.PICKLE
+    ):
+    """Put object in value server and return proxy object
+
+    Args:
+        obj (object)
+        key (str, optional): key to use for value server
+        serialization_method (SerializationMethod): serialization method
+    
+    Returns:
+        ObjectProxy
+    """
+    if key is None:
+        key = str(id(obj))
+    value_server.put(obj, key, serialization_method)
+    return ObjectProxy(Factory(key, serialization_method))
 
 
 class ValueServer:
@@ -115,38 +117,51 @@ class ValueServer:
         self.redis_client = redis.StrictRedis(
             host=hostname, port=port, decode_responses=True)
 
-    def exists(self, obj: ObjectDelegate) -> bool:
-        return self.redis_client.exists(obj._self_key)
+    def exists(self, key: str) -> bool:
+        """Check if key exists
 
-    def get(self, obj: ObjectDelegate) -> Any:
-        value = self.redis_client.get(self.key(obj))
-        return SerializationMethod.deserialize(
-                self.serialization_method(obj), value)
-    
-    def key(self, obj: ObjectDelegate) -> str:
-        return obj._self_key
+        Args:
+            key (str)
+
+        Returns:
+            bool
+        """
+        return self.redis_client.exists(key)
+
+    def get(self,
+            key: str,
+            serialization_method: Union[str, SerializationMethod] =
+                SerializationMethod.PICKLE
+        ) -> Any:
+        """Get object by key from value server
+
+        Args:
+            key (str)
+            serialization_method (SerializationMethod): serialization method
+                to use for deserializing object
+
+        Returns:
+            deserialized object corresponding to key
+        """
+        value = self.redis_client.get(key)
+        return SerializationMethod.deserialize(serialization_method, value)
 
     def put(self,
-            obj: ObjectDelegate,
-            key: str = None,
-            serialization_method: Optional[Union[str, SerializationMethod]] = None
+            obj: Any,
+            key: str,
+            serialization_method: Union[str, SerializationMethod] =
+                SerializationMethod.PICKLE
         ) -> None:
+        """Put object in value server
 
-        if key is None:
-            key = self.key(obj)
-        if serialization_method is None:
-            serialization_method = self.serialization_method(obj)
-
-        value = self.wrapped_obj(obj)
-        value = SerializationMethod.serialize(serialization_method, value)
-
+        Args:
+            obj (object)
+            key (str)
+            serialization_method (SerializationMethod): serialization method
+                to use for serializing object before putting in value server
+        """
+        value = SerializationMethod.serialize(serialization_method, obj)
         self.redis_client.set(key, value)
-
-    def serialization_method(self, obj: ObjectDelegate) -> SerializationMethod:
-        return obj._self_serialization_method
-
-    def wrapped_obj(self, obj: ObjectDelegate) -> Any:
-        return obj._self_wrapped_obj
 
 
 def init_value_server(hostname: Optional[str] = None,
