@@ -4,10 +4,9 @@ import logging
 import os
 import redis
 
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional, Union
-from lazy_object_proxy import Proxy
 
+from colmena import value_server
 from colmena.models import SerializationMethod
 
 
@@ -15,130 +14,6 @@ logger = logging.getLogger(__name__)
 
 VALUE_SERVER_HOST_ENV_VAR = 'COLMENA_VALUE_SERVER_HOST'
 VALUE_SERVER_PORT_ENV_VAR = 'COLMENA_VALUE_SERVER_PORT'
-
-value_server = None
-default_pool = ThreadPoolExecutor()
-
-count = 0
-
-class Factory():
-    """Factory class for retrieving objects from the value server"""
-    def __init__(self,
-                 key: str,
-                 serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
-    ) -> None:
-        """
-        Args:
-            key (str): key used to retrive object from value server
-            serialization_method (SerializationMethod): serialization method
-                used to store object in value server
-        """
-        self.key = key
-        self.serialization_method = serialization_method
-        self.async_get_future = None
-
-    def __call__(self):
-        """Retrive object from value server
-        Note:
-            `__call__` is generally only called once by the ObjectProxy
-            unless ObjectProxy.reset_proxy() is called.
-        """
-        if value_server is None:
-            init_value_server()
-
-        if self.async_get_future is not None:
-            return self.async_get_future.result()
-
-        return value_server.get(self.key)
-
-    def async_get(self):
-        """Asynchrously get the object for the next call to `__call__`"""
-        if value_server is None:
-            init_value_server()
-
-        self.async_get_future = default_pool.submit(
-                value_server.get, self.key)
-
-
-class ObjectProxy(Proxy):
-    """Lazy proxy object wrapping a factory function
-
-    An ObjectProxy transparently wraps any arbitrary object via an object
-    `Factory`. The factory is callable and returns the true object; however,
-    the factory is not called until the proxy is accessed in some way.
-    """
-    def __init__(self, factory: Factory) -> None:
-        """
-        Args:
-            factory (Factor): factory class that when called will return
-                the true object being wrapped
-        """
-        super(ObjectProxy, self).__init__(factory)
-
-    def __reduce__(self):
-        """See `__reduce_ex__`"""
-        return ObjectProxy, (self.__factory__,)
-
-    def __reduce_ex__(self, protocol):
-        """Helper method for pickling
-
-        Override `Proxy.__reduce_ex__` so that we only pickle the Factory
-        and not the object itself to reduce size of the pickle.
-        """
-        return ObjectProxy, (self.__factory__,)
-
-    def async_resolve_proxy(self) -> None:
-        self.__factory__.async_get()
-
-    def reset_proxy(self) -> None:
-        """Reset wrapped object so that the factory is called on next access"""
-        if hasattr(self, '__target__'):
-            object.__delattr__(self, '__target__')
-
-
-def to_proxy(obj: Any,
-             key=None,
-             serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
-) -> None:
-    """Put object in value server and return proxy object
-
-    Args:
-        obj (object)
-        key (str, optional): key to use for value server
-        serialization_method (SerializationMethod): serialization method
-
-    Returns:
-        ObjectProxy
-    """
-    if key is None:
-        key = str(id(obj))
-    if not value_server.exists(key):
-        value_server.put(obj, key, serialization_method)
-    return ObjectProxy(Factory(key, serialization_method))
-
-
-def async_get_args(args: Union[object, list, tuple, dict]) -> None:
-    """Dereference ValueServerReference objects
-    Scans all arguments for any ValueServerReference objects and retrieves
-    the corresponding values from the value server. If the value server
-    is not available, the arguments are returned as is.
-    Args:
-        possible_references (object, list, tuple, dict): possible object or
-            iterable of objects that may be ValueServerReference objects
-    Returns:
-        An object or iterable of objects in the same format as the arguments
-        with all ValueServerReference objects replaced with the corresponding
-        values from the value server
-    """
-    def async_get_if_proxy(obj: Any) -> Any:
-        if isinstance(obj, ObjectProxy):
-            obj.async_resolve_proxy()
-
-    if isinstance(args, list) or isinstance(args, tuple):
-        map(async_get_if_proxy, args)
-
-    if isinstance(args, dict):
-        map(async_get_if_proxy, args.values())
 
 
 class ValueServer:
@@ -166,7 +41,7 @@ class ValueServer:
     def get(self,
             key: str,
             serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
-    ) -> Any:
+    ) -> Optional[object]:
         """Get object by key from value server
 
         Args:
@@ -175,21 +50,24 @@ class ValueServer:
                 to use for deserializing object
 
         Returns:
-            deserialized object corresponding to key
+            deserialized object corresponding to key or None if key does not
+            exist
         """
         value = self.redis_client.get(key)
-        return SerializationMethod.deserialize(serialization_method, value)
+        if value is not None:
+            return SerializationMethod.deserialize(serialization_method, value)
+        return None
 
     def put(self,
-            obj: Any,
             key: str,
+            obj: Any,
             serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
     ) -> None:
         """Put object in value server
 
         Args:
-            obj (object)
             key (str)
+            obj (object)
             serialization_method (SerializationMethod): serialization method
                 to use for serializing object before putting in value server
         """
@@ -201,7 +79,7 @@ def init_value_server(hostname: Optional[str] = None,
                       port: Optional[int] = None) -> None:
     """Attempt to establish a Redis client connection to the value server
 
-    Attempt to initialize the global variable `_server` to a `ValueServer`
+    Attempt to initialize the global variable `server` to a `ValueServer`
     instance using the Redis server hostname and port that are provided as
     arguments or via the environment variables defined by
     `VALUE_SERVER_HOST_ENV_VAR` and `VALUE_SERVER_PORT_ENV_VAR`. If the hostname
@@ -212,23 +90,25 @@ def init_value_server(hostname: Optional[str] = None,
         hostname (str): optional Redis server hostname for the value server
         port (int): optional Redis server port for the value server
     """
-    global value_server
+    #global value_server.server
 
-    if value_server is not None:
+    if value_server.server is not None:
         return
 
     if hostname is None:
         if VALUE_SERVER_HOST_ENV_VAR in os.environ:
             hostname = os.environ.get(VALUE_SERVER_HOST_ENV_VAR)
         else:
-            # Note: for now we just assume if the env var is not set that is
-            # because we are not using the value server
-            return
+            raise ValueError('hostname was not passed to init_value_server ',
+                    'and the {} environment variable is not set'.format(
+                    VALUE_SERVER_HOST_ENV_VAR))
 
     if port is None:
         if VALUE_SERVER_PORT_ENV_VAR in os.environ:
             port = int(os.environ.get(VALUE_SERVER_PORT_ENV_VAR))
         else:
-            return
+            raise ValueError('port was not passed to init_value_server ',
+                    'and the {} environment variable is not set'.format(
+                    VALUE_SERVER_PORT_ENV_VAR))
 
-    value_server = ValueServer(hostname, port)
+    value_server.server = ValueServer(hostname, port)
