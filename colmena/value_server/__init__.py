@@ -5,7 +5,6 @@ from colmena.value_server.proxy import to_proxy
 from colmena.value_server.proxy import ObjectProxy
 
 from colmena.value_server.server import init_value_server
-#from colmena.value_server.server import server
 from colmena.value_server.server import VALUE_SERVER_HOST_ENV_VAR
 from colmena.value_server.server import VALUE_SERVER_PORT_ENV_VAR
 

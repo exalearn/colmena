@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from lazy_object_proxy import Proxy
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 import colmena.value_server as value_server
 from colmena.models import SerializationMethod
@@ -101,6 +101,7 @@ def to_proxy(obj: Any,
     if not value_server.server.exists(key):
         value_server.server.put(key, obj, serialization_method)
     return ObjectProxy(Factory(key, serialization_method))
+
 
 def async_get_args(args: Union[object, list, tuple, dict]) -> None:
     """Dereference ValueServerReference objects

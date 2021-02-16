@@ -90,8 +90,6 @@ def init_value_server(hostname: Optional[str] = None,
         hostname (str): optional Redis server hostname for the value server
         port (int): optional Redis server port for the value server
     """
-    #global value_server.server
-
     if value_server.server is not None:
         return
 
@@ -100,15 +98,15 @@ def init_value_server(hostname: Optional[str] = None,
             hostname = os.environ.get(VALUE_SERVER_HOST_ENV_VAR)
         else:
             raise ValueError('hostname was not passed to init_value_server ',
-                    'and the {} environment variable is not set'.format(
-                    VALUE_SERVER_HOST_ENV_VAR))
+                             'and the {} environment variable is not '
+                             'set'.format(VALUE_SERVER_HOST_ENV_VAR))
 
     if port is None:
         if VALUE_SERVER_PORT_ENV_VAR in os.environ:
             port = int(os.environ.get(VALUE_SERVER_PORT_ENV_VAR))
         else:
             raise ValueError('port was not passed to init_value_server ',
-                    'and the {} environment variable is not set'.format(
-                    VALUE_SERVER_PORT_ENV_VAR))
+                             'and the {} environment variable is not '
+                             'set'.format(VALUE_SERVER_PORT_ENV_VAR))
 
     value_server.server = ValueServer(hostname, port)

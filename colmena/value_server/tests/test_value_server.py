@@ -2,7 +2,7 @@
 import numpy as np
 import os
 
-from pytest import fixture, raises, mark
+from pytest import raises, mark
 
 from colmena import value_server
 from colmena.value_server import init_value_server
@@ -13,7 +13,8 @@ from colmena.value_server import VALUE_SERVER_PORT_ENV_VAR
 
 
 class DisablePyTestCollectionMixin(object):
-      __test__ = False
+    __test__ = False
+
 
 class TestClass(DisablePyTestCollectionMixin):
     def __init__(self, x=1) -> None:
