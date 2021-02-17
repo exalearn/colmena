@@ -76,6 +76,10 @@ class ValueServer:
         """
         value = SerializationMethod.serialize(serialization_method, obj)
         self.redis_client.set(key, value)
+        # TODO(gpauloski): this clears whole LRU cache but really we just
+        # want to invalidate the one entry. This also does not work
+        # across workers
+        self.get.cache_clear()
 
 
 def init_value_server(hostname: Optional[str] = None,
