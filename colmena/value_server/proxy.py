@@ -36,11 +36,13 @@ class Factory():
             value_server.init_value_server()
 
         if self.async_get_future is not None:
-            return self.async_get_future.result()
+            result = self.async_get_future.result()
+            self.async_get_future = None
+            return result
 
         return value_server.server.get(self.key)
 
-    def async_get(self):
+    def async_resolve(self):
         """Asynchrously get the object for the next call to `__call__`"""
         if value_server.server is None:
             value_server.init_value_server()
@@ -75,8 +77,8 @@ class ObjectProxy(Proxy):
         """
         return ObjectProxy, (self.__factory__,)
 
-    def async_resolve_proxy(self) -> None:
-        self.__factory__.async_get()
+    def async_resolve(self) -> None:
+        self.__factory__.async_resolve()
 
     def reset_proxy(self) -> None:
         """Reset wrapped object so that the factory is called on next access"""
@@ -103,25 +105,27 @@ def to_proxy(obj: Any,
     return ObjectProxy(Factory(key, serialization_method))
 
 
-def async_get_args(args: Union[object, list, tuple, dict]) -> None:
-    """Dereference ValueServerReference objects
-    Scans all arguments for any ValueServerReference objects and retrieves
-    the corresponding values from the value server. If the value server
-    is not available, the arguments are returned as is.
+def async_resolve_proxies(args: Union[object, list, tuple, dict]) -> None:
+    """Call async get on Proxy Objects
+
+    Scans all arguments for any ObjectProxy instances and calls
+    ObjectProxy.async_resolve_proxy() on it. This is useful if you have one
+    or more proxies that you know will be needed soon so you can start
+    asynchronously getting the values.
+
     Args:
-        possible_references (object, list, tuple, dict): possible object or
-            iterable of objects that may be ValueServerReference objects
-    Returns:
-        An object or iterable of objects in the same format as the arguments
-        with all ValueServerReference objects replaced with the corresponding
-        values from the value server
+        args (object, list, tuple, dict): possible object or
+            iterable of objects that may be ObjectProxy instances
     """
-    def async_get_if_proxy(obj: Any) -> Any:
+    def async_resolve_if_proxy(obj: Any) -> Any:
         if isinstance(obj, ObjectProxy):
-            obj.async_resolve_proxy()
+            obj.async_resolve()
 
     if isinstance(args, list) or isinstance(args, tuple):
-        map(async_get_if_proxy, args)
-
-    if isinstance(args, dict):
-        map(async_get_if_proxy, args.values())
+        for x in args:
+            async_resolve_if_proxy(x)
+    elif isinstance(args, dict):
+        for x in args:
+            async_resolve_if_proxy(args[x])
+    else:
+        async_resolve_if_proxy(args)

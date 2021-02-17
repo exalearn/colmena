@@ -1,6 +1,6 @@
 """Implementation of the value server"""
 
-from colmena.value_server.proxy import async_get_args
+from colmena.value_server.proxy import async_resolve_proxies
 from colmena.value_server.proxy import to_proxy
 from colmena.value_server.proxy import ObjectProxy
 
@@ -12,7 +12,7 @@ global server
 server = None
 
 __all__ = [
-    'async_get_args',
+    'async_resolve_proxies',
     'to_proxy',
     'ObjectProxy',
     'init_value_server',

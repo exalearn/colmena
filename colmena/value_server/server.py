@@ -4,6 +4,7 @@ import logging
 import os
 import redis
 
+from functools import lru_cache
 from typing import Any, Optional, Union
 
 from colmena import value_server
@@ -12,6 +13,7 @@ from colmena.models import SerializationMethod
 
 logger = logging.getLogger(__name__)
 
+LRU_CACHE_SIZE = 16
 VALUE_SERVER_HOST_ENV_VAR = 'COLMENA_VALUE_SERVER_HOST'
 VALUE_SERVER_PORT_ENV_VAR = 'COLMENA_VALUE_SERVER_PORT'
 
@@ -38,6 +40,7 @@ class ValueServer:
         """
         return self.redis_client.exists(key)
 
+    @lru_cache(maxsize=LRU_CACHE_SIZE)
     def get(self,
             key: str,
             serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE

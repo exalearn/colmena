@@ -20,14 +20,15 @@ echo "Redis started on $HOSTNAME:$PORT"
 python synthetic.py \
 	--redis-host $HOSTNAME \
 	--redis-port $PORT \
-	--task-input-size 10 \
+	--task-input-size 50 \
 	--task-output-size 0 \
-	--task-interval 1 \
-	--task-count 100 \
-    --output-dir runs/reuse_data \
+	--task-interval 15 \
+	--task-count 50 \
+    --output-dir runs/test \
     --reuse-data \
-	#--use-value-server \
+	--use-value-server \
 	#--config $CONFIG
+    #--output-dir runs/full_test_unique_30s_50x50 \
 
 # Kill the redis server
 kill $REDIS

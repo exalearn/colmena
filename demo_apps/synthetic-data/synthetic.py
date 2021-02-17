@@ -70,8 +70,11 @@ def empty_array(size: int) -> np.ndarray:
 
 def target_function(data: np.ndarray, output_size: int) -> np.ndarray:
     import numpy as np
+    import time
+    time.sleep(0.005)  # simulate more imports/setup
     # Check that ObjectProxy acts as the wrapped np object
     assert isinstance(data, np.ndarray), 'got type {}'.format(type(data))
+    time.sleep(0.005)  # simulate more computation
     return np.empty(int(1000 * output_size / 4), dtype=np.float32)
 
 

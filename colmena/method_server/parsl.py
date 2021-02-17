@@ -18,7 +18,7 @@ from parsl.dataflow.futures import AppFuture
 from colmena.models import Result
 from colmena.method_server.base import BaseMethodServer
 from colmena.redis.queue import MethodServerQueues
-# from colmena.value_server import async_get_args
+from colmena.value_server import async_resolve_proxies
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,8 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     result.time_deserialize_inputs = result.deserialize()
 
     # TODO(gpauloski): asynchronously retrieve objects in the value store
-    # async_get_args(result.args)
-    # async_get_args(result.kwargs)
+    async_resolve_proxies(result.args)
+    async_resolve_proxies(result.kwargs)
 
     # Execute the function
     start_time = perf_counter()
