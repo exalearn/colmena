@@ -8,6 +8,7 @@ from colmena import value_server
 from colmena.value_server import init_value_server
 from colmena.value_server import to_proxy
 from colmena.value_server import ObjectProxy
+from colmena.value_server import LRUCache
 from colmena.value_server import VALUE_SERVER_HOST_ENV_VAR
 from colmena.value_server import VALUE_SERVER_PORT_ENV_VAR
 
@@ -46,9 +47,12 @@ def test_value_server() -> None:
     value_server.server.put('test_key', [1, 2, 3])
     assert value_server.server.exists('test_key')
     assert value_server.server.get('test_key') == [1, 2, 3]
-    value_server.server.put('test_key', [1, 2, 3, 4])
+
+    # Value server stores object as immutable so this
+    # does not work
+    # value_server.server.put('test_key', [1, 2, 3, 4])
     assert value_server.server.exists('test_key')
-    assert value_server.server.get('test_key') == [1, 2, 3, 4]
+    assert value_server.server.get('test_key') == [1, 2, 3]
 
 
 @mark.timeout(30)
@@ -74,3 +78,20 @@ def test_proxy() -> None:
     assert np.sum(x) == 6
     x = x + x
     assert np.array_equal(x, [2, 4, 6])
+
+
+@mark.timeout(30)
+def test_lru_cache() -> None:
+    """Test LRU Cache"""
+    c = LRUCache(4)
+    # Put 1, 2, 3, 4 in cache
+    for i in range(1, 5):
+        c.set(str(i), i)
+    for i in range(4, 0, -1):
+        assert c.get(str(i)) == i
+    # 4 is now least recently used
+    c.set('5', 5)
+    # 4 should now be evicted
+    assert c.exists('1')
+    assert not c.exists('4')
+    assert c.exists('5')

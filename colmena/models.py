@@ -89,6 +89,7 @@ class Result(BaseModel):
     time_deserialize_inputs: float = Field(None, description="Time required to deserialize inputs on worker")
     time_serialize_results: float = Field(None, description="Time required to serialize results on worker")
     time_deserialize_results: float = Field(None, description="Time required to deserialize results on client")
+    time_async_resolve_proxies: float = Field(None, description="Time required to scan function inputs and start async resolves of proxies")
 
     # Serialization options
     serialization_method: SerializationMethod = Field(SerializationMethod.JSON,

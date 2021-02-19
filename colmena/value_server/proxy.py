@@ -40,15 +40,29 @@ class Factory():
             self.async_get_future = None
             return result
 
-        return value_server.server.get(self.key)
+        return value_server.server.get(self.key, self.serialization_method)
+
+    def __reduce__(self):
+        """Helper method for pickling"""
+        return Factory, (self.key, self.serialization_method,)
+
+    def __reduce_ex__(self, protocol):
+        """See `__reduce__` since we ignore protocol"""
+        return self.__reduce__()
 
     def async_resolve(self):
         """Asynchrously get the object for the next call to `__call__`"""
         if value_server.server is None:
             value_server.init_value_server()
 
+        # If the value is locally cached by the value server, starting up
+        # a separate thread to retrieve a cached value will be slower than
+        # just getting the value from the cache
+        if value_server.server.is_cached(self.key):
+            return
+
         self.async_get_future = default_pool.submit(
-                value_server.server.get, self.key)
+                value_server.server.get, self.key, self.serialization_method)
 
 
 class ObjectProxy(Proxy):
@@ -67,18 +81,19 @@ class ObjectProxy(Proxy):
         super(ObjectProxy, self).__init__(factory)
 
     def __reduce__(self):
-        """See `__reduce_ex__`"""
-        return ObjectProxy, (self.__factory__,)
-
-    def __reduce_ex__(self, protocol):
         """Helper method for pickling
-        Override `Proxy.__reduce_ex__` so that we only pickle the Factory
+        Override `Proxy.__reduce__` so that we only pickle the Factory
         and not the object itself to reduce size of the pickle.
         """
         return ObjectProxy, (self.__factory__,)
 
+    def __reduce_ex__(self, protocol):
+        """See `__reduce__` since we ignore protocol"""
+        return self.__reduce__()
+
     def async_resolve(self) -> None:
-        self.__factory__.async_resolve()
+        if not hasattr(self, '__target__'):
+            self.__factory__.async_resolve()
 
     def reset_proxy(self) -> None:
         """Reset wrapped object so that the factory is called on next access"""

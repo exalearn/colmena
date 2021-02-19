@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 import os
 import redis
+import warnings
 
-from functools import lru_cache
+from collections import OrderedDict
 from typing import Any, Optional, Union
 
 from colmena import value_server
@@ -18,6 +19,36 @@ VALUE_SERVER_HOST_ENV_VAR = 'COLMENA_VALUE_SERVER_HOST'
 VALUE_SERVER_PORT_ENV_VAR = 'COLMENA_VALUE_SERVER_PORT'
 
 
+class LRUCache:
+    """Simple LRU Cache"""
+    def __init__(self, maxsize: int = 16) -> None:
+        """
+        Args:
+            maxsize (int): maximum number of value to cache
+        """
+        self.maxsize = maxsize
+        self.cache = OrderedDict()
+
+    def exists(self, key: Any) -> bool:
+        """Check if key is cached"""
+        return key in self.cache
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        """Get value for key if it exists else returns `default`"""
+        if self.exists(key):
+            # Move to front b/c most recently used
+            self.cache.move_to_end(key, last=False)
+            return self.cache[key]
+        else:
+            return default
+
+    def set(self, key: Any, value: Any) -> None:
+        """Set key to value"""
+        if len(self.cache) >= self.maxsize:
+            self.cache.popitem()
+        self.cache[key] = value
+
+
 class ValueServer:
     """Wrapper around a Redis Client for interacting with the value server"""
     def __init__(self, hostname: str, port: int):
@@ -28,6 +59,7 @@ class ValueServer:
         """
         self.redis_client = redis.StrictRedis(
             host=hostname, port=port, decode_responses=True)
+        self.cache = LRUCache(LRU_CACHE_SIZE)
 
     def exists(self, key: str) -> bool:
         """Check if key exists
@@ -40,7 +72,17 @@ class ValueServer:
         """
         return self.redis_client.exists(key)
 
-    @lru_cache(maxsize=LRU_CACHE_SIZE)
+    def is_cached(self, key: str) -> bool:
+        """Check if key is cached locally
+
+        Args:
+            key (str)
+
+        Returns:
+            bool
+        """
+        return self.cache.exists(key)
+
     def get(self,
             key: str,
             serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
@@ -56,9 +98,13 @@ class ValueServer:
             deserialized object corresponding to key or None if key does not
             exist
         """
+        if self.is_cached(key):
+            return self.cache.get(key)
         value = self.redis_client.get(key)
         if value is not None:
-            return SerializationMethod.deserialize(serialization_method, value)
+            value = SerializationMethod.deserialize(serialization_method, value)
+            self.cache.set(key, value)
+            return value
         return None
 
     def put(self,
@@ -74,12 +120,12 @@ class ValueServer:
             serialization_method (SerializationMethod): serialization method
                 to use for serializing object before putting in value server
         """
+        if self.exists(key):
+            warnings.warn('Object with key={} is already in the value server')
+            return
+
         value = SerializationMethod.serialize(serialization_method, obj)
         self.redis_client.set(key, value)
-        # TODO(gpauloski): this clears whole LRU cache but really we just
-        # want to invalidate the one entry. This also does not work
-        # across workers
-        self.get.cache_clear()
 
 
 def init_value_server(hostname: Optional[str] = None,

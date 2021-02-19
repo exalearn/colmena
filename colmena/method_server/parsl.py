@@ -38,9 +38,12 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     # Unpack the inputs
     result.time_deserialize_inputs = result.deserialize()
 
-    # TODO(gpauloski): asynchronously retrieve objects in the value store
+    # Start resolving proxies from value server asynchronously
+    # We could include this in deserialization time?
+    start_time = perf_counter()
     async_resolve_proxies(result.args)
     async_resolve_proxies(result.kwargs)
+    result.time_async_resolve_proxies = perf_counter() - start_time
 
     # Execute the function
     start_time = perf_counter()

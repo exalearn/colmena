@@ -24,9 +24,9 @@ python synthetic.py \
 	--task-output-size 0 \
 	--task-interval 15 \
 	--task-count 50 \
-    --output-dir runs/test \
-    --reuse-data \
-	--use-value-server \
+    --output-dir runs/full_test_unique_30s_50x50_v3 \
+	#--use-value-server \
+    #--reuse-data \
 	#--config $CONFIG
     #--output-dir runs/full_test_unique_30s_50x50 \
 
