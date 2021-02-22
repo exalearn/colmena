@@ -19,3 +19,4 @@ dependencies:
       - -e .
       - parsl>=1.*
       - pydantic
+      - lazy-object-proxy>=1.*
