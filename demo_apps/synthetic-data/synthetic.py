@@ -45,6 +45,8 @@ def get_args():
                         help='Workers to use if --local-host')
     parser.add_argument('--use-value-server', action='store_true', default=False,
                         help='Use the value server for sending data to worker')
+    parser.add_argument('--value-server-threshold', type=int, default=1,
+                        help='Threshold object size for value server [MB]')
     parser.add_argument('--reuse-data', action='store_true', default=False,
                         help='Send the same input to each task')
     parser.add_argument('--output-dir', type=str, default='runs',
@@ -97,8 +99,6 @@ class Thinker(BaseThinker):
         self.use_value_server = use_value_server
         self.reuse_data = reuse_data
         self.count = 0
-        self.data_sent = 0
-        self.data_received = 0
 
     def __repr__(self):
         return ("SyntheticDataThinker(\n" + 
@@ -113,12 +113,6 @@ class Thinker(BaseThinker):
         for _ in range(self.task_count):
             result = self.queues.get_result(topic='generate')
             self.logger.info('Got result: {}'.format(str(result).replace('\n', ' ')))
-            self.data_received += sys.getsizeof(result.value)
-
-        self.logger.info(
-            'Thinker sent {} MB and recieved {} MB over {} tasks.'.format(
-            self.data_sent / 1000, self.data_received / 1000, self.count)
-        )
 
     @agent
     def producer(self):
@@ -127,14 +121,7 @@ class Thinker(BaseThinker):
         while not self.done.is_set():
             if not self.reuse_data:
                 input_data = empty_array(self.task_input_size)
-            if self.use_value_server:
-                start = time.time()
-                input_obj = value_server.to_proxy(input_data)
-                self.logger.info('to_proxy_time={}'.format(time.time() - start))
-            else:
-                input_obj = input_data
-            self.data_sent += sys.getsizeof(input_obj)
-            self.queues.send_inputs(input_obj,
+            self.queues.send_inputs(input_data,
                     self.task_output_size, method='target_function',
                     topic='generate')
             self.count += 1
@@ -165,7 +152,8 @@ if __name__ == "__main__":
         args.redis_host,
         args.redis_port,
         topics=['generate'],
-        serialization_method='pickle'
+        serialization_method='pickle',
+        value_server_threshold = args.value_server_threshold * 1000 * 1000,
     ) 
 
     worker_init='module load miniconda-3\nconda activate colmena\n'

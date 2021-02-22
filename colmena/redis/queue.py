@@ -23,7 +23,8 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
                      serialization_method: Union[str, SerializationMethod] = SerializationMethod.JSON,
                      keep_inputs: bool = True,
                      clean_slate: bool = True,
-                     topics: Optional[Iterable[str]] = None)\
+                     topics: Optional[Iterable[str]] = None,
+                     value_server_threshold: Optional[int] = None)\
         -> Tuple['ClientQueues', 'MethodServerQueues']:
     """Make a pair of queues for a server and client
 
@@ -35,11 +36,14 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
         clean_slate (bool): Whether to flush the queues before launching
         serialization_method (bool): Whether to serialize input and output objects before communicating them
         topics ([str]): List of topics used when having the client filter different types of tasks
+        value_server_threshold (int): Input/output objects larger than this threshold
+            (in bytes) will be stored in the value server. If None, value server
+            is ignored
     Returns:
         (ClientQueues, MethodServerQueues): Pair of communicators set to use the correct channels
     """
 
-    return (ClientQueues(hostname, port, name, serialization_method, keep_inputs, topics),
+    return (ClientQueues(hostname, port, name, serialization_method, keep_inputs, topics, value_server_threshold),
             MethodServerQueues(hostname, port, name, topics=topics, clean_slate=clean_slate))
 
 
@@ -205,7 +209,8 @@ class ClientQueues:
     def __init__(self, hostname: str, port: int = 6379, name: Optional[str] = None,
                  serialization_method: SerializationMethod = SerializationMethod.JSON,
                  keep_inputs: bool = True,
-                 topics: Optional[Iterable] = None):
+                 topics: Optional[Iterable] = None,
+                 value_server_threshold: Optional[int] = None):
         """
         Args:
             hostname (str): Hostname of the Redis server
@@ -214,11 +219,14 @@ class ClientQueues:
             serialization_method (SerializationMethod): Method used to store the input
             keep_inputs (bool): Whether to keep inputs after method results are stored
             topics ([str]): List of topics used when having the client filter different types of tasks
+            value_server_threshold (int): Threshold (bytes) to store objects in
+                value server
         """
 
         # Store the result communication options
         self.serialization_method = serialization_method
         self.keep_inputs = keep_inputs
+        self.value_server_threshold = value_server_threshold
 
         # Make the queues
         self.outbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
@@ -255,7 +263,7 @@ class ClientQueues:
 
         # Create a new Result object
         result = Result((input_args, input_kwargs), method=method, keep_inputs=_keep_inputs,
-                        serialization_method=self.serialization_method, task_info=task_info)
+                        serialization_method=self.serialization_method, task_info=task_info, value_server_threshold=self.value_server_threshold)
 
         # Push the serialized value to the method server
         result.time_serialize_inputs = result.serialize()

@@ -2,6 +2,7 @@
 
 from colmena.value_server.proxy import async_resolve_proxies
 from colmena.value_server.proxy import to_proxy
+from colmena.value_server.proxy import to_proxy_threshold
 from colmena.value_server.proxy import ObjectProxy
 
 from colmena.value_server.server import init_value_server
@@ -15,6 +16,7 @@ server = None
 __all__ = [
     'async_resolve_proxies',
     'to_proxy',
+    'to_proxy_threshold',
     'ObjectProxy',
     'init_value_server',
     'server',

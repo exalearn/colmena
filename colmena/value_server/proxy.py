@@ -120,6 +120,42 @@ def to_proxy(obj: Any,
     return ObjectProxy(Factory(key, serialization_method))
 
 
+def to_proxy_threshold(objs: Union[object, list, tuple, dict],
+                       threshold: Optional[int] = None,
+                       serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
+) -> Union[object, list, tuple, dict]:
+    """Wrap objects in proxy based on size threshold
+
+    Checks size of object or objects in iterable and wraps all objects with
+    size greater than `threshold` in an `ObjectProxy`
+
+    Args:
+        objs: object, iterable of objects, or dictionary to scan
+        threshold (int): threshold in bytes to determine if an object should
+            be replaced by a proxy
+        serialization_method (str): serialization method to use when placing
+            wrapped objects in the value server
+
+    Returns:
+        Object or iterable with same format as `objs` with any objects of
+        `sys.getsizeof` greater than `threshold` replace by proxies.
+    """
+    def _to_proxy(obj):
+        if isinstance(obj, ObjectProxy) or threshold is None:
+            return obj
+        if sys.getsizeof(obj) > threshold:
+            return to_proxy(obj, serialization_method=serialization_method)
+
+    if isinstance(objs, list):
+        return list(map(_to_proxy, objs))
+    elif isinstance(objs, tuple):
+        return tuple(map(_to_proxy, objs))
+    elif isinstance(objs, dict):
+        return {key: _to_proxy(obj) for key, obj in objs.items()}
+    else:
+        return _to_proxy(obj)
+
+
 def async_resolve_proxies(args: Union[object, list, tuple, dict]) -> None:
     """Call async get on Proxy Objects
 
