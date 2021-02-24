@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import sys
+
 from concurrent.futures import ThreadPoolExecutor
 from lazy_object_proxy import Proxy
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 import colmena.value_server as value_server
 from colmena.models import SerializationMethod
@@ -140,11 +142,13 @@ def to_proxy_threshold(objs: Union[object, list, tuple, dict],
         Object or iterable with same format as `objs` with any objects of
         `sys.getsizeof` greater than `threshold` replace by proxies.
     """
-    def _to_proxy(obj):
+    def _to_proxy(obj: Any) -> Any:
         if isinstance(obj, ObjectProxy) or threshold is None:
             return obj
         if sys.getsizeof(obj) > threshold:
             return to_proxy(obj, serialization_method=serialization_method)
+        else:
+            return obj
 
     if isinstance(objs, list):
         return list(map(_to_proxy, objs))
@@ -153,7 +157,7 @@ def to_proxy_threshold(objs: Union[object, list, tuple, dict],
     elif isinstance(objs, dict):
         return {key: _to_proxy(obj) for key, obj in objs.items()}
     else:
-        return _to_proxy(obj)
+        return _to_proxy(objs)
 
 
 def async_resolve_proxies(args: Union[object, list, tuple, dict]) -> None:

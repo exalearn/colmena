@@ -7,6 +7,7 @@ from pytest import raises, mark
 from colmena import value_server
 from colmena.value_server import init_value_server
 from colmena.value_server import to_proxy
+from colmena.value_server import to_proxy_threshold
 from colmena.value_server import ObjectProxy
 from colmena.value_server import LRUCache
 from colmena.value_server import VALUE_SERVER_HOST_ENV_VAR
@@ -78,6 +79,52 @@ def test_proxy() -> None:
     assert np.sum(x) == 6
     x = x + x
     assert np.array_equal(x, [2, 4, 6])
+
+
+@mark.timeout(30)
+def test_proxy_serialize() -> None:
+    """Test ObjectProxy serialization"""
+    x = to_proxy([1, 2, 3], serialization_method='pickle')
+    assert isinstance(x, list)
+    x = to_proxy([1, 2, 3], serialization_method='json')
+    assert isinstance(x, list)
+
+    # Should fail because np array not jsonable
+    with raises(TypeError):
+        x = to_proxy(np.array([1, 2, 3]), serialization_method='json')
+
+
+@mark.timeout(30)
+def test_to_proxy_threshold() -> None:
+    """Test to proxy by size threshold"""
+    assert to_proxy_threshold(None, 100) is None
+    x = to_proxy_threshold(1, 0)
+    assert x == 1
+    assert isinstance(x, ObjectProxy)
+
+    x = to_proxy_threshold(1, 1000)
+    assert not isinstance(x, ObjectProxy)
+
+    # list
+    x = to_proxy_threshold([1, np.empty(int(1000 * 1000 * 50 / 4))], 1000 * 1000)
+    assert isinstance(x, list)
+    assert isinstance(x[0], int)
+    assert not isinstance(x[0], ObjectProxy)
+    assert isinstance(x[1], ObjectProxy)
+
+    # tuple
+    x = to_proxy_threshold((1, np.empty(1000)), 1000)
+    assert isinstance(x, tuple)
+    assert isinstance(x[0], int)
+    assert not isinstance(x[0], ObjectProxy)
+    assert isinstance(x[1], ObjectProxy)
+
+    # dict
+    x = to_proxy_threshold({'1': 1, '2': np.empty(1000)}, 1000)
+    assert isinstance(x, dict)
+    assert isinstance(x['1'], int)
+    assert not isinstance(x['1'], ObjectProxy)
+    assert isinstance(x['2'], ObjectProxy)
 
 
 @mark.timeout(30)

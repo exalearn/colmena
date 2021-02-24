@@ -1,3 +1,4 @@
+import colmena
 import json
 import logging
 import pickle as pkl
@@ -7,8 +8,6 @@ from time import perf_counter
 from typing import Any, Tuple, Dict, Optional, Union
 
 from pydantic import BaseModel, Field
-
-from colmena import value_server
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +97,9 @@ class Result(BaseModel):
                                                       description="Method used to serialize input data")
     keep_inputs: bool = Field(True, description="Whether to keep the inputs with the result object or delete "
                                                 "them after the method has completed")
-    value_server_threshold: int = Field(None, description="Object size threshold (bytes) at which input/value objects are stored in value server before serialization")
+    value_server_threshold: int = Field(
+            None, description="Object size threshold (bytes) at which input/value "
+                              "objects are stored in value server before serialization")
 
     def __init__(self, inputs: Tuple[Tuple[Any], Dict[str, Any]], **kwargs):
         """
@@ -164,10 +165,13 @@ class Result(BaseModel):
         _inputs = self.inputs
         try:
             if self.value_server_threshold is not None:
-                _inputs = value_server.to_proxy_threshold(_inputs,
-                        self.value_server_threshold, self.serialization_method)
-                _value = value_server.to_proxy_threshold(_value,
-                        self.value_server_threshold, self.serialization_method)
+                _args = colmena.value_server.to_proxy_threshold(
+                        _inputs[0], self.value_server_threshold, self.serialization_method)
+                _kwargs = colmena.value_server.to_proxy_threshold(
+                        _inputs[1], self.value_server_threshold, self.serialization_method)
+                _inputs = (_args, _kwargs)
+                _value = colmena.value_server.to_proxy_threshold(
+                        _value, self.value_server_threshold, self.serialization_method)
             self.inputs = SerializationMethod.serialize(self.serialization_method, _inputs)
             self.value = SerializationMethod.serialize(self.serialization_method, _value)
             return perf_counter() - start_time
