@@ -33,9 +33,9 @@ def get_args():
                         help='Redis server port')
     parser.add_argument('--local-host', action='store_true', default=False,
                         help='Launch jobs on local host')
-    parser.add_argument('--task-input-size', type=int, default=1,
+    parser.add_argument('--task-input-size', type=float, default=1,
                         help='Data amount to send to tasks [MB]')
-    parser.add_argument('--task-output-size', type=int, default=1,
+    parser.add_argument('--task-output-size', type=float, default=1,
                         help='Data amount to return from tasks [MB]')
     parser.add_argument('--task-interval', type=float, default=0.001,
                         help='Interval between new task generation [s]')
@@ -45,7 +45,7 @@ def get_args():
                         help='Workers to use if --local-host')
     parser.add_argument('--use-value-server', action='store_true', default=False,
                         help='Use the value server for sending data to worker')
-    parser.add_argument('--value-server-threshold', type=int, default=1,
+    parser.add_argument('--value-server-threshold', type=float, default=1,
                         help='Threshold object size for value server [MB]')
     parser.add_argument('--reuse-data', action='store_true', default=False,
                         help='Send the same input to each task')
@@ -67,7 +67,7 @@ def get_args():
 
 
 def empty_array(size: int) -> np.ndarray:
-    return np.empty(int(1000 * size / 4), dtype=np.float32)
+    return np.empty(int(1000 * 1000 * size / 4), dtype=np.float32)
 
 
 def target_function(data: np.ndarray, output_size: int) -> np.ndarray:
@@ -77,7 +77,7 @@ def target_function(data: np.ndarray, output_size: int) -> np.ndarray:
     # Check that ObjectProxy acts as the wrapped np object
     assert isinstance(data, np.ndarray), 'got type {}'.format(type(data))
     time.sleep(0.005)  # simulate more computation
-    return np.empty(int(1000 * output_size / 4), dtype=np.float32)
+    return np.empty(int(1000 * 1000 * output_size / 4), dtype=np.float32)
 
 
 class Thinker(BaseThinker):
@@ -121,6 +121,7 @@ class Thinker(BaseThinker):
         while not self.done.is_set():
             if not self.reuse_data:
                 input_data = empty_array(self.task_input_size)
+            print('SIZE', sys.getsizeof(input_data))
             self.queues.send_inputs(input_data,
                     self.task_output_size, method='target_function',
                     topic='generate')
@@ -147,21 +148,22 @@ if __name__ == "__main__":
 
     logging.info('Args: {}'.format(args))
 
+    value_server_threshold = args.value_server_threshold * 1000 * 1000 if args.use_value_server else None
+
     # Make the queues
     client_queues, server_queues = make_queue_pairs(
         args.redis_host,
         args.redis_port,
         topics=['generate'],
         serialization_method='pickle',
-        value_server_threshold = args.value_server_threshold * 1000 * 1000,
+        value_server_threshold=value_server_threshold
     ) 
 
     worker_init='module load miniconda-3\nconda activate colmena\n'
 
     if args.use_value_server:
-        # Connect to value server on client. The workers will connect automatically
-        # using the host/port that we pass as environment variables
-        value_server.init_value_server(args.redis_host, args.redis_port)
+        # Workers connect to the value server with the host/port
+        # that we pass as environment variables
         worker_init += 'export {}={}\nexport {}={}\n'.format(
                 value_server.VALUE_SERVER_HOST_ENV_VAR, args.redis_host,
                 value_server.VALUE_SERVER_PORT_ENV_VAR, args.redis_port)
