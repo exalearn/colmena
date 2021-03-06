@@ -3,9 +3,8 @@ from __future__ import annotations
 import logging
 import os
 import redis
-import warnings
+import time
 
-from collections import OrderedDict
 from typing import Any, Optional, Union
 
 from colmena import value_server
@@ -27,26 +26,36 @@ class LRUCache:
             maxsize (int): maximum number of value to cache
         """
         self.maxsize = maxsize
-        self.cache = OrderedDict()
+        self.data = {}
+        self.lru = []
+
+        # Count hits/misses
+        self.hits = 0
+        self.misses = 0
 
     def exists(self, key: Any) -> bool:
         """Check if key is cached"""
-        return key in self.cache
+        return key in self.data
 
     def get(self, key: Any, default: Any = None) -> Any:
         """Get value for key if it exists else returns `default`"""
         if self.exists(key):
             # Move to front b/c most recently used
-            self.cache.move_to_end(key, last=False)
-            return self.cache[key]
+            self.hits += 1
+            self.lru.remove(key)
+            self.lru.insert(0, key)
+            return self.data[key]
         else:
+            self.misses += 1
             return default
 
     def set(self, key: Any, value: Any) -> None:
         """Set key to value"""
-        if len(self.cache) >= self.maxsize:
-            self.cache.popitem()
-        self.cache[key] = value
+        if len(self.data) >= self.maxsize:
+            lru_key = self.lru.pop()
+            del self.data[lru_key]
+        self.lru.insert(0, key)
+        self.data[key] = value
 
 
 class ValueServer:
@@ -61,31 +70,28 @@ class ValueServer:
             host=hostname, port=port, decode_responses=True)
         self.cache = LRUCache(LRU_CACHE_SIZE)
 
-    def exists(self, key: str) -> bool:
-        """Check if key exists
-
-        Args:
-            key (str)
-
-        Returns:
-            bool
-        """
-        return self.redis_client.exists(key)
-
-    def is_cached(self, key: str) -> bool:
+    def is_cached(self, key: str, strict: bool = False) -> bool:
         """Check if key is cached locally
 
         Args:
             key (str)
+            strict (bool): if True, cached value must be as new as remote
 
         Returns:
             bool
         """
-        return self.cache.exists(key)
+        if self.cache.exists(key):
+            if strict:
+                redis_timestamp = float(self.redis_client.get(key + '_timestamp'))
+                cache_timestamp = self.cache.get(key)[0]
+                return cache_timestamp >= redis_timestamp
+            return True
+        return False
 
     def get(self,
             key: str,
-            serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
+            serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
+            strict: bool = False
     ) -> Optional[object]:
         """Get object by key from value server
 
@@ -93,26 +99,31 @@ class ValueServer:
             key (str)
             serialization_method (SerializationMethod): serialization method
                 to use for deserializing object
+            strict (bool): return most recent version of item regardless of
+                timestamp value
 
         Returns:
             deserialized object corresponding to key or None if key does not
             exist
         """
-        if self.is_cached(key):
-            return self.cache.get(key)
+        if self.is_cached(key, strict):
+            return self.cache.get(key)[1]
+
         value = self.redis_client.get(key)
         if value is not None:
-            value = SerializationMethod.deserialize(serialization_method, value)
-            self.cache.set(key, value)
-            return value
+            timestamp = float(self.redis_client.get(key + '_timestamp'))
+            obj = SerializationMethod.deserialize(serialization_method, value)
+            self.cache.set(key, (timestamp, obj))
+            return obj
+
         return None
 
-    def put(self,
+    def set(self,
             key: str,
             obj: Any,
-            serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
+            serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
     ) -> None:
-        """Put object in value server
+        """Set object in value server
 
         Args:
             key (str)
@@ -120,12 +131,9 @@ class ValueServer:
             serialization_method (SerializationMethod): serialization method
                 to use for serializing object before putting in value server
         """
-        if self.exists(key):
-            warnings.warn('Object with key={} is already in the value server')
-            return
-
         value = SerializationMethod.serialize(serialization_method, obj)
         self.redis_client.set(key, value)
+        self.redis_client.set(key + '_timestamp', time.time())
 
 
 def init_value_server(hostname: Optional[str] = None,

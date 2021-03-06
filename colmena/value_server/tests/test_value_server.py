@@ -1,35 +1,21 @@
 """Tests for Colmena Value Server"""
-import numpy as np
+import multiprocessing as mp
 import os
 
 from pytest import raises, mark
 
 from colmena import value_server
 from colmena.value_server import init_value_server
-from colmena.value_server import to_proxy
-from colmena.value_server import to_proxy_threshold
-from colmena.value_server import ObjectProxy
 from colmena.value_server import LRUCache
 from colmena.value_server import VALUE_SERVER_HOST_ENV_VAR
 from colmena.value_server import VALUE_SERVER_PORT_ENV_VAR
 
 
-class DisablePyTestCollectionMixin(object):
-    __test__ = False
-
-
-class TestClass(DisablePyTestCollectionMixin):
-    def __init__(self, x=1) -> None:
-        self.x = x
-
-    def __reduce_ex__(self, version):
-        # Object must be json or pickleable
-        return TestClass, (self.x,)
-
-
 @mark.timeout(30)
 def test_init_value_server() -> None:
     """Test initializing value server from ENV variables"""
+    value_server.server = None
+
     with raises(ValueError):
         init_value_server()
 
@@ -39,92 +25,28 @@ def test_init_value_server() -> None:
     init_value_server()
     assert value_server.server is not None
 
+    # The below test assume empty DB
+    value_server.server.redis_client.flushdb()
+
 
 @mark.timeout(30)
 def test_value_server() -> None:
     """Test value server interactions"""
-    assert not value_server.server.exists('test_key')
     assert value_server.server.get('test_key') is None
-    value_server.server.put('test_key', [1, 2, 3])
-    assert value_server.server.exists('test_key')
-    assert value_server.server.get('test_key') == [1, 2, 3]
-
-    # Value server stores object as immutable so this
-    # does not work
-    # value_server.server.put('test_key', [1, 2, 3, 4])
-    assert value_server.server.exists('test_key')
+    value_server.server.set('test_key', [1, 2, 3])
     assert value_server.server.get('test_key') == [1, 2, 3]
 
 
 @mark.timeout(30)
-def test_proxy() -> None:
-    """Test proxy object behaves like wrapped object"""
-    x = to_proxy(1)
-    assert isinstance(x, ObjectProxy)
-    assert isinstance(x, int)
-    assert x == 1
-    x += 1
-    assert x == 2
-
-    x = to_proxy(TestClass())
-    assert isinstance(x, TestClass)
-    assert x.x == 1
-    x.x += 1
-    assert x.x == 2
-
-    x = to_proxy(np.array([1, 2, 3]))
-    assert isinstance(x, np.ndarray)
-    assert len(x) == 3
-    assert x.shape == (3, )
-    assert np.sum(x) == 6
-    x = x + x
-    assert np.array_equal(x, [2, 4, 6])
-
-
-@mark.timeout(30)
-def test_proxy_serialize() -> None:
-    """Test ObjectProxy serialization"""
-    x = to_proxy([1, 2, 3], serialization_method='pickle')
-    assert isinstance(x, list)
-    x = to_proxy([1, 2, 3], serialization_method='json')
-    assert isinstance(x, list)
-
-    # Should fail because np array not jsonable
-    with raises(TypeError):
-        x = to_proxy(np.array([1, 2, 3]), serialization_method='json')
-
-
-@mark.timeout(30)
-def test_to_proxy_threshold() -> None:
-    """Test to proxy by size threshold"""
-    assert to_proxy_threshold(None, 100) is None
-    x = to_proxy_threshold(1, 0)
-    assert x == 1
-    assert isinstance(x, ObjectProxy)
-
-    x = to_proxy_threshold(1, 1000)
-    assert not isinstance(x, ObjectProxy)
-
-    # list
-    x = to_proxy_threshold([1, np.empty(int(1000 * 1000 * 50 / 4))], 1000 * 1000)
-    assert isinstance(x, list)
-    assert isinstance(x[0], int)
-    assert not isinstance(x[0], ObjectProxy)
-    assert isinstance(x[1], ObjectProxy)
-
-    # tuple
-    x = to_proxy_threshold((1, np.empty(1000)), 1000)
-    assert isinstance(x, tuple)
-    assert isinstance(x[0], int)
-    assert not isinstance(x[0], ObjectProxy)
-    assert isinstance(x[1], ObjectProxy)
-
-    # dict
-    x = to_proxy_threshold({'1': 1, '2': np.empty(1000)}, 1000)
-    assert isinstance(x, dict)
-    assert isinstance(x['1'], int)
-    assert not isinstance(x['1'], ObjectProxy)
-    assert isinstance(x['2'], ObjectProxy)
+def test_value_server_strict() -> None:
+    """Test value server strict timestamp guarentees"""
+    value_server.server.set('test_key', [1, 2, 3])
+    assert value_server.server.get('test_key') == [1, 2, 3]
+    value_server.server.set('test_key', [2, 3, 4])
+    # cache will still have [1, 2, 3] without strict flag set
+    assert value_server.server.get('test_key') == [1, 2, 3]
+    # setting strict flag will force getting most recent version
+    assert value_server.server.get('test_key', strict=True) == [2, 3, 4]
 
 
 @mark.timeout(30)
@@ -142,3 +64,25 @@ def test_lru_cache() -> None:
     assert c.exists('1')
     assert not c.exists('4')
     assert c.exists('5')
+
+
+@mark.timeout(30)
+def test_lru_cache_mp() -> None:
+    """Test LRU Cache with Multiprocessing"""
+    return
+    c = LRUCache(1)
+    c.set('test_key', 'test_value')
+
+    def f(x):
+        _c = LRUCache(1)
+        assert _c.hits == 0
+        assert _c.misses == 0
+        assert _c.get('test_key') == 'test_value'
+        assert _c.hits == 1
+        assert _c.misses == 0
+        assert _c.get(x) is None
+        assert _c.hits == 1
+        assert _c.misses == 1
+
+    with mp.Pool(2) as p:
+        p.map(f, ['1', '2', '3'])

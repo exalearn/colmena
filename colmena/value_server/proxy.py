@@ -16,16 +16,19 @@ class Factory():
     """Factory class for retrieving objects from the value server"""
     def __init__(self,
                  key: str,
-                 serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
+                 serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
+                 strict: bool = False
     ) -> None:
         """
         Args:
             key (str): key used to retrive object from value server
             serialization_method (SerializationMethod): serialization method
                 used to store object in value server
+            strict (bool): TODO
         """
         self.key = key
         self.serialization_method = serialization_method
+        self.strict = strict
         self.async_get_future = None
 
     def __call__(self):
@@ -42,11 +45,12 @@ class Factory():
             self.async_get_future = None
             return result
 
-        return value_server.server.get(self.key, self.serialization_method)
+        return value_server.server.get(
+            self.key, self.serialization_method, strict=self.strict)
 
     def __reduce__(self):
         """Helper method for pickling"""
-        return Factory, (self.key, self.serialization_method,)
+        return Factory, (self.key, self.serialization_method, self.strict,)
 
     def __reduce_ex__(self, protocol):
         """See `__reduce__` since we ignore protocol"""
@@ -60,11 +64,12 @@ class Factory():
         # If the value is locally cached by the value server, starting up
         # a separate thread to retrieve a cached value will be slower than
         # just getting the value from the cache
-        if value_server.server.is_cached(self.key):
+        if value_server.server.is_cached(self.key, self.timestamp):
             return
 
         self.async_get_future = default_pool.submit(
-                value_server.server.get, self.key, self.serialization_method)
+                value_server.server.get, self.key, self.serialization_method,
+                strict=self.strict)
 
 
 class ObjectProxy(Proxy):
@@ -104,27 +109,32 @@ class ObjectProxy(Proxy):
 
 
 def to_proxy(obj: Any,
-             key=None,
-             serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
+             key: Optional[str] = None,
+             serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
+             strict: bool = False
 ) -> None:
     """Put object in value server and return proxy object
+
     Args:
         obj (object)
         key (str, optional): key to use for value server
         serialization_method (SerializationMethod): serialization method
+        strict (bool): force strict guarentees that Value Server always returns
+            most recent object associated with this key
+
     Returns:
         ObjectProxy
     """
     if key is None:
         key = str(id(obj))
-    if not value_server.server.exists(key):
-        value_server.server.put(key, obj, serialization_method)
-    return ObjectProxy(Factory(key, serialization_method))
+    value_server.server.set(key, obj, serialization_method)
+    return ObjectProxy(Factory(key, serialization_method, strict))
 
 
 def to_proxy_threshold(objs: Union[object, list, tuple, dict],
                        threshold: Optional[int] = None,
-                       serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE
+                       serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
+                       strict: bool = False
 ) -> Union[object, list, tuple, dict]:
     """Wrap objects in proxy based on size threshold
 
@@ -137,6 +147,8 @@ def to_proxy_threshold(objs: Union[object, list, tuple, dict],
             be replaced by a proxy
         serialization_method (str): serialization method to use when placing
             wrapped objects in the value server
+        strict (bool): force strict guarentees that Value Server always returns
+            most recent object associated with this key
 
     Returns:
         Object or iterable with same format as `objs` with any objects of
@@ -146,7 +158,8 @@ def to_proxy_threshold(objs: Union[object, list, tuple, dict],
         if isinstance(obj, ObjectProxy) or threshold is None:
             return obj
         if sys.getsizeof(obj) > threshold:
-            return to_proxy(obj, serialization_method=serialization_method)
+            return to_proxy(obj, serialization_method=serialization_method,
+                            strict=strict)
         else:
             return obj
 
