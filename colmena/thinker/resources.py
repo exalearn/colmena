@@ -1,5 +1,5 @@
 """Utilities for tracking resources"""
-from threading import Semaphore, Lock, Thread, Event
+from threading import Semaphore, Lock, Thread, Event, Barrier, BrokenBarrierError
 from typing import List, Dict, Optional, Tuple
 from queue import Queue
 import logging
@@ -29,7 +29,8 @@ class ResourceCounter:
         """
 
         # Settings currently hidden from user
-        self._acquire_timeout = 5
+        self._acquire_timeout = 0.1  # How long we wait between acquisitions to see if a request was vacated
+        self._barrier_timeout = 0.1  # How long a request has to reply before
 
         # Save the total number of nodes available
         self._total_nodes = total_nodes
@@ -44,7 +45,7 @@ class ResourceCounter:
         self._task_allocations: Dict[Optional[str], Semaphore] = dict(
             (t, Semaphore(value=0)) for t in my_tasks
         )
-        self._service_requests: Dict[Optional[str], Queue[Tuple[int, Lock, Event]]] = dict(
+        self._service_requests: Dict[Optional[str], Queue[Tuple[int, Lock, Event, Barrier]]] = dict(
             (t, Queue()) for t in my_tasks
         )
 
@@ -54,7 +55,7 @@ class ResourceCounter:
 
         # Launch all of the fulfillers
         self._fulfillers = dict(
-            (t, Thread(target=self._fulfill_requests, args=(t,), daemon=True)) for t in my_tasks
+            (t, Thread(name=f"fulfill-{t}", target=self._fulfill_requests, args=(t,), daemon=True)) for t in my_tasks
         )
         for t in self._fulfillers.values():
             t.start()
@@ -85,7 +86,7 @@ class ResourceCounter:
         logger.debug(f'Started fulfiller for task {task}')
         while True:
             # Retrieve the next request
-            n_requested, lock, vacate = self._service_requests[task].get()
+            n_requested, lock, vacate, reply = self._service_requests[task].get()
 
             # Wait until either the request is fully completed or the request is vacated
             was_vacated = False
@@ -102,8 +103,16 @@ class ResourceCounter:
             # Indicate to the requester that their request is fulfilled
             lock.release()
 
-            # If the request was vacated, toss the nodes back into the poll
-            if vacate.is_set():
+            # If reservation was not vacated, wait for the barrier to confirm
+            if not was_vacated:
+                try:
+                    reply.wait(self._barrier_timeout)
+                except BrokenBarrierError:
+                    logger.info(f"Request for {n_requested} nodes was vacated due to barrier failure")
+
+            # If the request was vacated, toss the nodes back into the pool
+            if was_vacated or reply.broken:
+                print(f'Vacated {n_acquired}')
                 for _ in range(n_acquired):
                     self._task_allocations[task].release()
 
@@ -147,13 +156,17 @@ class ResourceCounter:
         acq_lock = Lock()
         acq_lock.acquire()
         req_vacate = Event()
+        reply = Barrier(2)
 
         # Push the request to the pool
-        self._service_requests[task].put((n_nodes, acq_lock, req_vacate))
+        self._service_requests[task].put((n_nodes, acq_lock, req_vacate, reply))
 
         # Wait until the request is fulfilled
         was_fulfilled = acq_lock.acquire(timeout=timeout)
-        if not was_fulfilled:
+        if was_fulfilled:
+            reply.wait()  # Re-affirm
+            return not reply.broken
+        else:
             req_vacate.set()
         return was_fulfilled
 
@@ -174,13 +187,17 @@ class ResourceCounter:
         acq_lock = Lock()
         acq_lock.acquire()
         req_vacate = Event()
+        reply = Barrier(2)
 
         # Push the request to the pool
-        self._service_requests[task_from].put((n_nodes, acq_lock, req_vacate))
+        self._service_requests[task_from].put((n_nodes, acq_lock, req_vacate, reply))
 
         # Wait until the request was fulfilled
         was_fulfilled = acq_lock.acquire(timeout=timeout)
         if was_fulfilled:
+            reply.wait()  # Re-affirm we want this allocation
+            if reply.broken:
+                return False
             logger.info(f"Reallocated {n_nodes} from {task_from} to {task_to}")
             for _ in range(n_nodes):
                 self._task_allocations[task_to].release()
