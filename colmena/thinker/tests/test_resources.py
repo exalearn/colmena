@@ -36,11 +36,11 @@ def test_allocations(rec):
     assert rec.count_available_nodes("ml") == 4
 
     # Attempt a transfer that times out
-    assert not rec.transfer_nodes("ml", "sim", n_nodes=5, timeout=1)
-    sleep(1)  # Wait until the fulfiller will discover the request was vacated
+    assert not rec.transfer_nodes("ml", "sim", n_nodes=5, timeout=0.01)
     assert rec.count_available_nodes("ml") == 4
 
     # Attempt a transfer that completes
+    # TODO (wardlt): Change to "release"?
     assert rec.transfer_nodes("ml", "sim", n_nodes=4, timeout=4)
     assert rec.count_available_nodes("sim") == 4
     assert rec.count_available_nodes("ml") == 0
