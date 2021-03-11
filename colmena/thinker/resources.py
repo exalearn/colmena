@@ -99,15 +99,16 @@ class ResourceCounter:
                     break
                 n_acquired += 1
 
-            # If the request was vacated, toss the nodes back into the poll
-            if was_vacated:
-                for _ in range(n_acquired):
-                    self._task_allocations[task].release()
-
             # Indicate to the requester that their request is fulfilled
             lock.release()
 
-    def register_completion(self, task: str, n_nodes: int, rerequest: bool = True, timeout: float = -1) -> bool:
+            # If the request was vacated, toss the nodes back into the poll
+            if vacate.is_set():
+                for _ in range(n_acquired):
+                    self._task_allocations[task].release()
+
+    def register_completion(self, task: str, n_nodes: int, rerequest: bool = True, timeout: float = -1)\
+            -> Optional[bool]:
         """Register that nodes for a particular task are available 
         and, by default, re-request those nodes for the same task.
 
@@ -119,13 +120,14 @@ class ResourceCounter:
             rerequest: Whether to re-request
             timeout: Maximum time to wait for the request to be filled
         Returns:
-            Whether the request was fulfilled
+            Whether the re-request was fulfilled
         """
 
         for _ in range(n_nodes):
             self._task_allocations[task].release()  # TODO (wardlt): Py3.9 lets you release counter by >1
         if rerequest:
-            return self.request_nodes(task, n_nodes)
+            return self.request_nodes(task, n_nodes, timeout=timeout)
+        return None
 
     # TODO (warlt): Allow partial fulfillment?
     def request_nodes(self, task: str, n_nodes: int, timeout: float = -1) -> bool:

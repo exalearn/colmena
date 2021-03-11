@@ -21,3 +21,9 @@ def test_allocations(rec):
     assert rec.count_available_nodes("ml") == 0
 
     assert not rec.request_nodes("ml", 1, timeout=0.02)
+
+    assert rec.register_completion("ml", 4, rerequest=False) is None
+    assert rec.count_available_nodes("ml") == 4
+
+    assert rec.register_completion("ml", 4, rerequest=True)
+    assert rec.count_available_nodes("ml") == 4
