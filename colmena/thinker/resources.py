@@ -112,7 +112,6 @@ class ResourceCounter:
 
             # If the request was vacated, toss the nodes back into the pool
             if was_vacated or reply.broken:
-                print(f'Vacated {n_acquired}')
                 for _ in range(n_acquired):
                     self._task_allocations[task].release()
 

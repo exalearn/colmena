@@ -40,7 +40,7 @@ def _launch_agent(func: Callable, worker: 'BaseThinker'):
     worker.logger.info(f'{name} completed')
 
 
-class AgentData(local):
+class _AgentData(local):
     """Data local to a certain agent thread
 
     Attributes:
@@ -85,25 +85,16 @@ class BaseThinker(Thread):
     when the "Thinker" thread is started.
     Colmena will also create a distinct logger for the
 
-    Start the thread by calling `.start()`, as in:
+    Start the thread by calling ``.start()``
 
-    .. code-block: python
-
-        t = ExampleThinker(queue)
-        t.start()
-        t.join()  # Wait until work completes
-
-    Attributes:
-         done (threading.Event): Event used to mark that a thread has completed
+    Args:
+        queue: Queue wrapper used to communicate with method server
+        daemon: Whether to launch this as a daemon thread
+        **kwargs: Options passed to :class:`Thread`
     """
 
     def __init__(self, queue: ClientQueues, daemon: bool = True, **kwargs):
-        """
-        Args:
-            queue: Queue wrapper used to communicate with
-            daemon: Whether to launch this as a daemon thread
-            **kwargs: Options passed to :class:`Thread`
-        """
+        """"""
         super().__init__(daemon=daemon, **kwargs)
 
         # Create the base logger
@@ -113,7 +104,7 @@ class BaseThinker(Thread):
         self.done: Event = Event()
 
         # Thread-local stuff, like the default queue and name
-        self.local_details = AgentData(self.make_logger())
+        self.local_details = _AgentData(self.make_logger())
 
     @property
     def logger(self) -> logging.Logger:
