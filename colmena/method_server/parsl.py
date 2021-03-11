@@ -7,6 +7,7 @@ from threading import Thread
 from concurrent.futures import wait, Future
 from time import sleep, perf_counter
 from typing import Optional, List, Callable, Tuple, Dict, Union, Set
+from traceback import TracebackException
 
 import parsl
 from parsl import python_app, ThreadPoolExecutor
@@ -47,6 +48,8 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
         if result.task_info is None:
             result.task_info = {}
         result.task_info['exception'] = str(e)
+        tb = TracebackException.from_exception(e)
+        result.task_info['traceback'] = "".join(tb.format())
     finally:
         end_time = perf_counter()
 
