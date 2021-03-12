@@ -1,5 +1,3 @@
-from time import sleep
-
 from pytest import fixture
 
 from colmena.thinker.resources import ResourceCounter

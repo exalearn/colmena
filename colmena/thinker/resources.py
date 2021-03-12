@@ -101,11 +101,11 @@ class ResourceCounter:
 
     def release(self, task: str, n_nodes: int, rerequest: bool = True, timeout: float = -1)\
             -> Optional[bool]:
-        """Register that nodes for a particular task are available 
+        """Register that nodes for a particular task are available
         and, by default, re-request those nodes for the same task.
 
         Blocks until the task request completes
-        
+
         Args:
             task: Name of the task
             n_nodes: Number of nodes to mark as available
