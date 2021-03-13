@@ -36,14 +36,14 @@ class ResourceCounter:
     of the resource utilization semaphore.
     """
 
-    def __init__(self, total_nodes: int, task_types: List[str]):
+    def __init__(self, total_slots: int, task_types: List[str]):
         """
         Args:
-            total_nodes: Total number of nodes available to the resources
+            total_slots: Total number of nodes available to the resources
             task_types: Names of task types
         """
         # Save the total number of nodes available
-        self._total_nodes = total_nodes
+        self._total_slots = total_slots
 
         # Add a "global" task type
         my_tasks: List[Optional[str]] = task_types.copy()
@@ -67,18 +67,18 @@ class ResourceCounter:
             (t, Lock()) for t in my_tasks
         )
 
-        # Mark the number of unallocated nodes
-        for _ in range(self._total_nodes):
+        # Mark the number of unallocated slots
+        for _ in range(self._total_slots):
             self._availability[None].release()
-        self._allocation[None] = self._total_nodes
+        self._allocation[None] = self._total_slots
 
     @property
-    def unallocated_nodes(self) -> int:
-        """Number of unallocated nodes"""
+    def unallocated_slots(self) -> int:
+        """Number of unallocated slots"""
         return self._allocation[None]
 
-    def allocated_nodes(self, task: str) -> int:
-        """Number of nodes allocated to a certain task
+    def allocated_slots(self, task: str) -> int:
+        """Number of slots allocated to a certain task
 
         Args:
             task: Name of the task
@@ -87,19 +87,19 @@ class ResourceCounter:
             raise KeyError(f'Unknown task name: {task}')
         return self._allocation[task]
 
-    def available_nodes(self, task: Optional[str]) -> int:
+    def available_slots(self, task: Optional[str]) -> int:
         """Get the number of nodes available for a certain task
 
         Args:
             task: Name of the task
         Returns:
-            Number of nodes available for that task
+            Number of slots available for that task
         """
         if task not in self._availability:
             raise KeyError(f'Unknown task name: {task}')
         return self._availability[task]._value
 
-    def release(self, task: str, n_nodes: int, rerequest: bool = True, timeout: float = -1)\
+    def release(self, task: str, n_slots: int, rerequest: bool = True, timeout: float = -1)\
             -> Optional[bool]:
         """Register that nodes for a particular task are available
         and, by default, re-request those nodes for the same task.
@@ -108,28 +108,28 @@ class ResourceCounter:
 
         Args:
             task: Name of the task
-            n_nodes: Number of nodes to mark as available
-            rerequest: Whether to re-request
+            n_slots: Number of slots to mark as available
+            rerequest: Whether to re-request nodes immediately after releasing them
             timeout: Maximum time to wait for the request to be filled
         Returns:
             Whether the re-request was fulfilled
         """
 
-        for _ in range(n_nodes):
+        for _ in range(n_slots):
             self._availability[task].release()  # TODO (wardlt): Py3.9 lets you release counter by >1
         if rerequest:
-            return self.acquire(task, n_nodes, timeout=timeout)
+            return self.acquire(task, n_slots, timeout=timeout)
         return None
 
     # TODO (warlt): Allow partial fulfillment?
-    def acquire(self, task: str, n_nodes: int, timeout: float = -1) -> bool:
+    def acquire(self, task: str, n_slots: int, timeout: float = -1) -> bool:
         """Request a certain number of nodes for a particular task
 
         Draws only from the pool of nodes allocated to this task
 
         Args:
             task: Name of the task
-            n_nodes: Number of nodes to request
+            n_slots: Number of slots to request
             timeout: Maximum time to wait for the request to be filled
         Returns:
             Whether the request was fulfilled
@@ -143,7 +143,7 @@ class ResourceCounter:
         # Wait until all nodes are acquired
         n_acquired = 0
         success = True
-        for _ in range(n_nodes):
+        for _ in range(n_slots):
             success = self._availability[task].acquire(timeout=timeout)
             if not success:
                 break
@@ -159,32 +159,32 @@ class ResourceCounter:
 
         return success
 
-    def reallocate(self, task_from: Optional[str], task_to: Optional[str], n_nodes: int,
+    def reallocate(self, task_from: Optional[str], task_to: Optional[str], n_slots: int,
                    timeout: float = -1) -> bool:
         """Transfer computer resources from one task to another
 
         Args:
             task_from: Which task to pull resources from (None to request un-allocated nodes)
             task_to: Which task to add resources to (None to de-allocate nodes)
-            n_nodes: Number of nodes to request
+            n_slots: Number of nodes to request
             timeout: Maximum time to wait for the request to be filled
         Returns:
             Whether request was fulfilled
         """
 
         # Pull nodes from the remaining
-        acq_success = self.acquire(task_from, n_nodes, timeout)
+        acq_success = self.acquire(task_from, n_slots, timeout)
 
         # If successful, push those resources to the target pool
         if acq_success:
             # Mark resources as available
-            for _ in range(n_nodes):
+            for _ in range(n_slots):
                 self._availability[task_to].release()
 
             # Record changes to the total pool size
             with self._allocation_lock[task_from], self._allocation_lock[task_to]:
-                self._allocation[task_from] -= n_nodes
-                self._allocation[task_to] += n_nodes
+                self._allocation[task_from] -= n_slots
+                self._allocation[task_to] += n_slots
             # TODO (wardlt): Eventually provide some mechanism to inform a batch
             #   system that resources allocated to ``from_task`` should be released
 
