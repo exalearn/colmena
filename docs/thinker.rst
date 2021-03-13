@@ -43,7 +43,11 @@ to the constructor for this feature to be available.
 
 See the documentation for :class:`colmena.thinker.resources.ResourceCounter`.
 
-Parameterizing Agents
----------------------
+Configurating Agents
+--------------------
 
-**TBD**
+Agent threads in Colmena take a few different configuration options.
+For example, the ``critical`` keyword argument means that the ``self.done`` attribute will not
+be flagged when this thread executes.
+
+See :func:`colmena.thinker.agent` for more details.

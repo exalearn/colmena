@@ -13,11 +13,22 @@ from colmena.thinker.resources import ResourceCounter
 logger = logging.getLogger(__name__)
 
 
-def agent(func):
-    """Denote a function as an "agent" thread that is launched when
-    a Thinker process is started"""
-    func._colmena_agent = True
-    return func
+def agent(func: Optional[Callable] = None, critical: bool = True):
+    """Decorator that denotes a function as an "agent" thread that is launched when a Thinker process is started
+
+    Args:
+        func: Do not directly pass this variable. It is used as an argument to the decorator
+        critical: Whether the "done" flag should be set once this thread finishes
+    Returns:
+        "Decorated" version of the function or a decorator function
+    """
+    def decorator(f: Callable):
+        f._colmena_agent = True
+        f._colmena_critical = critical
+        return f
+    if func is None:
+        return decorator
+    return decorator(func)
 
 
 def _launch_agent(func: Callable, worker: 'BaseThinker'):
@@ -35,10 +46,15 @@ def _launch_agent(func: Callable, worker: 'BaseThinker'):
     worker.logger.info(f'{name} started')
 
     # Launch it
-    func(worker)
+    try:
+        func(worker)
+    finally:
+        # If a "critical" function, set the "done" flag
+        if getattr(func, '_colmena_critical', False):
+            worker.done.set()
 
-    # Mark that the thread has crashed
-    worker.logger.info(f'{name} completed')
+        # Mark that the thread has crashed
+        worker.logger.info(f'{name} completed')
 
 
 class _AgentData(local):
@@ -178,7 +194,6 @@ class BaseThinker(Thread):
             # Wait until any one completes, then set the "gen_done" event to
             #  signal all remaining threads to finish after completing their work
             for finished in as_completed(threads):
-                self.done.set()
                 exc = finished.exception()
                 if exc is None:
                     self.logger.info('Thread completed without problems')
