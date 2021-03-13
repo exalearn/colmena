@@ -1,9 +1,9 @@
 """Perform GPR Active Learning where we periodicially dedicate resources to
 re-prioritizing a list of simulations to run"""
-
-
-from colmena.thinker import BaseThinker, agent
+from colmena.models import Result
+from colmena.thinker import BaseThinker, agent, result_processor
 from colmena.method_server import ParslMethodServer
+from colmena.thinker.resources import ResourceCounter
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
@@ -23,10 +23,8 @@ import json
 import sys
 import os
 
+
 # Hard code the function to be optimized
-from colmena.thinker.resources import ResourceCounter
-
-
 def ackley(x: np.ndarray, a=20, b=0.2, c=2 * np.pi, mean_rt=0, std_rt=0.1) -> np.ndarray:
     """The Ackley function (http://www.sfu.ca/~ssurjano/ackley.html)
 
@@ -146,28 +144,27 @@ class Thinker(BaseThinker):
             with self.queue_lock:
                 self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
 
-    @agent
-    def simulation_receiver(self):
+    @result_processor(topic="doer")
+    def simulation_receiver(self, result: Result):
+        self.logger.info("Received a task result")
 
-        while len(self.database) < self.n_guesses and not self.done.is_set():
-            # Wait for a result to complete
-            self.logger.info("Waiting for a task request")
-            result = self.queues.get_result(topic='doer')
-            self.logger.info("Received a task result")
+        # Notify all that we have data!
+        self.sim_complete.set()
+        self.sim_complete.clear()
 
-            # Notify all that we have data!
-            self.sim_complete.set()
-            self.sim_complete.clear()
+        # Free up new resources
+        self.rec.release("sim", 1, rerequest=False)
 
-            # Free up new resources
-            self.rec.release("sim", 1, rerequest=False)
+        # Add the result to the database
+        self.database.append((result.args[0], result.value))
 
-            # Add the result to the database
-            self.database.append((result.args[0], result.value))
+        # Append it to the output deck
+        with open(self.result_path, 'a') as fp:
+            print(result.json(exclude={'inputs'}), file=fp)
 
-            # Append it to the output deck
-            with open(self.result_path, 'a') as fp:
-                print(result.json(exclude={'inputs'}), file=fp)
+        # If we hit the database size, stop receiving tasks
+        if len(self.database) >= self.n_guesses:
+            self.done.set()
 
     @agent
     def thinker_worker(self):

@@ -43,11 +43,33 @@ to the constructor for this feature to be available.
 
 See the documentation for :class:`colmena.thinker.resources.ResourceCounter`.
 
-Configurating Agents
---------------------
+Configuring General Agents
+--------------------------
 
 Agent threads in Colmena take a few different configuration options.
 For example, the ``critical`` keyword argument means that the ``self.done`` attribute will not
 be flagged when this thread executes.
 
 See :func:`colmena.thinker.agent` for more details.
+
+Special-Purpose Agents
+----------------------
+
+There are a few common patterns of agents within Colmena,
+such as agents that wait for results to become available in a queue.
+We provide decorators that simplify creating agents for such tasks.
+
+Result Processing Agents
+++++++++++++++++++++++++
+
+The :func:`colmena.thinker.result_processor` is for agents that respond to results becoming available.
+It takes a single argument that defines which topic queue to be associated with and
+must decorate a function that takes Result object as an input.
+
+.. code-block:: python
+
+    class Thinker(BaseThinker):
+        @result_processor(topic='simulation')
+        def process(self, result: Result):
+            # Process results
+
