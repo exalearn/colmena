@@ -9,7 +9,7 @@ from colmena.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
-from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
+from parsl.executors import HighThroughputExecutor
 from parsl.providers import LocalProvider
 from functools import partial, update_wrapper
 from parsl.config import Config
@@ -109,10 +109,7 @@ class Thinker(BaseThinker):
             batch_size: Number of simulations to run in parallel
             n_guesses: Number of guesses the Thinker can make
         """
-        super().__init__(queues)
-
-        # Make the resource tracker
-        self.rec = ResourceCounter(batch_size, task_types=["ml", "sim"])
+        super().__init__(queues, resource_counter=ResourceCounter(batch_size, task_types=["ml", "sim"]))
 
         # Saving parameters
         self.retrain_after = retrain_after

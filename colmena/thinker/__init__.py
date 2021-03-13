@@ -8,6 +8,7 @@ import os
 import logging
 
 from colmena.redis.queue import ClientQueues
+from colmena.thinker.resources import ResourceCounter
 
 logger = logging.getLogger(__name__)
 
@@ -83,21 +84,25 @@ class BaseThinker(Thread):
 
     The decorator will tell Colmena to launch that method as a separate thread
     when the "Thinker" thread is started.
-    Colmena will also create a distinct logger for the
+    Colmena will also create a distinct logger for each of the agents to that is
+    accessible as the :meth:`logger` property.
 
-    Start the thread by calling ``.start()``
-
-    Args:
-        queue: Queue wrapper used to communicate with method server
-        daemon: Whether to launch this as a daemon thread
-        **kwargs: Options passed to :class:`Thread`
+    Start the thinker by calling ``.start()``
     """
 
-    def __init__(self, queue: ClientQueues, daemon: bool = True, **kwargs):
-        """"""
+    def __init__(self, queue: ClientQueues, resource_counter: Optional[ResourceCounter] = None,
+                 daemon: bool = True, **kwargs):
+        """
+            Args:
+                queue: Queue wrapper used to communicate with method server
+                resource_counter: Utility to used track resource utilization
+                daemon: Whether to launch this as a daemon thread
+                **kwargs: Options passed to :class:`Thread`
+        """
         super().__init__(daemon=daemon, **kwargs)
 
-        # Create the base logger
+        # Define thinker-wide collectives
+        self.rec = resource_counter
         self.queues = queue
 
         # Create some basic events and locks

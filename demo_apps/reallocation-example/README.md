@@ -25,7 +25,7 @@ of new simulations have completed.
 
 We divide the application into three threads: simulation submitter, simulation receiver, and thinker.
 The threads communicate data between them using a shared database (a Python dictionary),
-a task queue, and a "resource tracker" (see [Colmena Docs](https://colmena.readthedocs.io/en/latest/source/colmena.thinker.html#module-colmena.thinker.resources>)).
+a task queue, and a "resource tracker" (see [Colmena Docs](https://colmena.readthedocs.io/en/latest/source/colmena.thinker.html#module-colmena.thinker.resources)).
 
 The allocation states with an empty database, a task queue filled with tasks in a random order,
 and all resources dedicated to simulation tasks.
