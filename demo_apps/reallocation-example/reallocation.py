@@ -130,7 +130,7 @@ class Thinker(BaseThinker):
         self.done = Event()
 
         # Start by allocating all of the resources to the simulation task
-        self.rec.reallocate(None, "sim", self.rec.unallocated_nodes)
+        self.rec.reallocate(None, "sim", self.rec.unallocated_slots)
 
     @agent
     def simulation_dispatcher(self):
