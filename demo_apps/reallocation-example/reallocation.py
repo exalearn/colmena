@@ -1,7 +1,7 @@
 """Perform GPR Active Learning where we periodicially dedicate resources to
 re-prioritizing a list of simulations to run"""
 from colmena.models import Result
-from colmena.thinker import BaseThinker, agent, result_processor
+from colmena.thinker import BaseThinker, agent, result_processor, task_submitter
 from colmena.method_server import ParslMethodServer
 from colmena.thinker.resources import ResourceCounter
 from colmena.redis.queue import ClientQueues, make_queue_pairs
@@ -132,17 +132,11 @@ class Thinker(BaseThinker):
         # Start by allocating all of the resources to the simulation task
         self.rec.reallocate(None, "sim", self.rec.unallocated_slots)
 
-    @agent
+    @task_submitter(task_type="sim", n_slots=1)
     def simulation_dispatcher(self):
         """Dispatch tasks"""
-
-        # Until done, request resources and then submit task once available
-        while not self.done.is_set():
-            while not self.rec.acquire("sim", 1, timeout=1):
-                if self.done.is_set():
-                    return
-            with self.queue_lock:
-                self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
+        with self.queue_lock:
+            self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
 
     @result_processor(topic="doer")
     def simulation_receiver(self, result: Result):
