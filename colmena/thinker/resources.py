@@ -1,9 +1,13 @@
 """Utilities for tracking resources"""
-from threading import Semaphore, Lock
+from threading import Semaphore, Lock, Event
 from typing import List, Dict, Optional
+from time import monotonic
+from math import inf
 import logging
 
 logger = logging.getLogger(__name__)
+
+_CANCEL_CHECK_FREQ = 1.0
 
 
 class ResourceCounter:
@@ -99,8 +103,7 @@ class ResourceCounter:
             raise KeyError(f'Unknown task name: {task}')
         return self._availability[task]._value
 
-    def release(self, task: str, n_slots: int, rerequest: bool = True, timeout: float = -1)\
-            -> Optional[bool]:
+    def release(self, task: str, n_slots: int, rerequest: bool = True, timeout: float = -1) -> Optional[bool]:
         """Register that nodes for a particular task are available
         and, by default, re-request those nodes for the same task.
 
@@ -121,8 +124,7 @@ class ResourceCounter:
             return self.acquire(task, n_slots, timeout=timeout)
         return None
 
-    # TODO (warlt): Allow partial fulfillment?
-    def acquire(self, task: str, n_slots: int, timeout: float = -1) -> bool:
+    def acquire(self, task: str, n_slots: int, timeout: float = -1, cancel_if: Optional[Event] = None) -> bool:
         """Request a certain number of nodes for a particular task
 
         Draws only from the pool of nodes allocated to this task
@@ -131,23 +133,40 @@ class ResourceCounter:
             task: Name of the task
             n_slots: Number of slots to request
             timeout: Maximum time to wait for the request to be filled
+            cancel_if: Cancel the request if this event happens
         Returns:
             Whether the request was fulfilled
         """
 
-        # Acquire the lock for getting the hold over the
-        lock_acquired = self._availability_lock[task].acquire(timeout=timeout)
-        if not lock_acquired:
-            return lock_acquired
+        # Determine when this operation will time out
+        if timeout > 0:
+            end_time = monotonic() + timeout
+        else:
+            end_time = inf
+
+        # Set a small timeout if we are also checking for a condition
+        if cancel_if:
+            timeout = _CANCEL_CHECK_FREQ
+
+        # Acquire the lock for getting the hold
+        lock_acquired = False
+        while not lock_acquired:
+            lock_acquired = self._availability_lock[task].acquire(timeout=timeout)
+            if (cancel_if is not None and cancel_if.is_set()) or monotonic() > end_time:
+                if lock_acquired:
+                    self._availability_lock[task].release()
+                return False
 
         # Wait until all nodes are acquired
         n_acquired = 0
         success = True
-        for _ in range(n_slots):
-            success = self._availability[task].acquire(timeout=timeout)
-            if not success:
+        while n_acquired < n_slots:
+            acq_success = self._availability[task].acquire(timeout=timeout)
+            if (cancel_if is not None and cancel_if.is_set()) or monotonic() > end_time:
+                success = False
                 break
-            n_acquired += 1
+            if acq_success:
+                n_acquired += 1
 
         # Let another thread use this class
         self._availability_lock[task].release()
@@ -160,7 +179,7 @@ class ResourceCounter:
         return success
 
     def reallocate(self, task_from: Optional[str], task_to: Optional[str], n_slots: int,
-                   timeout: float = -1) -> bool:
+                   timeout: float = -1, cancel_if: Optional[Event] = None) -> bool:
         """Transfer computer resources from one task to another
 
         Args:
@@ -168,12 +187,13 @@ class ResourceCounter:
             task_to: Which task to add resources to (None to de-allocate nodes)
             n_slots: Number of nodes to request
             timeout: Maximum time to wait for the request to be filled
+            cancel_if: Cancel the request if this event happens
         Returns:
             Whether request was fulfilled
         """
 
         # Pull nodes from the remaining
-        acq_success = self.acquire(task_from, n_slots, timeout)
+        acq_success = self.acquire(task_from, n_slots, timeout, cancel_if)
 
         # If successful, push those resources to the target pool
         if acq_success:

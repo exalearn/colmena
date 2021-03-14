@@ -1,3 +1,5 @@
+from threading import Timer, Event
+
 from pytest import fixture
 
 from colmena.thinker.resources import ResourceCounter
@@ -46,3 +48,16 @@ def test_allocations(rec):
     assert rec.available_slots("ml") == 0
     assert rec.allocated_slots("sim") == 4
     assert rec.unallocated_slots == 0
+
+    # Test out the "cancel if" events
+    stop = Event()
+    stop.set()
+    assert not rec.acquire("sim", n_slots=5, cancel_if=stop)
+    assert rec.available_slots("sim") == 4
+
+    stop.clear()
+    t = Timer(0.2, function=stop.set)
+    t.start()
+    assert not rec.acquire("sim", n_slots=5, cancel_if=stop)
+    assert rec.available_slots("sim") == 4
+    assert stop.is_set()
