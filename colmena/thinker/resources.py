@@ -103,9 +103,9 @@ class ResourceCounter:
             raise KeyError(f'Unknown task name: {task}')
         return self._availability[task]._value
 
-    def release(self, task: str, n_slots: int, rerequest: bool = True, timeout: float = -1) -> Optional[bool]:
+    def release(self, task: Optional[str], n_slots: int, rerequest: bool = False, timeout: float = -1) -> Optional[bool]:
         """Register that nodes for a particular task are available
-        and, by default, re-request those nodes for the same task.
+        and, optionally, re-request those nodes for the same task.
 
         Blocks until the task request completes
 
@@ -124,7 +124,7 @@ class ResourceCounter:
             return self.acquire(task, n_slots, timeout=timeout)
         return None
 
-    def acquire(self, task: str, n_slots: int, timeout: float = -1, cancel_if: Optional[Event] = None) -> bool:
+    def acquire(self, task: Optional[str], n_slots: int, timeout: float = -1, cancel_if: Optional[Event] = None) -> bool:
         """Request a certain number of nodes for a particular task
 
         Draws only from the pool of nodes allocated to this task

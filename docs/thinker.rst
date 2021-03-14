@@ -71,5 +71,20 @@ must decorate a function that takes Result object as an input.
     class Thinker(BaseThinker):
         @result_processor(topic='simulation')
         def process(self, result: Result):
-            # Process results
+            # Do some compute that that result
+            self.database.append((result.args, results.value))
 
+Task Submission Agents
+++++++++++++++++++++++
+
+The task submission agents react to the availability of computational resources.
+The :func:`colmena.thinker.task_submitter` decorator tasks the pool of resources
+to draw from and the number of slots needed for this agent to begin processing.
+Agent functions have no arguments.
+
+.. code-block:: python
+
+    class Thinker(BaseThinker)
+        @task_submitter(n_slots=4, task_type="simulation")
+        def submit_new_simulation(self):
+            self.queues.submit_task(self.task_queue.pop(), method='simulate')

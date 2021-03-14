@@ -61,6 +61,35 @@ def result_processor(func: Optional[Callable] = None, topic: Optional[str] = Non
     return decorator(func)
 
 
+def _task_submitter_agent(thinker: 'BaseThinker', process_func: Callable, task_type: str, n_slots: int):
+    """Wrapper function for task submission agents"""
+    while not thinker.done.is_set():
+        # Wait until resources are free or thinker.done is set
+        acq_success = thinker.rec.acquire(task_type, n_slots, cancel_if=thinker.done)
+        if acq_success:
+            process_func(thinker)
+
+
+def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slots: int = 1):
+    """Decorator that builds agents which respond to computing resources becoming available
+
+    Decorated functions should assume that resources are available and reserved when the function is called
+
+    Args:
+        func: Do not directly pass this variable. It is used as an argument to the decorator
+        task_type: Name of task pool from which to request resources
+        n_slots: Number of resources to request
+    """
+
+    def decorator(f: Callable):
+        output = partial(_task_submitter_agent, process_func=f, task_type=task_type, n_slots=n_slots)
+        output = agent(output)
+        return update_wrapper(output, f)
+    if func is None:
+        return decorator
+    return decorator(func)
+
+
 def _launch_agent(func: Callable, thinker: 'BaseThinker'):
     """Shim function for launching an agent
 

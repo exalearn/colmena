@@ -6,16 +6,18 @@ from pytest import fixture, mark
 
 from colmena.models import Result
 from colmena.redis.queue import make_queue_pairs
-from colmena.thinker import BaseThinker, agent, result_processor
+from colmena.thinker import BaseThinker, agent, result_processor, task_submitter
+from colmena.thinker.resources import ResourceCounter
 
 
 class ExampleThinker(BaseThinker):
 
-    def __init__(self, queues, flag: Event, daemon: bool):
-        super().__init__(queues, daemon=daemon)
+    def __init__(self, queues, rec, flag: Event, daemon: bool):
+        super().__init__(queues, rec, daemon=daemon)
         self.flag = flag
         self.func_ran = False
         self.last_value = None
+        self.submitted = None
 
     @agent(critical=False)
     def function(self):
@@ -29,6 +31,11 @@ class ExampleThinker(BaseThinker):
     def process_results(self, result: Result):
         self.last_value = result.value
 
+    @task_submitter(n_slots=1)
+    def submit_task(self):
+        assert self.rec.available_slots(None) == 0
+        self.submitted = True
+
 
 @fixture()
 def queues():
@@ -41,7 +48,8 @@ def test_detection():
     assert hasattr(ExampleThinker.critical_function, '_colmena_agent')
     assert getattr(ExampleThinker.critical_function, '_colmena_critical')
     assert hasattr(ExampleThinker.process_results, '_colmena_agent')
-    assert len(ExampleThinker.list_agents()) == 3
+    assert hasattr(ExampleThinker.submit_task, '_colmena_agent')
+    assert len(ExampleThinker.list_agents()) == 4
     assert 'function' in [a.__name__ for a in ExampleThinker.list_agents()]
 
 
@@ -50,7 +58,9 @@ def test_run(queues):
     # Make the server and thinker
     client, server = queues
     flag = Event()
-    th = ExampleThinker(client, flag, daemon=True)
+    rec = ResourceCounter(1, [])
+    rec.acquire(None, 1)
+    th = ExampleThinker(client, rec, flag, daemon=True)
 
     # Launch it and wait for it to run
     th.start()
@@ -62,10 +72,18 @@ def test_run(queues):
     assert th.is_alive()
     assert not th.done.is_set()
 
-    # Push a result to the queue and make sure it was received
+    # Test task processor: Push a result to the queue and make sure it was received
     server.send_result(Result(inputs=((1,), {}), value=4))
     sleep(.1)
     assert th.last_value == 4
+
+    # Test task submitter: Release the nodes and see if it submits
+    assert not th.submitted
+    th.rec.release(None, 1)
+    sleep(0.1)
+    assert th.is_alive()
+    assert th.submitted
+    assert rec.available_slots(None) == 0
 
     # Set the "finish" flag
     flag.set()
