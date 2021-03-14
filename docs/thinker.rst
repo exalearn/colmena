@@ -88,3 +88,23 @@ Agent functions have no arguments.
         @task_submitter(n_slots=4, task_type="simulation")
         def submit_new_simulation(self):
             self.queues.submit_task(self.task_queue.pop(), method='simulate')
+
+
+Event Responder Agent
++++++++++++++++++++++
+
+The :func:`colmena.thinker.event_responder` waits for an event associated with an thinker being set.
+The ``event_name`` is the name of a class attribute of the thinker class.
+
+.. code-block:: python
+
+    class Thinker(BaseThinker):
+
+        def __init__(self, queues):
+            super().__init__(queues)
+            self.flag = Event()
+
+        @event_responder(event_name="flag")
+        def responder(self):
+            self.flag.clear()  # Mark that we saw the event
+            # Do something about it

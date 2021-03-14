@@ -6,7 +6,7 @@ from pytest import fixture, mark
 
 from colmena.models import Result
 from colmena.redis.queue import make_queue_pairs
-from colmena.thinker import BaseThinker, agent, result_processor, task_submitter
+from colmena.thinker import BaseThinker, agent, result_processor, task_submitter, event_responder
 from colmena.thinker.resources import ResourceCounter
 
 
@@ -18,6 +18,8 @@ class ExampleThinker(BaseThinker):
         self.func_ran = False
         self.last_value = None
         self.submitted = None
+        self.event = Event()
+        self.event_responded = False
 
     @agent(critical=False)
     def function(self):
@@ -36,6 +38,11 @@ class ExampleThinker(BaseThinker):
         assert self.rec.available_slots(None) == 0
         self.submitted = True
 
+    @event_responder(event_name='event')
+    def responder(self):
+        self.event_responded = True
+        self.event.clear()
+
 
 @fixture()
 def queues():
@@ -49,7 +56,8 @@ def test_detection():
     assert getattr(ExampleThinker.critical_function, '_colmena_critical')
     assert hasattr(ExampleThinker.process_results, '_colmena_agent')
     assert hasattr(ExampleThinker.submit_task, '_colmena_agent')
-    assert len(ExampleThinker.list_agents()) == 4
+    assert hasattr(ExampleThinker.responder, '_colmena_agent')
+    assert len(ExampleThinker.list_agents()) == 5
     assert 'function' in [a.__name__ for a in ExampleThinker.list_agents()]
 
 
@@ -84,6 +92,15 @@ def test_run(queues):
     assert th.is_alive()
     assert th.submitted
     assert rec.available_slots(None) == 0
+
+    # Test event responder: Trigger events and see if it triggers
+    assert not th.event.is_set()
+    assert not th.event_responded
+    th.event.set()
+    sleep(0.1)
+    assert th.is_alive()
+    assert th.event_responded
+    assert not th.event.is_set()
 
     # Set the "finish" flag
     flag.set()

@@ -90,6 +90,40 @@ def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slo
     return decorator(func)
 
 
+def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event_name: str):
+    """Wrapper for event processing agents"""
+
+    # Get the event
+    if not hasattr(thinker, event_name):
+        raise ValueError(f'Thinker lacks an event named {event_name}')
+    event: Event = getattr(thinker, event_name)
+
+    while not thinker.done.is_set():
+        # Wait until resources are free or thinker.done is set
+        if event.wait(_DONE_REACTION_TIME):
+            process_func(thinker)
+
+
+def event_responder(func: Optional[Callable] = None, event_name: str = None):
+    """Decorator that builds agents which respond to an event being set
+
+    The Thinker associated with this agent must have a class attribute that is an :class:`Event`
+    with the same name as ``event_name``.
+
+    Args:
+        func: Do not directly pass this variable. It is used as an argument to the decorator
+        event_name: Name of the event to watch
+    """
+
+    def decorator(f: Callable):
+        output = partial(_event_responder_agent, process_func=f, event_name=event_name)
+        output = agent(output)
+        return update_wrapper(output, f)
+    if func is None:
+        return decorator
+    return decorator(func)
+
+
 def _launch_agent(func: Callable, thinker: 'BaseThinker'):
     """Shim function for launching an agent
 
