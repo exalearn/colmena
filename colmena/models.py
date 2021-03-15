@@ -1,3 +1,4 @@
+import colmena
 import json
 import logging
 import pickle as pkl
@@ -60,7 +61,7 @@ class Result(BaseModel):
 
     Each instance of this class stores the inputs and outputs to the function along with some tracking
     information allowing for performance analysis (e.g., time submitted to Queue, time received by client).
-    All times are listed as UTC Unix timestamps.
+    All times are listed as Unix timestamps.
 
     The Result class also handles serialization of the data to be transmitted over a RedisQueue
     """
@@ -89,12 +90,16 @@ class Result(BaseModel):
     time_deserialize_inputs: float = Field(None, description="Time required to deserialize inputs on worker")
     time_serialize_results: float = Field(None, description="Time required to serialize results on worker")
     time_deserialize_results: float = Field(None, description="Time required to deserialize results on client")
+    time_async_resolve_proxies: float = Field(None, description="Time required to scan function inputs and start async resolves of proxies")
 
     # Serialization options
     serialization_method: SerializationMethod = Field(SerializationMethod.JSON,
                                                       description="Method used to serialize input data")
     keep_inputs: bool = Field(True, description="Whether to keep the inputs with the result object or delete "
                                                 "them after the method has completed")
+    value_server_threshold: int = Field(
+            None, description="Object size threshold (bytes) at which input/value "
+                              "objects are stored in value server before serialization")
 
     def __init__(self, inputs: Tuple[Tuple[Any], Dict[str, Any]], **kwargs):
         """
@@ -105,7 +110,7 @@ class Result(BaseModel):
 
         # Mark "created" only if the value is not already set
         if 'time_created' not in kwargs:
-            self.time_created = datetime.utcnow().timestamp()
+            self.time_created = datetime.now().timestamp()
 
     @property
     def args(self) -> Tuple[Any]:
@@ -117,19 +122,19 @@ class Result(BaseModel):
 
     def mark_result_received(self):
         """Mark that a completed computation was received by a client"""
-        self.time_result_received = datetime.utcnow().timestamp()
+        self.time_result_received = datetime.now().timestamp()
 
     def mark_input_received(self):
         """Mark that a method server has received a value"""
-        self.time_input_received = datetime.utcnow().timestamp()
+        self.time_input_received = datetime.now().timestamp()
 
     def mark_compute_started(self):
         """Mark that the compute for a method has started"""
-        self.time_compute_started = datetime.utcnow().timestamp()
+        self.time_compute_started = datetime.now().timestamp()
 
     def mark_result_sent(self):
         """Mark when a result is sent from the method server"""
-        self.time_result_sent = datetime.utcnow().timestamp()
+        self.time_result_sent = datetime.now().timestamp()
 
     def set_result(self, result: Any, runtime: float = None):
         """Set the value of this computation
@@ -159,6 +164,14 @@ class Result(BaseModel):
         _value = self.value
         _inputs = self.inputs
         try:
+            if self.value_server_threshold is not None:
+                _args = colmena.value_server.to_proxy_threshold(
+                        _inputs[0], self.value_server_threshold, self.serialization_method)
+                _kwargs = colmena.value_server.to_proxy_threshold(
+                        _inputs[1], self.value_server_threshold, self.serialization_method)
+                _inputs = (_args, _kwargs)
+                _value = colmena.value_server.to_proxy_threshold(
+                        _value, self.value_server_threshold, self.serialization_method)
             self.inputs = SerializationMethod.serialize(self.serialization_method, _inputs)
             self.value = SerializationMethod.serialize(self.serialization_method, _value)
             return perf_counter() - start_time

@@ -1,6 +1,7 @@
 """Parsl method server and related utilities"""
 import os
 import logging
+import platform
 from functools import partial
 from queue import Queue
 from threading import Thread
@@ -15,9 +16,10 @@ from parsl.config import Config
 from parsl.app.python import PythonApp
 from parsl.dataflow.futures import AppFuture
 
+from colmena.models import Result
 from colmena.method_server.base import BaseMethodServer
 from colmena.redis.queue import MethodServerQueues
-from colmena.models import Result
+from colmena.value_server import async_resolve_proxies
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,13 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Unpack the inputs
     result.time_deserialize_inputs = result.deserialize()
+
+    # Start resolving proxies from value server asynchronously
+    # We could include this in deserialization time?
+    start_time = perf_counter()
+    async_resolve_proxies(result.args)
+    async_resolve_proxies(result.kwargs)
+    result.time_async_resolve_proxies = perf_counter() - start_time
 
     # Execute the function
     start_time = perf_counter()
@@ -57,6 +66,14 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     result.set_result(output, end_time - start_time)
     if not success:
         result.success = False
+
+    # Add the worker information into the tasks, if available
+    if result.task_info is None:
+        result.task_info = {}
+    for tag in ['PARSL_WORKER_RANK', 'PARSL_WORKER_POOL_ID']:
+        if tag in os.environ:
+            result.task_info[tag] = os.environ[tag]
+    result.task_info['executor'] = platform.node()
 
     # Re-pack the results
     result.time_serialize_results = result.serialize()
@@ -216,6 +233,7 @@ class ParslMethodServer(BaseMethodServer):
             else:
                 function = method
                 options = {'executors': default_executors}
+                logger.info(f'Using default executors for {function.__name__}: {default_executors}')
 
             # Make the Parsl app
             name = function.__name__

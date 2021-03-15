@@ -1,0 +1,7 @@
+{
+    "task_input_size": 10,
+    "task_output_size": 10,
+    "task_count": 10,
+    "task_interval": 0.1,
+    "worker_count": 2
+}

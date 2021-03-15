@@ -1,13 +1,15 @@
-"""Perform GPR Active Learning where one threads continually re-prioritizes a list of
-simulations to run and a second thread sebmits """
+"""Perform GPR Active Learning where we periodicially dedicate resources to
+re-prioritizing a list of simulations to run"""
 from colmena.models import Result
-from colmena.thinker import BaseThinker, agent, result_processor
+from colmena.thinker import BaseThinker, agent, result_processor, task_submitter
 from colmena.method_server import ParslMethodServer
+from colmena.thinker.resources import ResourceCounter
 from colmena.redis.queue import ClientQueues, make_queue_pairs
+
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
-from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
+from parsl.executors import HighThroughputExecutor
 from parsl.providers import LocalProvider
 from functools import partial, update_wrapper
 from parsl.config import Config
@@ -91,23 +93,30 @@ def reprioritize_queue(database: List[Tuple[np.ndarray, float]],
 class Thinker(BaseThinker):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, queues: ClientQueues,  output_dir: str, dim: int = 2,
+    def __init__(self, queues: ClientQueues,
+                 output_dir: str,
+                 dim: int = 2,
+                 retrain_after: int = 5,
                  n_guesses: int = 100, batch_size: int = 10, opt_delay: float = 0,
                  search_space_size: int = 1000):
         """
         Args:
-            output_dir (str): Output path
-            dim (int): Dimensionality of optimization space
-            batch_size (int): Number of simulations to run in parallel
-            n_guesses (int): Number of guesses the Thinker can make
-            queues (ClientQueues): Queues for communicating with method server
+            queues: Queues to use to communicate with the method server
+            output_dir: Output path for the result data
+            dim: Dimensionality of optimization space
+            batch_size: Number of simulations to run in parallel
+            n_guesses: Number of guesses the Thinker can make
         """
-        super().__init__(queues)
+        super().__init__(queues, resource_counter=ResourceCounter(batch_size, task_types=["ml", "sim"]))
+
+        # Saving parameters
+        self.retrain_after = retrain_after
         self.n_guesses = n_guesses
         self.queues = queues
         self.batch_size = batch_size
         self.dim = dim
-        self.output_path = os.path.join(output_dir, 'results.json')
+        self.result_path = os.path.join(output_dir, 'results.json')
+        self.retrain_path = os.path.join(output_dir, 'retrain.json')
         self.opt_delay = opt_delay
 
         # Make an initial task queue and database
@@ -116,40 +125,44 @@ class Thinker(BaseThinker):
         self.database = []
 
         # Synchronization bits
-        self.has_data = Event()
+        self.sim_complete = Event()
         self.queue_lock = Lock()
         self.done = Event()
 
-    @result_processor(topic='doer')
-    def simulation_worker(self, result: Result):
-        """Dispatch tasks and update"""
+        # Start by allocating all of the resources to the simulation task
+        self.rec.reallocate(None, "sim", self.rec.unallocated_slots)
 
-        # Immediately send out a new one
+    @task_submitter(task_type="sim", n_slots=1)
+    def simulation_dispatcher(self):
+        """Dispatch tasks"""
         with self.queue_lock:
             self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
 
-        # Add the old task to the database
+    @result_processor(topic="doer")
+    def simulation_receiver(self, result: Result):
+        self.logger.info("Received a task result")
+
+        # Notify all that we have data!
+        self.sim_complete.set()
+        self.sim_complete.clear()
+
+        # Free up new resources
+        self.rec.release("sim", 1, rerequest=False)
+
+        # Add the result to the database
         self.database.append((result.args[0], result.value))
 
         # Append it to the output deck
-        with open(self.output_path, 'a') as fp:
+        with open(self.result_path, 'a') as fp:
             print(result.json(exclude={'inputs'}), file=fp)
 
-        # If have required amount, terminate program
-        if len(self.database) == self.n_guesses:
-            logging.info('Done running new calculations')
+        # If we hit the database size, stop receiving tasks
+        if len(self.database) >= self.n_guesses:
             self.done.set()
-
-        # Mark that we have some data now
-        self.has_data.set()
 
     @agent
     def thinker_worker(self):
         """Reprioritize task list"""
-
-        # Send out the initial tasks
-        for _ in range(self.batch_size):
-            self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
 
         # Make the GPR model
         gpr = Pipeline([
@@ -157,10 +170,18 @@ class Thinker(BaseThinker):
             ('gpr', GaussianProcessRegressor(normalize_y=True, kernel=kernels.RBF() * kernels.ConstantKernel()))
         ])
 
-        # Wait until we have data
-        self.has_data.wait()
-
         while not self.done.is_set():
+            # Wait until database reaches a certain size
+            retrain_size = len(self.database) + self.retrain_after
+            self.logger.info(f"Waiting for dataset to reach {retrain_size}")
+            while len(self.database) < retrain_size:
+                self.sim_complete.wait(timeout=5)
+                if self.done.is_set():
+                    return
+
+            # Request a node
+            self.rec.reallocate("sim", "ml", 1)
+
             # Send out an update task
             with self.queue_lock:
                 self.queues.send_inputs(self.database, gpr, self.task_queue,
@@ -173,14 +194,14 @@ class Thinker(BaseThinker):
 
             # Update the queue (requires locking)
             with self.queue_lock:
-                logging.info('Reordering task queue')
+                self.logger.info('Reordering task queue')
                 # Copy out the old values
                 current_queue = self.task_queue.copy()
                 self.task_queue.clear()
 
                 # Note how many of the tasks have been started
                 num_started = len(new_order) - len(current_queue)
-                logging.info(f'{num_started} jobs have completed in the meanwhile')
+                self.logger.info(f'{num_started} jobs have completed in the meanwhile')
 
                 # Compute the new position of tasks
                 new_order -= num_started
@@ -190,7 +211,14 @@ class Thinker(BaseThinker):
                     if i < 0:  # Task has already been sent out
                         continue
                     self.task_queue.append(current_queue[i])
-                logging.info(f'New queue contains {len(self.task_queue)} tasks')
+                self.logger.info(f'New queue contains {len(self.task_queue)} tasks')
+
+            # Give the nodes back to the simulation tasks
+            self.rec.reallocate("ml", "sim", 1)
+
+            # Save the result to disk
+            with open(self.retrain_path, 'a') as fp:
+                print(result.json(exclude={'inputs', 'value'}), file=fp)
 
 
 if __name__ == '__main__':
@@ -203,10 +231,12 @@ if __name__ == '__main__':
     parser.add_argument("--num-guesses", "-n", help="Total number of guesses", type=int, default=100)
     parser.add_argument("--num-parallel", "-p", help="Number of guesses to evaluate in parallel (i.e., the batch size)",
                         type=int, default=os.cpu_count())
+    parser.add_argument("--retrain-wait", type=int, help="Number of simulations to complete before retraining models",
+                        default=20)
     parser.add_argument("--dim",  help="Dimensionality of the Ackley function", type=int, default=4)
     parser.add_argument('--runtime', help="Average runtime for the target function", type=float, default=2)
-    parser.add_argument('--runtime-var', help="Average runtime for the target function", type=float, default=0.1)
-    parser.add_argument('--opt-delay', help="Minimum runtime for the optimization function", type=float, default=2.)
+    parser.add_argument('--runtime-var', help="Variance in runtime for the target function", type=float, default=1)
+    parser.add_argument('--opt-delay', help="Minimum runtime for the optimization function", type=float, default=20.)
     args = parser.parse_args()
 
     # Connect to the redis server
@@ -216,7 +246,7 @@ if __name__ == '__main__':
 
     # Make the output directory
     out_dir = os.path.join('runs',
-                           f'interleaved-N{args.num_guesses}-P{args.num_parallel}'
+                           f'reallocate-N{args.num_guesses}-P{args.num_parallel}'
                            f'-{datetime.now().strftime("%d%m%y-%H%M%S")}')
     os.makedirs(out_dir, exist_ok=False)
     with open(os.path.join(out_dir, 'params.json'), 'w') as fp:
@@ -235,7 +265,7 @@ if __name__ == '__main__':
         executors=[
             HighThroughputExecutor(
                 address="localhost",
-                label="simulation",
+                label="workers",
                 max_workers=args.num_parallel,
                 cores_per_worker=0.0001,
                 worker_port_range=(10000, 20000),
@@ -243,17 +273,7 @@ if __name__ == '__main__':
                     init_blocks=1,
                     max_blocks=1,
                 ),
-            ),
-            HighThroughputExecutor(
-                address="localhost",
-                label="task_generator",
-                max_workers=1,
-                provider=LocalProvider(
-                    init_blocks=1,
-                    max_blocks=1,
-                ),
-            ),
-            ThreadPoolExecutor(label="local_threads", max_threads=4)
+            )
         ],
         strategy=None,
     )
@@ -265,8 +285,7 @@ if __name__ == '__main__':
 
     my_rep = partial(reprioritize_queue, opt_delay=args.opt_delay)
     update_wrapper(my_rep, reprioritize_queue)
-    doer = ParslMethodServer([(my_ackley, {'executors': ['simulation']}),
-                              (my_rep, {'executors': ['task_generator']})],
+    doer = ParslMethodServer([my_ackley, my_rep],
                              server_queues, config)
     thinker = Thinker(client_queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
                       batch_size=args.num_parallel)
