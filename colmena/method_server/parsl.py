@@ -133,13 +133,13 @@ class _ErrorHandler(Thread):
                     if exc is None:
                         logger.debug(f'Task completed: {task}')
                         continue
-                    logger.debug(f'Task {task} with an exception: {exc}')
+                    logger.warning(f'Task {task} with an exception: {exc}')
 
                     # Pull out the result objects
                     queues: MethodServerQueues = task.task_def['args'][0]
                     topic: str = task.task_def['args'][1]
                     method_task = task.task_def['depends'][0]
-                    result_obj: Result = method_task.task_def['args'][1]
+                    result_obj: Result = method_task.task_def['args'][0]
                     result_obj.success = False
                     queues.send_result(result_obj, topic=topic)
 

@@ -380,6 +380,7 @@ class MethodServerQueues:
         elif output[1] == "null":
             raise KillSignalException('Kill signal received on task queue')
         topic, message = output
+        logger.debug(f'Received a task message with topic {topic} inbound queue')
 
         # Get the message
         task = Result.parse_raw(message)
