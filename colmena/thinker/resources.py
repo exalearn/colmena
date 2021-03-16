@@ -205,6 +205,7 @@ class ResourceCounter:
             with self._allocation_lock[task_from], self._allocation_lock[task_to]:
                 self._allocation[task_from] -= n_slots
                 self._allocation[task_to] += n_slots
+            logger.info(f'Transferred {n_slots} slots from {task_from} to {task_to}')
             # TODO (wardlt): Eventually provide some mechanism to inform a batch
             #   system that resources allocated to ``from_task`` should be released
 
