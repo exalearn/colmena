@@ -2,6 +2,7 @@ import colmena
 import json
 import logging
 import pickle as pkl
+import sys
 from datetime import datetime
 from enum import Enum
 from time import perf_counter
@@ -163,17 +164,29 @@ class Result(BaseModel):
         start_time = perf_counter()
         _value = self.value
         _inputs = self.inputs
+
+        def _serialize_and_proxy(value):
+            key = str(id(value))
+            value = SerializationMethod.serialize(self.serialization_method, value)
+            if (
+                self.value_server_threshold is not None and
+                sys.getsizeof(value) >= self.value_server_threshold
+            ):
+                value = colmena.value_server.to_proxy(
+                        value, key=key, is_serialized=True,
+                        serialization_method=self.serialization_method)
+                value = SerializationMethod.serialize(self.serialization_method, value)
+            return value
+
         try:
-            if self.value_server_threshold is not None:
-                _args = colmena.value_server.to_proxy_threshold(
-                        _inputs[0], self.value_server_threshold, self.serialization_method)
-                _kwargs = colmena.value_server.to_proxy_threshold(
-                        _inputs[1], self.value_server_threshold, self.serialization_method)
-                _inputs = (_args, _kwargs)
-                _value = colmena.value_server.to_proxy_threshold(
-                        _value, self.value_server_threshold, self.serialization_method)
-            self.inputs = SerializationMethod.serialize(self.serialization_method, _inputs)
-            self.value = SerializationMethod.serialize(self.serialization_method, _value)
+            args = tuple(map(_serialize_and_proxy, _inputs[0]))
+            kwargs = {k: _serialize_and_proxy(v) for k, v in _inputs[1].items()}
+            self.inputs = (args, kwargs)
+            if _value is not None:
+                if isinstance(_value, tuple):
+                    self.value = tuple(map(_serialize_and_proxy, _value))
+                else:
+                    self.value = _serialize_and_proxy(_value)
             return perf_counter() - start_time
         except Exception as e:
             # Put the original values back
@@ -189,16 +202,23 @@ class Result(BaseModel):
         """
         # Check that the data is actually a string
         start_time = perf_counter()
-        if not (isinstance(self.value, str) and isinstance(self.inputs, str)):
-            logger.warning('Data is not serialized, skipping deserialization.')
-            return perf_counter() - start_time
-
-        # Deserialize the data
         _value = self.value
         _inputs = self.inputs
+
+        def _deserialize(value):
+            if not isinstance(value, str):
+                return value
+            return SerializationMethod.deserialize(self.serialization_method, value)
+
         try:
-            self.inputs = SerializationMethod.deserialize(self.serialization_method, _inputs)
-            self.value = SerializationMethod.deserialize(self.serialization_method, _value)
+            args = tuple(map(_deserialize, _inputs[0]))
+            kwargs = {k: _deserialize(v) for k, v in _inputs[1].items()}
+            self.inputs = (args, kwargs)
+            if _value is not None:
+                if isinstance(_value, tuple):
+                    self.value = tuple(map(_deserialize, _value))
+                else:
+                    self.value = _deserialize(_value)
             return perf_counter() - start_time
         except Exception as e:
             # Put the original values back

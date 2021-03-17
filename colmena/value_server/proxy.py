@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 
 from concurrent.futures import ThreadPoolExecutor
@@ -10,6 +11,7 @@ import colmena.value_server as value_server
 from colmena.models import SerializationMethod
 
 default_pool = ThreadPoolExecutor()
+logger = logging.getLogger(__name__)
 
 
 class Factory():
@@ -64,7 +66,7 @@ class Factory():
         # If the value is locally cached by the value server, starting up
         # a separate thread to retrieve a cached value will be slower than
         # just getting the value from the cache
-        if value_server.server.is_cached(self.key, self.timestamp):
+        if value_server.server.is_cached(self.key, self.strict):
             return
 
         self.async_get_future = default_pool.submit(
@@ -99,7 +101,17 @@ class ObjectProxy(Proxy):
         return self.__reduce__()
 
     def async_resolve(self) -> None:
-        if not hasattr(self, '__target__'):
+        try:
+            object.__getattribute__(self, '__target__')
+        except AttributeError:
+            # TODO(gpauloski): there is an edge case here where is async_resolve()
+            # is called twice, both cases fail to get attribute __target__ and then
+            # call __factory__.async_resolve() twice. If, between the two calls
+            # to async_resolve(), the cache entry for this object is removed, then
+            # there will be a thread created to resolve the object but the result
+            # of the thread is never used. In practice this has no consequences
+            # beyond the performance hit of starting a thread to query the value
+            # server. Generally async_resolve() should not be called twice :)
             self.__factory__.async_resolve()
 
     def reset_proxy(self) -> None:
@@ -111,7 +123,8 @@ class ObjectProxy(Proxy):
 def to_proxy(obj: Any,
              key: Optional[str] = None,
              serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
-             strict: bool = False
+             strict: bool = False,
+             is_serialized: bool = False
 ) -> None:
     """Put object in value server and return proxy object
 
@@ -121,13 +134,15 @@ def to_proxy(obj: Any,
         serialization_method (SerializationMethod): serialization method
         strict (bool): force strict guarentees that Value Server always returns
             most recent object associated with this key
+        is_serialized (bool): true if `obj` is already serialized using
+            `serialization_method`
 
     Returns:
         ObjectProxy
     """
     if key is None:
         key = str(id(obj))
-    value_server.server.set(key, obj, serialization_method)
+    value_server.server.set(key, obj, serialization_method, is_serialized=is_serialized)
     return ObjectProxy(Factory(key, serialization_method, strict))
 
 

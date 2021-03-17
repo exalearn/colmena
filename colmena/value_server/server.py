@@ -122,6 +122,7 @@ class ValueServer:
             key: str,
             obj: Any,
             serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
+            is_serialized: bool = False
     ) -> None:
         """Set object in value server
 
@@ -130,9 +131,12 @@ class ValueServer:
             obj (object)
             serialization_method (SerializationMethod): serialization method
                 to use for serializing object before putting in value server
+            is_serialized (bool): true if `obj` is already serialized using
+                `serialization_method`
         """
-        value = SerializationMethod.serialize(serialization_method, obj)
-        self.redis_client.set(key, value)
+        if not is_serialized:
+            obj = SerializationMethod.serialize(serialization_method, obj)
+        self.redis_client.set(key, obj)
         self.redis_client.set(key + '_timestamp', time.time())
 
 

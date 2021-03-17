@@ -1,8 +1,10 @@
 """Tests for ObjectProxy"""
 import numpy as np
+import pickle as pkl
 
 from pytest import raises, mark, fixture
 
+from colmena import value_server
 from colmena.value_server import to_proxy
 from colmena.value_server import to_proxy_threshold
 from colmena.value_server import ObjectProxy
@@ -77,6 +79,34 @@ def test_proxy_serialize() -> None:
     # Should fail because np array not jsonable
     with raises(TypeError):
         x = to_proxy(np.array([1, 2, 3]), serialization_method='json')
+
+
+@mark.timeout(30)
+def test_serialize_proxy() -> None:
+    """Test serializing ObjectProxy"""
+    x = to_proxy([1, 2, 3])
+    # Currently, object proxies cannot be JSON serialized
+    # x_json = json.dumps(x)
+    # assert x == json.loads(x_json)
+    x_pickle = pkl.dumps(x).hex()
+    assert x == pkl.loads(bytes.fromhex(x_pickle))
+
+
+@mark.timeout(30)
+def test_async_resolve() -> None:
+    """Test async proxy resolving"""
+    key = str(np.random.randint(0, 100000))
+    x = to_proxy([1, 2, 3], key=key)
+    assert x.__factory__.async_get_future is None
+    assert not value_server.server.is_cached(key)
+    x.async_resolve()
+    assert x.__factory__.async_get_future is not None
+    assert isinstance(x, list)
+    assert x.__factory__.async_get_future is None
+    # x is already resolved so this should be a no-op
+    x.async_resolve()
+    assert x.__factory__.async_get_future is None
+    assert isinstance(x, list)
 
 
 @mark.timeout(30)

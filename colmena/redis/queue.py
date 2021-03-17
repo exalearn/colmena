@@ -35,9 +35,9 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
         hostname (str): Hostname of the Redis server
         port (int): Port on which to access Redis
         name (str): Name of the MethodServer
+        serialization_method (SerializationMethod): serialization type for inputs/outputs
         keep_inputs (bool): Whether to keep the inputs after the method has finished executing
         clean_slate (bool): Whether to flush the queues before launching
-        serialization_method (bool): Whether to serialize input and output objects before communicating them
         topics ([str]): List of topics used when having the client filter different types of tasks
         value_server_threshold (int): Input/output objects larger than this threshold
             (in bytes) will be stored in the value server. If None, value server
@@ -216,7 +216,7 @@ class ClientQueues:
     """
 
     def __init__(self, hostname: str, port: int = 6379, name: Optional[str] = None,
-                 serialization_method: SerializationMethod = SerializationMethod.JSON,
+                 serialization_method: Union[str, SerializationMethod] = SerializationMethod.JSON,
                  keep_inputs: bool = True,
                  topics: Optional[Iterable] = None,
                  value_server_threshold: Optional[int] = None,
