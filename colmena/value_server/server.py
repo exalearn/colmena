@@ -70,11 +70,22 @@ class ValueServer:
             host=hostname, port=port, decode_responses=True)
         self.cache = LRUCache(LRU_CACHE_SIZE)
 
+    def evict(self, key: str) -> None:
+        """Evicts value corresponding to `key` from Redis
+
+        Warning:
+            Will not evict from the local worker caches.
+
+        Args:
+            key (str): key corresponding to value to evict
+        """
+        self.redis_client.delete(key)
+
     def is_cached(self, key: str, strict: bool = False) -> bool:
         """Check if key is cached locally
 
         Args:
-            key (str)
+            key (str): key corresponding to possibly cached value
             strict (bool): if True, cached value must be as new as remote
 
         Returns:

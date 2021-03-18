@@ -143,7 +143,7 @@ def to_proxy(obj: Any,
             `serialization_method`
 
     Returns:
-        (ObjectProxy) Proxy wrapping `obj` or `obj` if `obj` is already a proxy 
+        (ObjectProxy) Proxy wrapping `obj` or `obj` if `obj` is already a proxy
     """
     if isinstance(obj, ObjectProxy):
         return obj

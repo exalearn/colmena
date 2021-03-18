@@ -38,6 +38,18 @@ def test_value_server() -> None:
 
 
 @mark.timeout(30)
+def test_value_server_eviction() -> None:
+    """Test value server evictions"""
+    value_server.server.set('test_key', [1, 2, 3])
+    assert value_server.server.get('test_key') == [1, 2, 3]
+    value_server.server.evict('test_key')
+    # Value still exists in local cache
+    assert value_server.server.get('test_key') == [1, 2, 3]
+    # Value will not exists in Redis
+    assert value_server.server.redis_client.get('test_key') is None
+
+
+@mark.timeout(30)
 def test_value_server_strict() -> None:
     """Test value server strict timestamp guarentees"""
     value_server.server.set('test_key', [1, 2, 3])
