@@ -197,6 +197,9 @@ to/from the method server(s) using the Redis queues.
 Colmena provides as :class:`colmena.thinker.BaseThinker` class to simplify creating
 multi-threaded applications.
 
+This part of the guide describes the high-level features of the ``BaseThinker`` class.
+Advanced features are described in `the next section <./thinker.html>`_.
+
 Working with ``BaseThinker``
 ++++++++++++++++++++++++++++
 

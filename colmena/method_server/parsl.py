@@ -1,6 +1,7 @@
 """Parsl method server and related utilities"""
 import os
 import logging
+import platform
 from functools import partial
 from queue import Queue
 from threading import Thread
@@ -69,6 +70,14 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     result.set_result(output, end_time - start_time)
     if not success:
         result.success = False
+
+    # Add the worker information into the tasks, if available
+    if result.task_info is None:
+        result.task_info = {}
+    for tag in ['PARSL_WORKER_RANK', 'PARSL_WORKER_POOL_ID']:
+        if tag in os.environ:
+            result.task_info[tag] = os.environ[tag]
+    result.task_info['executor'] = platform.node()
 
     # Re-pack the results
     result.time_serialize_results = result.serialize()
@@ -228,6 +237,7 @@ class ParslMethodServer(BaseMethodServer):
             else:
                 function = method
                 options = {'executors': default_executors}
+                logger.info(f'Using default executors for {function.__name__}: {default_executors}')
 
             # Make the Parsl app
             name = function.__name__

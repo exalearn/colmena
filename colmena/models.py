@@ -62,7 +62,7 @@ class Result(BaseModel):
 
     Each instance of this class stores the inputs and outputs to the function along with some tracking
     information allowing for performance analysis (e.g., time submitted to Queue, time received by client).
-    All times are listed as UTC Unix timestamps.
+    All times are listed as Unix timestamps.
 
     The Result class also handles serialization of the data to be transmitted over a RedisQueue
     """
@@ -113,7 +113,7 @@ class Result(BaseModel):
 
         # Mark "created" only if the value is not already set
         if 'time_created' not in kwargs:
-            self.time_created = datetime.utcnow().timestamp()
+            self.time_created = datetime.now().timestamp()
 
     @property
     def args(self) -> Tuple[Any]:
@@ -125,19 +125,19 @@ class Result(BaseModel):
 
     def mark_result_received(self):
         """Mark that a completed computation was received by a client"""
-        self.time_result_received = datetime.utcnow().timestamp()
+        self.time_result_received = datetime.now().timestamp()
 
     def mark_input_received(self):
         """Mark that a method server has received a value"""
-        self.time_input_received = datetime.utcnow().timestamp()
+        self.time_input_received = datetime.now().timestamp()
 
     def mark_compute_started(self):
         """Mark that the compute for a method has started"""
-        self.time_compute_started = datetime.utcnow().timestamp()
+        self.time_compute_started = datetime.now().timestamp()
 
     def mark_result_sent(self):
         """Mark when a result is sent from the method server"""
-        self.time_result_sent = datetime.utcnow().timestamp()
+        self.time_result_sent = datetime.now().timestamp()
 
     def set_result(self, result: Any, runtime: float = None):
         """Set the value of this computation

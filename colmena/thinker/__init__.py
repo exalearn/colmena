@@ -8,6 +8,7 @@ import os
 import logging
 
 from colmena.redis.queue import ClientQueues
+from colmena.thinker.resources import ResourceCounter
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def _launch_agent(func: Callable, worker: 'BaseThinker'):
     worker.logger.info(f'{name} completed')
 
 
-class AgentData(local):
+class _AgentData(local):
     """Data local to a certain agent thread
 
     Attributes:
@@ -83,37 +84,32 @@ class BaseThinker(Thread):
 
     The decorator will tell Colmena to launch that method as a separate thread
     when the "Thinker" thread is started.
-    Colmena will also create a distinct logger for the
+    Colmena will also create a distinct logger for each of the agents to that is
+    accessible as the :meth:`logger` property.
 
-    Start the thread by calling `.start()`, as in:
-
-    .. code-block: python
-
-        t = ExampleThinker(queue)
-        t.start()
-        t.join()  # Wait until work completes
-
-    Attributes:
-         done (threading.Event): Event used to mark that a thread has completed
+    Start the thinker by calling ``.start()``
     """
 
-    def __init__(self, queue: ClientQueues, daemon: bool = True, **kwargs):
+    def __init__(self, queue: ClientQueues, resource_counter: Optional[ResourceCounter] = None,
+                 daemon: bool = True, **kwargs):
         """
-        Args:
-            queue: Queue wrapper used to communicate with
-            daemon: Whether to launch this as a daemon thread
-            **kwargs: Options passed to :class:`Thread`
+            Args:
+                queue: Queue wrapper used to communicate with method server
+                resource_counter: Utility to used track resource utilization
+                daemon: Whether to launch this as a daemon thread
+                **kwargs: Options passed to :class:`Thread`
         """
         super().__init__(daemon=daemon, **kwargs)
 
-        # Create the base logger
+        # Define thinker-wide collectives
+        self.rec = resource_counter
         self.queues = queue
 
         # Create some basic events and locks
         self.done: Event = Event()
 
         # Thread-local stuff, like the default queue and name
-        self.local_details = AgentData(self.make_logger())
+        self.local_details = _AgentData(self.make_logger())
 
     @property
     def logger(self) -> logging.Logger:
