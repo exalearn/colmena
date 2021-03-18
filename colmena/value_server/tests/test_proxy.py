@@ -140,3 +140,11 @@ def test_to_proxy_threshold() -> None:
     assert isinstance(x['1'], int)
     assert not isinstance(x['1'], ObjectProxy)
     assert isinstance(x['2'], ObjectProxy)
+
+
+@mark.timeout(30)
+def test_proxy_proxy() -> None:
+    """Test proxying a proxy"""
+    x = to_proxy([1, 2, 3])
+    y = to_proxy(x)
+    assert id(x) == id(y)

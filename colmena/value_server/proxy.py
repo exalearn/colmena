@@ -143,8 +143,10 @@ def to_proxy(obj: Any,
             `serialization_method`
 
     Returns:
-        (ObjectProxy)
+        (ObjectProxy) Proxy wrapping `obj` or `obj` if `obj` is already a proxy 
     """
+    if isinstance(obj, ObjectProxy):
+        return obj
     if key is None:
         key = str(id(obj))
     value_server.server.set(key, obj, serialization_method, is_serialized=is_serialized)

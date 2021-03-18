@@ -172,7 +172,8 @@ class Result(BaseModel):
             value = SerializationMethod.serialize(self.serialization_method, value)
             if (
                 self.value_server_threshold is not None and
-                sys.getsizeof(value) >= self.value_server_threshold
+                sys.getsizeof(value) >= self.value_server_threshold and
+                not isinstance(value, colmena.value_server.ObjectProxy)
             ):
                 value = colmena.value_server.to_proxy(
                         value, key=key, is_serialized=True,
