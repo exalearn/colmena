@@ -12,15 +12,3 @@ from colmena.value_server.server import VALUE_SERVER_PORT_ENV_VAR
 
 global server
 server = None
-
-__all__ = [
-    'async_resolve_proxies',
-    'to_proxy',
-    'to_proxy_threshold',
-    'ObjectProxy',
-    'init_value_server',
-    'server',
-    'LRUCache',
-    'VALUE_SERVER_HOST_ENV_VAR',
-    'VALUE_SERVER_PORT_ENV_VAR'
-]

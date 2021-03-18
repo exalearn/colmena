@@ -144,10 +144,11 @@ def init_value_server(hostname: Optional[str] = None,
                       port: Optional[int] = None) -> None:
     """Attempt to establish a Redis client connection to the value server
 
-    Attempt to initialize the global variable `server` to a `ValueServer`
-    instance using the Redis server hostname and port that are provided as
-    arguments or via the environment variables defined by
-    `VALUE_SERVER_HOST_ENV_VAR` and `VALUE_SERVER_PORT_ENV_VAR`. If the hostname
+    Attempt to initialize the global variable `colmena.value_server.server` 
+    to a `ValueServer` instance using the Redis server hostname and port that
+    are provided as arguments or via the environment variables defined by
+    `colmena.value_server.VALUE_SERVER_HOST_ENV_VAR` and 
+    `colmena.value_server.VALUE_SERVER_PORT_ENV_VAR`. If the hostname
     and port are not provided via arguments or environment variables, we
     assume the value server is not being used.
 

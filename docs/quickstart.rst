@@ -47,6 +47,15 @@ We setup the Redis queues in Python using Colmena's "queue building" function:
 This command connects to a server on localhost and creates separates queues for simulation and task
 generation results.
 
+Using the Value Server
+++++++++++++++++++++++
+
+Colmena includes a value server which can be used to efficiently transfer large objects, typically on the order of 100KB or larger, between the client and workers directly.
+To enable the value server, a threshold value (bytes) can be passed via the parameter :code:`value_server_threshold` to :code:`make_queue_pairs`.
+Any input/output object of a target function larger than :code:`value_server_threshold` will be automatically passed via the value server.
+
+By default, the value server uses the Redis server passed to :code:`make_queue_pairs`.
+An alternative Redis server for the value server can be specified via the :code:`value_server_hostname` and :code:`value_server_port` parameters of :code:`make_queue_pairs`.
 
 2. Build a method server
 ------------------------

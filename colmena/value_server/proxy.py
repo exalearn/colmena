@@ -88,7 +88,7 @@ class ObjectProxy(Proxy):
     def __init__(self, factory: Factory) -> None:
         """
         Args:
-            factory (Factor): factory class that when called will return
+            factory (Factory): factory class that when called will return
                 the true object being wrapped
         """
         super(ObjectProxy, self).__init__(factory)
