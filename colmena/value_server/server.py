@@ -78,7 +78,7 @@ class ValueServer:
             strict (bool): if True, cached value must be as new as remote
 
         Returns:
-            bool
+            (bool)
         """
         if self.cache.exists(key):
             if strict:
@@ -96,7 +96,7 @@ class ValueServer:
         """Get object by key from value server
 
         Args:
-            key (str)
+            key (str): key corresponding to requested value
             serialization_method (SerializationMethod): serialization method
                 to use for deserializing object
             strict (bool): return most recent version of item regardless of
@@ -127,8 +127,8 @@ class ValueServer:
         """Set object in value server
 
         Args:
-            key (str)
-            obj (object)
+            key (str): key to associate with `obj`
+            obj (object): object to put in value server
             serialization_method (SerializationMethod): serialization method
                 to use for serializing object before putting in value server
             is_serialized (bool): true if `obj` is already serialized using
@@ -175,3 +175,4 @@ def init_value_server(hostname: Optional[str] = None,
                              'set'.format(VALUE_SERVER_PORT_ENV_VAR))
 
     value_server.server = ValueServer(hostname, port)
+    logger.debug(f'Initialized Value Server at {hostname}:{port}')

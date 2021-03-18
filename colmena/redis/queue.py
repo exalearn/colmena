@@ -246,6 +246,8 @@ class ClientQueues:
         self.value_server_threshold = value_server_threshold
 
         if self.value_server_threshold is not None:
+            if self.serialization_method.lower() != 'pickle':
+                raise ValueError('Serialization method must be pickle to use the value server')
             if value_server_hostname is None:
                 value_server_hostname = hostname
             if value_server_port is None:

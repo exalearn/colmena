@@ -26,7 +26,10 @@ class Factory():
             key (str): key used to retrive object from value server
             serialization_method (SerializationMethod): serialization method
                 used to store object in value server
-            strict (bool): TODO
+            strict (bool): if `True`, ensures that the underlying object
+                retrieved from the value server is the most up to date version.
+                Otherwise, an older version of an object associated with `key` may
+                be returned if it is cached locally.
         """
         self.key = key
         self.serialization_method = serialization_method
@@ -35,6 +38,7 @@ class Factory():
 
     def __call__(self):
         """Retrive object from value server
+
         Note:
             `__call__` is generally only called once by the ObjectProxy
             unless ObjectProxy.reset_proxy() is called.
@@ -101,6 +105,7 @@ class ObjectProxy(Proxy):
         return self.__reduce__()
 
     def async_resolve(self) -> None:
+        """Asynchronously resolve the proxy"""
         try:
             object.__getattribute__(self, '__target__')
         except AttributeError:
@@ -129,8 +134,8 @@ def to_proxy(obj: Any,
     """Put object in value server and return proxy object
 
     Args:
-        obj (object)
-        key (str, optional): key to use for value server
+        obj (object): object to be proxied
+        key (str, optional): key to associate with `obj` in the value server
         serialization_method (SerializationMethod): serialization method
         strict (bool): force strict guarentees that Value Server always returns
             most recent object associated with this key
@@ -138,12 +143,14 @@ def to_proxy(obj: Any,
             `serialization_method`
 
     Returns:
-        ObjectProxy
+        (ObjectProxy)
     """
     if key is None:
         key = str(id(obj))
     value_server.server.set(key, obj, serialization_method, is_serialized=is_serialized)
-    return ObjectProxy(Factory(key, serialization_method, strict))
+    proxy = ObjectProxy(Factory(key, serialization_method, strict))
+    logger.debug(f'Created proxy from object type={type(obj)} with key={key}')
+    return proxy
 
 
 def to_proxy_threshold(objs: Union[object, list, tuple, dict],
