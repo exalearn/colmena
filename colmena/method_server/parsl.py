@@ -18,7 +18,7 @@ from parsl.dataflow.futures import AppFuture
 from colmena.models import Result
 from colmena.method_server.base import BaseMethodServer
 from colmena.redis.queue import MethodServerQueues
-from colmena.value_server import async_resolve_proxies
+from colmena.value_server import async_resolve_proxies, init_value_server
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,10 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Unpack the inputs
     result.time_deserialize_inputs = result.deserialize()
+
+    # Initialize value server client on the worker
+    if result.value_server_hostname is not None and result.value_server_port is not None:
+        init_value_server(result.value_server_hostname, result.value_server_port)
 
     # Start resolving proxies from value server asynchronously
     # We could include this in deserialization time?

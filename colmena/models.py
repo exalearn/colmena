@@ -98,6 +98,8 @@ class Result(BaseModel):
                                                       description="Method used to serialize input data")
     keep_inputs: bool = Field(True, description="Whether to keep the inputs with the result object or delete "
                                                 "them after the method has completed")
+    value_server_hostname: Optional[str] = Field(None, description="Value server hostname")
+    value_server_port: Optional[str] = Field(None, description="Value server port")
     value_server_threshold: int = Field(
             None, description="Object size threshold (bytes) at which input/value "
                               "objects are stored in value server before serialization")

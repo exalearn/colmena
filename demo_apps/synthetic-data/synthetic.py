@@ -42,7 +42,7 @@ def get_args():
     parser.add_argument('--task-count', type=int, default=100,
                         help='Number of task to generate')
     parser.add_argument('--worker-count', type=int, default=10,
-                        help='Workers to use if --local-host')
+                        help='workers to use (worker/node=worker-count//node')
     parser.add_argument('--use-value-server', action='store_true', default=False,
                         help='Use the value server for sending data to worker')
     parser.add_argument('--value-server-threshold', type=float, default=1,
@@ -73,6 +73,7 @@ def empty_array(size: int) -> np.ndarray:
 def target_function(data: np.ndarray, output_size: int) -> np.ndarray:
     import numpy as np
     import time
+
     time.sleep(0.005)  # simulate more imports/setup
     # Check that ObjectProxy acts as the wrapped np object
     assert isinstance(data, np.ndarray), 'got type {}'.format(type(data))
@@ -121,7 +122,6 @@ class Thinker(BaseThinker):
         while not self.done.is_set():
             if not self.reuse_data:
                 input_data = empty_array(self.task_input_size)
-            print('SIZE', sys.getsizeof(input_data))
             self.queues.send_inputs(input_data,
                     self.task_output_size, method='target_function',
                     topic='generate')
@@ -159,14 +159,6 @@ if __name__ == "__main__":
         value_server_threshold=value_server_threshold
     ) 
 
-    worker_init='module load miniconda-3\nconda activate colmena\n'
-
-    if args.use_value_server:
-        # Workers connect to the value server with the host/port
-        # that we pass as environment variables
-        worker_init += 'export {}={}\nexport {}={}\n'.format(
-                value_server.VALUE_SERVER_HOST_ENV_VAR, args.redis_host,
-                value_server.VALUE_SERVER_PORT_ENV_VAR, args.redis_port)
 
     # Define the worker configuration
     if args.local_host:
@@ -177,13 +169,14 @@ if __name__ == "__main__":
             HighThroughputExecutor(
                 address=address_by_hostname(),
                 label='workers',
-                max_workers=node_count,
+                max_workers=args.worker_count,
+                cores_per_worker=max(1, args.worker_count // node_count),
                 provider=LocalProvider(
                     nodes_per_block=node_count,
                     init_blocks=1,
                     max_blocks=1,
                     launcher=AprunLauncher('-d 64 --cc depth'),
-                    worker_init=worker_init
+                    worker_init='module load miniconda-3\nconda activate colmena\n'
                 ),
             ),
         ]
@@ -205,6 +198,8 @@ if __name__ == "__main__":
     logging.info('Created the method server and task generator')
     logging.info(thinker)
 
+    start_time = time.time()
+
     try:
         # Launch the servers
         doer.start()
@@ -221,5 +216,5 @@ if __name__ == "__main__":
     doer.join()
 
     # Print the output result
-    logging.info('Finished')
+    logging.info('Finished. Runtime = {}s'.format(time.time() - start_time))
 

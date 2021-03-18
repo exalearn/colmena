@@ -252,6 +252,9 @@ class ClientQueues:
                 value_server_port = port
             colmena.value_server.init_value_server(value_server_hostname, value_server_port)
 
+        self.value_server_hostname = value_server_hostname
+        self.value_server_port = value_server_port
+
         # Make the queues
         self.outbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
         self.inbound = RedisQueue(hostname, port, 'results' if name is None else f'{name}_results', topics=topics)
@@ -286,8 +289,16 @@ class ClientQueues:
             _keep_inputs = keep_inputs
 
         # Create a new Result object
-        result = Result((input_args, input_kwargs), method=method, keep_inputs=_keep_inputs,
-                        serialization_method=self.serialization_method, task_info=task_info, value_server_threshold=self.value_server_threshold)
+        result = Result(
+            (input_args, input_kwargs),
+            method=method,
+            keep_inputs=_keep_inputs,
+            serialization_method=self.serialization_method,
+            task_info=task_info,
+            value_server_hostname=self.value_server_hostname,
+            value_server_port=self.value_server_port,
+            value_server_threshold=self.value_server_threshold
+        )
 
         # Push the serialized value to the method server
         result.time_serialize_inputs = result.serialize()
