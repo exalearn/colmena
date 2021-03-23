@@ -1,8 +1,10 @@
 """Base classes for 'thinking' applications that respond to tasks completing"""
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial, update_wrapper
 from threading import Event, local, Thread
 from traceback import TracebackException
 from typing import Optional, Callable, List
+
 import os
 
 import logging
@@ -12,15 +14,117 @@ from colmena.thinker.resources import ResourceCounter
 
 logger = logging.getLogger(__name__)
 
-
-def agent(func):
-    """Denote a function as an "agent" thread that is launched when
-    a Thinker process is started"""
-    func._colmena_agent = True
-    return func
+_DONE_REACTION_TIME = 1
 
 
-def _launch_agent(func: Callable, worker: 'BaseThinker'):
+def agent(func: Optional[Callable] = None, critical: bool = True):
+    """Decorator that denotes a function as an "agent" thread that is launched when a Thinker process is started
+
+    Args:
+        func: Do not directly pass this variable. It is used as an argument to the decorator
+        critical: Whether the "done" flag should be set once this thread finishes
+    """
+    def decorator(f: Callable):
+        f._colmena_agent = True
+        f._colmena_critical = critical
+        return f
+    if func is None:
+        return decorator
+    return decorator(func)
+
+
+def _result_event_agent(thinker: 'BaseThinker', process_func: Callable, topic: Optional[str]):
+    """Wrapper function for result processing agents"""
+    # Wait until we get a result
+    while not thinker.done.is_set():
+        result = thinker.queues.get_result(timeout=_DONE_REACTION_TIME, topic=topic)
+        if result is not None:
+            process_func(thinker, result)
+
+
+def result_processor(func: Optional[Callable] = None, topic: Optional[str] = None):
+    """Decorator that builds agents which respond to results becoming available in a queue
+
+    Decorated functions must take a single argument: a result object
+
+    Args:
+        func: Do not directly pass this variable. It is used as an argument to the decorator
+        topic: Topic of the queue to pull from
+    """
+
+    def decorator(f: Callable):
+        output = partial(_result_event_agent, process_func=f, topic=topic)
+        output = agent(output)
+        return update_wrapper(output, f)
+    if func is None:
+        return decorator
+    return decorator(func)
+
+
+def _task_submitter_agent(thinker: 'BaseThinker', process_func: Callable, task_type: str, n_slots: int):
+    """Wrapper function for task submission agents"""
+    while not thinker.done.is_set():
+        # Wait until resources are free or thinker.done is set
+        acq_success = thinker.rec.acquire(task_type, n_slots, cancel_if=thinker.done)
+        if acq_success:
+            process_func(thinker)
+
+
+def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slots: int = 1):
+    """Decorator that builds agents which respond to computing resources becoming available
+
+    Decorated functions should assume that resources are available and reserved when the function is called
+
+    Args:
+        func: Do not directly pass this variable. It is used as an argument to the decorator
+        task_type: Name of task pool from which to request resources
+        n_slots: Number of resources to request
+    """
+
+    def decorator(f: Callable):
+        output = partial(_task_submitter_agent, process_func=f, task_type=task_type, n_slots=n_slots)
+        output = agent(output)
+        return update_wrapper(output, f)
+    if func is None:
+        return decorator
+    return decorator(func)
+
+
+def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event_name: str):
+    """Wrapper for event processing agents"""
+
+    # Get the event
+    if not hasattr(thinker, event_name):
+        raise ValueError(f'Thinker lacks an event named {event_name}')
+    event: Event = getattr(thinker, event_name)
+
+    while not thinker.done.is_set():
+        # Wait until resources are free or thinker.done is set
+        if event.wait(_DONE_REACTION_TIME):
+            process_func(thinker)
+
+
+def event_responder(func: Optional[Callable] = None, event_name: str = None):
+    """Decorator that builds agents which respond to an event being set
+
+    The Thinker associated with this agent must have a class attribute that is an :class:`Event`
+    with the same name as ``event_name``.
+
+    Args:
+        func: Do not directly pass this variable. It is used as an argument to the decorator
+        event_name: Name of the event to watch
+    """
+
+    def decorator(f: Callable):
+        output = partial(_event_responder_agent, process_func=f, event_name=event_name)
+        output = agent(output)
+        return update_wrapper(output, f)
+    if func is None:
+        return decorator
+    return decorator(func)
+
+
+def _launch_agent(func: Callable, thinker: 'BaseThinker'):
     """Shim function for launching an agent
 
     Sets the thread-local variables for a class, such as its name and default topic
@@ -28,17 +132,22 @@ def _launch_agent(func: Callable, worker: 'BaseThinker'):
 
     # Set the thread-local options for this agent
     name = func.__name__
-    worker.local_details.name = name
-    worker.local_details.logger = worker.make_logger(name)
+    thinker.local_details.name = name
+    thinker.local_details.logger = thinker.make_logger(name)
 
     # Mark that this thread has launched
-    worker.logger.info(f'{name} started')
+    thinker.logger.info(f'{name} started')
 
     # Launch it
-    func(worker)
+    try:
+        func(thinker)
+    finally:
+        # If a "critical" function, set the "done" flag
+        if getattr(func, '_colmena_critical', False):
+            thinker.done.set()
 
-    # Mark that the thread has crashed
-    worker.logger.info(f'{name} completed')
+        # Mark that the thread has crashed
+        thinker.logger.info(f'{name} completed')
 
 
 class _AgentData(local):
@@ -178,7 +287,6 @@ class BaseThinker(Thread):
             # Wait until any one completes, then set the "gen_done" event to
             #  signal all remaining threads to finish after completing their work
             for finished in as_completed(threads):
-                self.done.set()
                 exc = finished.exception()
                 if exc is None:
                     self.logger.info('Thread completed without problems')

@@ -1,8 +1,7 @@
 """Perform GPR Active Learning where one threads continually re-prioritizes a list of
 simulations to run and a second thread sebmits """
-
-
-from colmena.thinker import BaseThinker, agent
+from colmena.models import Result
+from colmena.thinker import BaseThinker, agent, result_processor
 from colmena.method_server import ParslMethodServer
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
@@ -121,40 +120,36 @@ class Thinker(BaseThinker):
         self.queue_lock = Lock()
         self.done = Event()
 
-    @agent
-    def simulation_worker(self):
+    @result_processor(topic='doer')
+    def simulation_worker(self, result: Result):
         """Dispatch tasks and update"""
-        # Send out the initial tasks
-        for _ in range(self.batch_size):
+
+        # Immediately send out a new one
+        with self.queue_lock:
             self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
 
-        # Pull and re-submit
-        while not self.done.is_set():
-            # Get a result
-            result = self.queues.get_result(topic='doer')
+        # Add the old task to the database
+        self.database.append((result.args[0], result.value))
 
-            # Immediately send out a new one
-            with self.queue_lock:
-                self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
+        # Append it to the output deck
+        with open(self.output_path, 'a') as fp:
+            print(result.json(exclude={'inputs'}), file=fp)
 
-            # Add the old task to the database
-            self.database.append((result.args[0], result.value))
+        # If have required amount, terminate program
+        if len(self.database) == self.n_guesses:
+            logging.info('Done running new calculations')
+            self.done.set()
 
-            # Append it to the output deck
-            with open(self.output_path, 'a') as fp:
-                print(result.json(exclude={'inputs'}), file=fp)
-
-            # If have required amount, terminate program
-            if len(self.database) == self.n_guesses:
-                logging.info('Done running new calculations')
-                self.done.set()
-
-            # Mark that we have some data now
-            self.has_data.set()
+        # Mark that we have some data now
+        self.has_data.set()
 
     @agent
     def thinker_worker(self):
         """Reprioritize task list"""
+
+        # Send out the initial tasks
+        for _ in range(self.batch_size):
+            self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
 
         # Make the GPR model
         gpr = Pipeline([
@@ -164,7 +159,6 @@ class Thinker(BaseThinker):
 
         # Wait until we have data
         self.has_data.wait()
-        logging.info('Task reprioritization worker has started')
 
         while not self.done.is_set():
             # Send out an update task
