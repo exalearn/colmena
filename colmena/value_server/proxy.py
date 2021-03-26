@@ -106,6 +106,7 @@ class ObjectProxy(Proxy):
 
     def async_resolve(self) -> None:
         """Asynchronously resolve the proxy"""
+        # TODO(gpauloski): use __resolved__ instead
         try:
             object.__getattribute__(self, '__target__')
         except AttributeError:
@@ -119,9 +120,13 @@ class ObjectProxy(Proxy):
             # server. Generally async_resolve() should not be called twice :)
             self.__factory__.async_resolve()
 
+    def deproxy(self) -> Any:
+        """Get underlying object from proxy"""
+        return self.__wrapped__
+
     def reset_proxy(self) -> None:
         """Reset wrapped object so that the factory is called on next access"""
-        if hasattr(self, '__target__'):
+        if self.__resolved__:
             object.__delattr__(self, '__target__')
 
 

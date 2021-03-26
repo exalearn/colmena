@@ -186,10 +186,8 @@ class Result(BaseModel):
             kwargs = {k: _serialize_and_proxy(v) for k, v in _inputs[1].items()}
             self.inputs = (args, kwargs)
             if _value is not None:
-                if isinstance(_value, tuple):
-                    self.value = tuple(map(_serialize_and_proxy, _value))
-                else:
-                    self.value = _serialize_and_proxy(_value)
+                self.value = _serialize_and_proxy(_value)
+
             return perf_counter() - start_time
         except Exception as e:
             # Put the original values back
@@ -213,15 +211,26 @@ class Result(BaseModel):
                 return value
             return SerializationMethod.deserialize(self.serialization_method, value)
 
+        if isinstance(_inputs, str):
+            _inputs = SerializationMethod.deserialize(self.serialization_method, _inputs)
+
         try:
-            args = tuple(map(_deserialize, _inputs[0]))
+            try:
+                args = tuple(map(_deserialize, _inputs[0]))
+            except:
+                raise ValueError('deserialize failed on {}'.format(self))
             kwargs = {k: _deserialize(v) for k, v in _inputs[1].items()}
             self.inputs = (args, kwargs)
             if _value is not None:
-                if isinstance(_value, tuple):
-                    self.value = tuple(map(_deserialize, _value))
-                else:
-                    self.value = _deserialize(_value)
+                _value = _deserialize(_value)
+                if isinstance(_value, colmena.value_server.ObjectProxy):
+                    # Extract return value from proxy and evict from value
+                    # server. Returns values are unique so eviction should be
+                    # okay here.
+                    key = _value.__factory__.key
+                    _value = _value.deproxy()
+                    colmena.value_server.server.evict(key)
+                self.value = _value
             return perf_counter() - start_time
         except Exception as e:
             # Put the original values back
