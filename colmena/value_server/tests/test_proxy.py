@@ -33,8 +33,14 @@ def init() -> None:
 def test_proxy() -> None:
     """Test proxy object behaves like wrapped object"""
     x = to_proxy(1)
+    assert not x.is_resolved()
+
     assert isinstance(x, ObjectProxy)
+    assert not x.is_resolved()
+
     assert isinstance(x, int)
+    assert x.is_resolved()
+
     assert x == 1
     x += 1
     assert x == 2
@@ -100,9 +106,11 @@ def test_async_resolve() -> None:
     assert x.__factory__.async_get_future is None
     assert not value_server.server.is_cached(key)
     x.async_resolve()
+    assert not x.is_resolved()
     assert x.__factory__.async_get_future is not None
     assert isinstance(x, list)
     assert x.__factory__.async_get_future is None
+    assert x.is_resolved()
     # x is already resolved so this should be a no-op
     x.async_resolve()
     assert x.__factory__.async_get_future is None

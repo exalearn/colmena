@@ -106,27 +106,20 @@ class ObjectProxy(Proxy):
 
     def async_resolve(self) -> None:
         """Asynchronously resolve the proxy"""
-        # TODO(gpauloski): use __resolved__ instead
-        try:
-            object.__getattribute__(self, '__target__')
-        except AttributeError:
-            # TODO(gpauloski): there is an edge case here where is async_resolve()
-            # is called twice, both cases fail to get attribute __target__ and then
-            # call __factory__.async_resolve() twice. If, between the two calls
-            # to async_resolve(), the cache entry for this object is removed, then
-            # there will be a thread created to resolve the object but the result
-            # of the thread is never used. In practice this has no consequences
-            # beyond the performance hit of starting a thread to query the value
-            # server. Generally async_resolve() should not be called twice :)
+        if not self.is_resolved():
             self.__factory__.async_resolve()
 
     def deproxy(self) -> Any:
         """Get underlying object from proxy"""
         return self.__wrapped__
 
+    def is_resolved(self) -> bool:
+        """Return True if proxy is resolved"""
+        return self.__resolved__
+
     def reset_proxy(self) -> None:
         """Reset wrapped object so that the factory is called on next access"""
-        if self.__resolved__:
+        if self.is_resolved():
             object.__delattr__(self, '__target__')
 
 

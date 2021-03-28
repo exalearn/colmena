@@ -168,23 +168,34 @@ class Result(BaseModel):
         _inputs = self.inputs
 
         def _serialize_and_proxy(value):
+            """Helper function for serializing and proxying"""
             key = str(id(value))
+            # Serialized object before proxying to compare size of serialized
+            # object to value server threshold
             value = SerializationMethod.serialize(self.serialization_method, value)
+
             if (
                 self.value_server_threshold is not None and
                 sys.getsizeof(value) >= self.value_server_threshold and
                 not isinstance(value, colmena.value_server.ObjectProxy)
             ):
+                # Proxy the value
                 value = colmena.value_server.to_proxy(
                         value, key=key, is_serialized=True,
                         serialization_method=self.serialization_method)
+                # Serialize the proxy. This is efficient since the proxy is
+                # just a reference + metadata about the value
                 value = SerializationMethod.serialize(self.serialization_method, value)
+
             return value
 
         try:
+            # Each value in *args and **kwargs is serialized independently
             args = tuple(map(_serialize_and_proxy, _inputs[0]))
             kwargs = {k: _serialize_and_proxy(v) for k, v in _inputs[1].items()}
             self.inputs = (args, kwargs)
+
+            # The entire result is serialized as one object
             if _value is not None:
                 self.value = _serialize_and_proxy(_value)
 
@@ -215,12 +226,12 @@ class Result(BaseModel):
             _inputs = SerializationMethod.deserialize(self.serialization_method, _inputs)
 
         try:
-            try:
-                args = tuple(map(_deserialize, _inputs[0]))
-            except:
-                raise ValueError('deserialize failed on {}'.format(self))
+            # Deserialize each value in *args and **kwargs
+            args = tuple(map(_deserialize, _inputs[0]))
             kwargs = {k: _deserialize(v) for k, v in _inputs[1].items()}
             self.inputs = (args, kwargs)
+
+            # Deserialize result if it exists. If result was proxied, deproxy.
             if _value is not None:
                 _value = _deserialize(_value)
                 if isinstance(_value, colmena.value_server.ObjectProxy):
@@ -231,6 +242,7 @@ class Result(BaseModel):
                     _value = _value.deproxy()
                     colmena.value_server.server.evict(key)
                 self.value = _value
+
             return perf_counter() - start_time
         except Exception as e:
             # Put the original values back
