@@ -76,6 +76,8 @@ class ResourceCounter:
             self._availability[None].release()
         self._allocation[None] = self._total_slots
 
+        logger.info(f'Created a resource tracker with {total_slots} slots and {len(task_types)} task types: {", ".join(task_types)}')
+
     @property
     def unallocated_slots(self) -> int:
         """Number of unallocated slots"""
