@@ -1,6 +1,7 @@
 import colmena
 import json
 import logging
+import random
 import pickle as pkl
 import sys
 from datetime import datetime
@@ -167,9 +168,12 @@ class Result(BaseModel):
         _value = self.value
         _inputs = self.inputs
 
-        def _serialize_and_proxy(value):
+        def _serialize_and_proxy(value, key=None):
             """Helper function for serializing and proxying"""
-            key = str(id(value))
+            if key is None:
+                # TODO(gpauloski): We assume all input/outputs are unique.
+                # We should rethink if we want to keep this.
+                key = str(random.getrandbits(128))
             # Serialized object before proxying to compare size of serialized
             # object to value server threshold
             value = SerializationMethod.serialize(self.serialization_method, value)
@@ -195,7 +199,10 @@ class Result(BaseModel):
             kwargs = {k: _serialize_and_proxy(v) for k, v in _inputs[1].items()}
             self.inputs = (args, kwargs)
 
-            # The entire result is serialized as one object
+            # The entire result is serialized as one object.
+            # We generate a random key for the result to avoid key collisions
+            # in Redis. I.e. the result of a function is always considered
+            # unique
             if _value is not None:
                 self.value = _serialize_and_proxy(_value)
 
