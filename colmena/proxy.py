@@ -4,7 +4,10 @@ import proxystore as ps
 from typing import Any, Union
 
 to_proxy = ps.to_proxy
-"""Alias of proxystore.to_proxy"""
+"""Place object in value server and return proxy
+
+Alias of `proxystore.to_proxy() <https://proxystore.readthedocs.io/en/latest/source/proxystore.html#proxystore.to_proxy>`_.
+"""
 
 
 def extract_and_evict(proxy: ps.proxy.Proxy) -> object:
