@@ -3,7 +3,6 @@
 import logging
 from typing import Optional, Any, Tuple, Dict, Iterable, Union
 
-import colmena
 import redis
 
 from proxystore import init_redis_backend

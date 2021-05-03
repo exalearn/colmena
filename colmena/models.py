@@ -1,4 +1,3 @@
-import colmena
 import json
 import logging
 import pickle as pkl
