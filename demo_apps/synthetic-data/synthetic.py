@@ -19,7 +19,6 @@ from parsl.providers import LocalProvider, CobaltProvider
 from colmena.method_server import ParslMethodServer
 from colmena.redis.queue import make_queue_pairs, ClientQueues
 from colmena.thinker import BaseThinker, agent
-from colmena import value_server
 
 
 def get_args():
@@ -74,9 +73,9 @@ def target_function(data: np.ndarray, output_size: int) -> np.ndarray:
     import numpy as np
     import time
 
-    time.sleep(0.005)  # simulate more imports/setup
+    time.sleep(5)  # simulate more imports/setup
     # Check that ObjectProxy acts as the wrapped np object
-    assert isinstance(data, np.ndarray), 'got type {}'.format(type(data))
+    assert isinstance(data, np.ndarray), 'got type {}'.format(data)
     time.sleep(0.005)  # simulate more computation
     return np.empty(int(1000 * 1000 * output_size / 4), dtype=np.float32)
 
@@ -156,6 +155,7 @@ if __name__ == "__main__":
         args.redis_port,
         topics=['generate'],
         serialization_method='pickle',
+        keep_inputs=False,
         value_server_threshold=value_server_threshold
     ) 
 

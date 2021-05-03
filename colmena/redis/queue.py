@@ -6,6 +6,8 @@ from typing import Optional, Any, Tuple, Dict, Iterable, Union
 import colmena
 import redis
 
+from proxystore import init_redis_backend
+
 from colmena.exceptions import TimeoutException, KillSignalException
 from colmena.models import Result, SerializationMethod
 
@@ -252,7 +254,7 @@ class ClientQueues:
                 value_server_hostname = hostname
             if value_server_port is None:
                 value_server_port = port
-            colmena.value_server.init_value_server(value_server_hostname, value_server_port)
+            init_redis_backend(value_server_hostname, value_server_port)
 
         self.value_server_hostname = value_server_hostname
         self.value_server_port = value_server_port
