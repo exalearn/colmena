@@ -254,6 +254,8 @@ class ClientQueues:
             if value_server_port is None:
                 value_server_port = port
             init_redis_backend(value_server_hostname, value_server_port)
+            logger.debug(f'Initialized value server using Redis server at '
+                          '{value_server_hostname}:{value_server_port}')
 
         self.value_server_hostname = value_server_hostname
         self.value_server_port = value_server_port

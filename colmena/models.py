@@ -186,6 +186,7 @@ class Result(BaseModel):
                 # so calling to_proxy() on the same object multiple times
                 # does not create multiple copies in the value server.
                 value_proxy = ps.to_proxy(value, key=str(id(value)))
+                logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
                 # Serialize the proxy. This is efficient since the proxy is
                 # just a reference + metadata about the value
                 value_str = SerializationMethod.serialize(
