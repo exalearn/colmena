@@ -50,7 +50,8 @@ generation results.
 Using the Value Server
 ++++++++++++++++++++++
 
-Colmena includes a value server which can be used to efficiently transfer large objects, typically on the order of 100KB or larger, between the client and workers directly.
+Colmena uses `ProxyStore <https://github.com/gpauloski/ProxyStore>`_ to implement a Redis-based value server.
+The value server can be used to efficiently transfer large objects, typically on the order of 100KB or larger, between the thinker and workers directly.
 To enable the value server, a threshold value (bytes) can be passed via the parameter :code:`value_server_threshold` to :code:`make_queue_pairs`.
 Any input/output object of a target function larger than :code:`value_server_threshold` will be automatically passed via the value server.
 
