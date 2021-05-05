@@ -11,7 +11,14 @@ Alias of `proxystore.to_proxy() <https://proxystore.readthedocs.io/en/latest/sou
 
 
 def extract_and_evict(proxy: ps.proxy.Proxy) -> object:
-    """Extract wrapped object from proxy and evict from value server"""
+    """Extract wrapped object from proxy and evict from value server
+    
+    Args:
+        proxy (Proxy): proxy instance returned by `to_proxy()`.
+
+    Returns:
+        object wrapped by `proxy`
+    """
     ps.utils.evict(proxy)
     return ps.utils.extract(proxy)
 

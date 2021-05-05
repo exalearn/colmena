@@ -185,6 +185,8 @@ class Result(BaseModel):
                 # Proxy the value. Note: we use the id of the object as the key
                 # so calling to_proxy() on the same object multiple times
                 # does not create multiple copies in the value server.
+                # TODO(gpauloski): consider making a custom Factory for Colmena
+                # to remove the double serialization here.
                 value_proxy = ps.to_proxy(value, key=str(id(value)))
                 logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
                 # Serialize the proxy. This is efficient since the proxy is
