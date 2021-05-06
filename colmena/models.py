@@ -1,13 +1,16 @@
-import colmena
 import json
 import logging
 import pickle as pkl
+import sys
 from datetime import datetime
 from enum import Enum
 from time import perf_counter
 from typing import Any, Tuple, Dict, Optional, Union
 
+import proxystore as ps
 from pydantic import BaseModel, Field
+
+from colmena.proxy import extract_and_evict
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +100,8 @@ class Result(BaseModel):
                                                       description="Method used to serialize input data")
     keep_inputs: bool = Field(True, description="Whether to keep the inputs with the result object or delete "
                                                 "them after the method has completed")
+    value_server_hostname: Optional[str] = Field(None, description="Value server hostname")
+    value_server_port: Optional[str] = Field(None, description="Value server port")
     value_server_threshold: int = Field(
             None, description="Object size threshold (bytes) at which input/value "
                               "objects are stored in value server before serialization")
@@ -163,17 +168,45 @@ class Result(BaseModel):
         start_time = perf_counter()
         _value = self.value
         _inputs = self.inputs
+
+        def _serialize_and_proxy(value):
+            """Helper function for serializing and proxying"""
+            # Serialized object before proxying to compare size of serialized
+            # object to value server threshold
+            value_str = SerializationMethod.serialize(
+                self.serialization_method, value
+            )
+
+            if (
+                self.value_server_threshold is not None and
+                sys.getsizeof(value_str) >= self.value_server_threshold and
+                not isinstance(value, ps.proxy.Proxy)
+            ):
+                # Proxy the value. Note: we use the id of the object as the key
+                # so calling to_proxy() on the same object multiple times
+                # does not create multiple copies in the value server.
+                # TODO(gpauloski): consider making a custom Factory for Colmena
+                # to remove the double serialization here.
+                value_proxy = ps.to_proxy(value, key=str(id(value)))
+                logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
+                # Serialize the proxy. This is efficient since the proxy is
+                # just a reference + metadata about the value
+                value_str = SerializationMethod.serialize(
+                    self.serialization_method, value_proxy
+                )
+
+            return value_str
+
         try:
-            if self.value_server_threshold is not None:
-                _args = colmena.value_server.to_proxy_threshold(
-                        _inputs[0], self.value_server_threshold, self.serialization_method)
-                _kwargs = colmena.value_server.to_proxy_threshold(
-                        _inputs[1], self.value_server_threshold, self.serialization_method)
-                _inputs = (_args, _kwargs)
-                _value = colmena.value_server.to_proxy_threshold(
-                        _value, self.value_server_threshold, self.serialization_method)
-            self.inputs = SerializationMethod.serialize(self.serialization_method, _inputs)
-            self.value = SerializationMethod.serialize(self.serialization_method, _value)
+            # Each value in *args and **kwargs is serialized independently
+            args = tuple(map(_serialize_and_proxy, _inputs[0]))
+            kwargs = {k: _serialize_and_proxy(v) for k, v in _inputs[1].items()}
+            self.inputs = (args, kwargs)
+
+            # The entire result is serialized as one object
+            if _value is not None:
+                self.value = _serialize_and_proxy(_value)
+
             return perf_counter() - start_time
         except Exception as e:
             # Put the original values back
@@ -189,16 +222,34 @@ class Result(BaseModel):
         """
         # Check that the data is actually a string
         start_time = perf_counter()
-        if not (isinstance(self.value, str) and isinstance(self.inputs, str)):
-            logger.warning('Data is not serialized, skipping deserialization.')
-            return perf_counter() - start_time
-
-        # Deserialize the data
         _value = self.value
         _inputs = self.inputs
+
+        def _deserialize(value):
+            if not isinstance(value, str):
+                return value
+            return SerializationMethod.deserialize(self.serialization_method, value)
+
+        if isinstance(_inputs, str):
+            _inputs = SerializationMethod.deserialize(self.serialization_method, _inputs)
+
         try:
-            self.inputs = SerializationMethod.deserialize(self.serialization_method, _inputs)
-            self.value = SerializationMethod.deserialize(self.serialization_method, _value)
+            # Deserialize each value in *args and **kwargs
+            args = tuple(map(_deserialize, _inputs[0]))
+            kwargs = {k: _deserialize(v) for k, v in _inputs[1].items()}
+            self.inputs = (args, kwargs)
+
+            # Deserialize result if it exists
+            if _value is not None:
+                _value = _deserialize(_value)
+                if isinstance(_value, ps.proxy.Proxy):
+                    # Task return values are always unique, so we immediately
+                    # evict the data from the value server to save space.
+                    # Evicting forces the proxy to resolve itself so we
+                    # also extract the wrapped object from the proxy
+                    _value = extract_and_evict(_value)
+                self.value = _value
+
             return perf_counter() - start_time
         except Exception as e:
             # Put the original values back

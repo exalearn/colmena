@@ -10,4 +10,5 @@ colmena
     colmena.models
     colmena.thinker
     colmena.exceptions
+    colmena.proxy
 

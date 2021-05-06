@@ -129,7 +129,7 @@ def test_pickling():
     # Attempt to push a non-JSONable object to the queue
     client.send_inputs(Test())
     _, task = server.get_task()
-    assert isinstance(task.inputs, str)
+    assert isinstance(task.inputs[0][0], str)
     task.deserialize()
     assert task.args[0].x is None
 

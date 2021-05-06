@@ -3,8 +3,9 @@
 import logging
 from typing import Optional, Any, Tuple, Dict, Iterable, Union
 
-import colmena
 import redis
+
+from proxystore import init_redis_backend
 
 from colmena.exceptions import TimeoutException, KillSignalException
 from colmena.models import Result, SerializationMethod
@@ -35,9 +36,9 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
         hostname (str): Hostname of the Redis server
         port (int): Port on which to access Redis
         name (str): Name of the MethodServer
+        serialization_method (SerializationMethod): serialization type for inputs/outputs
         keep_inputs (bool): Whether to keep the inputs after the method has finished executing
         clean_slate (bool): Whether to flush the queues before launching
-        serialization_method (bool): Whether to serialize input and output objects before communicating them
         topics ([str]): List of topics used when having the client filter different types of tasks
         value_server_threshold (int): Input/output objects larger than this threshold
             (in bytes) will be stored in the value server. If None, value server
@@ -216,7 +217,7 @@ class ClientQueues:
     """
 
     def __init__(self, hostname: str, port: int = 6379, name: Optional[str] = None,
-                 serialization_method: SerializationMethod = SerializationMethod.JSON,
+                 serialization_method: Union[str, SerializationMethod] = SerializationMethod.JSON,
                  keep_inputs: bool = True,
                  topics: Optional[Iterable] = None,
                  value_server_threshold: Optional[int] = None,
@@ -246,11 +247,18 @@ class ClientQueues:
         self.value_server_threshold = value_server_threshold
 
         if self.value_server_threshold is not None:
+            if self.serialization_method.lower() != 'pickle':
+                raise ValueError('Serialization method must be pickle to use the value server')
             if value_server_hostname is None:
                 value_server_hostname = hostname
             if value_server_port is None:
                 value_server_port = port
-            colmena.value_server.init_value_server(value_server_hostname, value_server_port)
+            init_redis_backend(value_server_hostname, value_server_port)
+            logger.debug('Initialized value server using Redis server at '
+                         f'{value_server_hostname}:{value_server_port}')
+
+        self.value_server_hostname = value_server_hostname
+        self.value_server_port = value_server_port
 
         # Make the queues
         self.outbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
@@ -286,8 +294,16 @@ class ClientQueues:
             _keep_inputs = keep_inputs
 
         # Create a new Result object
-        result = Result((input_args, input_kwargs), method=method, keep_inputs=_keep_inputs,
-                        serialization_method=self.serialization_method, task_info=task_info, value_server_threshold=self.value_server_threshold)
+        result = Result(
+            (input_args, input_kwargs),
+            method=method,
+            keep_inputs=_keep_inputs,
+            serialization_method=self.serialization_method,
+            task_info=task_info,
+            value_server_hostname=self.value_server_hostname,
+            value_server_port=self.value_server_port,
+            value_server_threshold=self.value_server_threshold
+        )
 
         # Push the serialized value to the method server
         result.time_serialize_inputs = result.serialize()
