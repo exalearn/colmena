@@ -5,7 +5,7 @@ from typing import Optional, Any, Tuple, Dict, Iterable, Union
 
 import redis
 
-from proxystore import init_redis_backend
+import proxystore as ps
 
 from colmena.exceptions import TimeoutException, KillSignalException
 from colmena.models import Result, SerializationMethod
@@ -253,7 +253,12 @@ class ClientQueues:
                 value_server_hostname = hostname
             if value_server_port is None:
                 value_server_port = port
-            init_redis_backend(value_server_hostname, value_server_port)
+            ps.store.init_store(
+                ps.store.STORES.REDIS,
+                name='redis',
+                hostname=value_server_hostname,
+                port=value_server_port
+            )
             logger.debug('Initialized value server using Redis server at '
                          f'{value_server_hostname}:{value_server_port}')
 

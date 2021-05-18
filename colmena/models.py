@@ -7,10 +7,10 @@ from enum import Enum
 from time import perf_counter
 from typing import Any, Tuple, Dict, Optional, Union
 
-import proxystore as ps
 from pydantic import BaseModel, Field
 
-from colmena.proxy import extract_and_evict
+import colmena
+import proxystore as ps
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ class Result(BaseModel):
         _value = self.value
         _inputs = self.inputs
 
-        def _serialize_and_proxy(value):
+        def _serialize_and_proxy(value, evict=False):
             """Helper function for serializing and proxying"""
             # Serialized object before proxying to compare size of serialized
             # object to value server threshold
@@ -183,11 +183,15 @@ class Result(BaseModel):
                 not isinstance(value, ps.proxy.Proxy)
             ):
                 # Proxy the value. Note: we use the id of the object as the key
-                # so calling to_proxy() on the same object multiple times
+                # so calling proxy() on the same object multiple times
                 # does not create multiple copies in the value server.
-                # TODO(gpauloski): consider making a custom Factory for Colmena
-                # to remove the double serialization here.
-                value_proxy = ps.to_proxy(value, key=str(id(value)))
+                value_proxy = colmena.proxy.proxy(
+                    value_str,
+                    key=str(id(value)),
+                    is_serialized=True,
+                    serialization_method=self.serialization_method,
+                    evict=evict
+                )
                 logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
                 # Serialize the proxy. This is efficient since the proxy is
                 # just a reference + metadata about the value
@@ -203,9 +207,11 @@ class Result(BaseModel):
             kwargs = {k: _serialize_and_proxy(v) for k, v in _inputs[1].items()}
             self.inputs = (args, kwargs)
 
-            # The entire result is serialized as one object
+            # The entire result is serialized as one object. Pass evict=True
+            # so the value is evicted from the value server once it is resolved
+            # by the thinker.
             if _value is not None:
-                self.value = _serialize_and_proxy(_value)
+                self.value = _serialize_and_proxy(_value, evict=True)
 
             return perf_counter() - start_time
         except Exception as e:
@@ -241,14 +247,7 @@ class Result(BaseModel):
 
             # Deserialize result if it exists
             if _value is not None:
-                _value = _deserialize(_value)
-                if isinstance(_value, ps.proxy.Proxy):
-                    # Task return values are always unique, so we immediately
-                    # evict the data from the value server to save space.
-                    # Evicting forces the proxy to resolve itself so we
-                    # also extract the wrapped object from the proxy
-                    _value = extract_and_evict(_value)
-                self.value = _value
+                self.value = _deserialize(_value)
 
             return perf_counter() - start_time
         except Exception as e:
