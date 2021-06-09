@@ -15,3 +15,13 @@ script:
     - pip install -r test-requirements.txt
     - flake8 colmena/
     - pytest colmena
+deploy:
+  provider: pypi
+  user: wardlt
+  skip_existing: true
+  distributions: sdist bdist_wheel
+  password:
+    secure: pypi-AgEIcHlwaS5vcmcCJGM5MGY1YjJiLTkyZDEtNDNlZS1iNDMzLWYzZmU1YTRkMDk2OQACOHsicGVybWlzc2lvbnMiOiB7InByb2plY3RzIjogWyJjb2xtZW5hIl19LCAidmVyc2lvbiI6IDF9AAAGINQwg7FnxqbcUmZZOCDVyiF4AOpyM8BnqCHalxj_RfT0
+  on:
+    tags: true
+    branch: master
