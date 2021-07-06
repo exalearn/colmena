@@ -1,4 +1,4 @@
-"""Tests for the Parsl implementation of the method server"""
+"""Tests for the Parsl implementation of the task server"""
 from typing import Tuple
 from parsl.config import Config
 from parsl import ThreadPoolExecutor
@@ -6,7 +6,7 @@ from parsl import ThreadPoolExecutor
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 
-from colmena.method_server.parsl import ParslMethodServer
+from colmena.task_server.parsl import ParslTaskServer
 from pytest import fixture, raises, mark
 
 
@@ -25,11 +25,11 @@ def config():
     )
 
 
-# Make a simple method server
+# Make a simple task server
 @fixture(autouse=True)
-def server_and_queue(config) -> Tuple[ParslMethodServer, ClientQueues]:
+def server_and_queue(config) -> Tuple[ParslTaskServer, ClientQueues]:
     client_q, server_q = make_queue_pairs('localhost', clean_slate=True)
-    server = ParslMethodServer([f], server_q, config)
+    server = ParslTaskServer([f], server_q, config)
     yield server, client_q
     if server.is_alive():
         server.terminate()

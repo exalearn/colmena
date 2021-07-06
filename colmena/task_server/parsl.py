@@ -1,4 +1,4 @@
-"""Parsl method server and related utilities"""
+"""Parsl task server and related utilities"""
 import os
 import logging
 import platform
@@ -17,8 +17,8 @@ from parsl.app.python import PythonApp
 from parsl.dataflow.futures import AppFuture
 
 from colmena.models import Result
-from colmena.method_server.base import BaseMethodServer
-from colmena.redis.queue import MethodServerQueues
+from colmena.task_server.base import BaseTaskServer
+from colmena.redis.queue import TaskServerQueues
 from colmena.proxy import resolve_proxies_async
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
 
 @python_app(executors=['_output_workers'])
-def output_result(queues: MethodServerQueues, topic: str, result_obj):
+def output_result(queues: TaskServerQueues, topic: str, result_obj: Result):
     """Submit the function result to the Redis queue
 
     Args:
@@ -135,7 +135,7 @@ class _ErrorHandler(Thread):
                     logger.warning(f'Task {task} with an exception: {exc}')
 
                     # Pull out the result objects
-                    queues: MethodServerQueues = task.task_def['args'][0]
+                    queues: TaskServerQueues = task.task_def['args'][0]
                     topic: str = task.task_def['args'][1]
                     method_task = task.task_def['depends'][0]
                     result_obj: Result = method_task.task_def['args'][0]
@@ -150,13 +150,13 @@ class _ErrorHandler(Thread):
                 futures = not_done
 
 
-class ParslMethodServer(BaseMethodServer):
-    """Method server based on Parsl
+class ParslTaskServer(BaseTaskServer):
+    """Task server based on Parsl
 
-    Create a Parsl method server by first creating a resource configuration following
+    Create a Parsl task server by first creating a resource configuration following
     the recommendations in `the Parsl documentation
     <https://parsl.readthedocs.io/en/stable/userguide/configuring.html>`_.
-    Then instantiate a method server with a list of functions,
+    Then instantiate a task server with a list of Python functions,
     configurations defining on which Parsl executors each function can run,
     and the Parsl resource configuration.
     The executor(s) for each function can be defined with a combination
@@ -164,30 +164,32 @@ class ParslMethodServer(BaseMethodServer):
 
     .. code-block:: python
 
-        ParslMethodServer([(f, {'executors': ['a']})], queues, config)
+        ParslTaskServer([(f, {'executors': ['a']})], queues, config)
 
     and also using a default executor
 
     .. code-block:: python
 
-        ParslMethodServer([f], queues, config, default_executors=['a'])
+        ParslTaskServer([f], queues, config, default_executors=['a'])
 
     Further configuration options for each method can be defined
     in the list of methods.
 
     **Technical Details**
 
-    The method server stores each of the supplied methods as Parsl "PythonApp" classes.
+    The task server stores each of the supplied methods as Parsl "PythonApp" classes.
     Tasks are launched using these PythonApps after being received on the queue.
     The Future provided when requesting the method invocation is then passed
     to second PythonApp that pushes the result of the function to the output
     queue after it completes.
     That second, "output_result," function runs on threads of the same
-    process as this method server.
+    process as this task server.
+    There is also a separate thread that monitors for Futures that yield an error
+    before the "output_result" function and sends back the error messages.
     """
 
     def __init__(self, methods: List[Union[Callable, Tuple[Callable, Dict]]],
-                 queues: MethodServerQueues,
+                 queues: TaskServerQueues,
                  config: Config,
                  timeout: Optional[int] = None,
                  default_executors: Union[str, List[str]] = 'all',
@@ -200,7 +202,7 @@ class ParslMethodServer(BaseMethodServer):
                 is a function and the second is a dictionary of the arguments being used to create
                 the Parsl ParslApp see `Parsl documentation
                 <https://parsl.readthedocs.io/en/stable/stubs/parsl.app.app.python_app.html#parsl.app.app.python_app>`_.
-            queues (MethodServerQueues): Queues for the method server
+            queues (TaskServerQueues): Queues for the task server
             config: Parsl configuration
             timeout (int): Timeout, if desired
             default_executors: Executor or list of executors to use by default.
@@ -225,7 +227,7 @@ class ParslMethodServer(BaseMethodServer):
         self.methods_ = {}
         for method in methods:
             # Get the options or use the defaults
-            if isinstance(method, tuple):
+            if isinstance(method, (tuple, list)):
                 if len(method) != 2:
                     raise ValueError('Method description should a tuple of length 2')
                 function, options = method
@@ -291,7 +293,7 @@ class ParslMethodServer(BaseMethodServer):
         return self.methods_[method_name](result)
 
     def _cleanup(self):
-        """Close out any resources needed by the method server"""
+        """Close out any resources needed by the task server"""
         # Wait until all tasks have finished
         dfk = parsl.dfk()
         dfk.wait_for_current_tasks()

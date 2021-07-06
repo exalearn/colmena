@@ -1,15 +1,15 @@
-colmena.method\_server
+colmena.task\_server
 ======================
 
-.. automodule:: colmena.method_server
+.. automodule:: colmena.task_server
    :members:
    :undoc-members:
    :show-inheritance:
 
-colmena.method\_server.base
+colmena.task\_server.base
 ---------------------------
 
-.. automodule:: colmena.method_server.base
+.. automodule:: colmena.task_server.base
    :members:
    :undoc-members:
    :show-inheritance:

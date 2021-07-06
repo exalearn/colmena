@@ -1,4 +1,4 @@
-"""Base class for the Method Server"""
+"""Base class for the Task Server"""
 
 from abc import ABCMeta, abstractmethod
 from multiprocessing import Process
@@ -6,31 +6,32 @@ from typing import Optional
 import logging
 
 from colmena.exceptions import KillSignalException, TimeoutException
-from colmena.redis.queue import MethodServerQueues
+from colmena.redis.queue import TaskServerQueues
 
 logger = logging.getLogger(__name__)
 
 
-class BaseMethodServer(Process, metaclass=ABCMeta):
-    """Abstract class that executes requests across distributed resources.
+class BaseTaskServer(Process, metaclass=ABCMeta):
+    """Abstract class for the Colmena Task Server, which manages the execution
+    of different asks
 
-    Clients submit requests to the server by pushing them to a Redis queue,
-    and then receives results from a second queue.
+    Clients submit task requests to the server by pushing them to a Redis queue,
+    and then receive results from a second queue.
 
     Different implementations vary in how the queue is processed.
 
-    Start the method server by first instantiating it and then calling :meth:`start`
+    Start the task server by first instantiating it and then calling :meth:`start`
     to launch the server in a separate process.
 
-    The method server is shutdown by pushing a ``None`` to the inputs queue,
-    signaling that no new tests will be incoming. The remaining tasks will
+    The task server can be stopped by pushing a ``None`` to the task queue,
+    signaling that no new tasks will be incoming. The remaining tasks will
     continue to be pushed to the output queue.
     """
 
-    def __init__(self, queues: MethodServerQueues, timeout: Optional[int] = None):
+    def __init__(self, queues: TaskServerQueues, timeout: Optional[int] = None):
         """
         Args:
-            queues (MethodServerQueues): Queues for the method server
+            queues (TaskServerQueues): Queues for the task server
             timeout (int): Timeout, if desired
         """
         super().__init__()
@@ -56,14 +57,14 @@ class BaseMethodServer(Process, metaclass=ABCMeta):
 
     @abstractmethod
     def _cleanup(self):
-        """Close out any resources needed by the method server"""
+        """Close out any resources needed by the task server"""
         pass
 
     def run(self) -> None:
         """Launch the thread and start running tasks
 
         Blocks until the inputs queue is closed and all tasks have completed"""
-        logger.info(f"Started method server {self.__class__.__name__} on {self.ident}")
+        logger.info(f"Started task server {self.__class__.__name__} on {self.ident}")
 
         # Loop until queue has closed
         self.listen_and_launch()

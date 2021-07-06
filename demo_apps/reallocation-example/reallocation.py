@@ -1,8 +1,8 @@
 """Perform GPR Active Learning where we periodicially dedicate resources to
 re-prioritizing a list of simulations to run"""
 from colmena.models import Result
-from colmena.thinker import BaseThinker, agent, result_processor, task_submitter
-from colmena.method_server import ParslMethodServer
+from colmena.thinker import BaseThinker, agent, result_processor
+from colmena.task_server import ParslTaskServer
 from colmena.thinker.resources import ResourceCounter
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 
@@ -101,7 +101,7 @@ class Thinker(BaseThinker):
                  search_space_size: int = 1000):
         """
         Args:
-            queues: Queues to use to communicate with the method server
+            queues: Queues to use to communicate with the task server
             output_dir: Output path for the result data
             dim: Dimensionality of optimization space
             batch_size: Number of simulations to run in parallel
@@ -132,11 +132,17 @@ class Thinker(BaseThinker):
         # Start by allocating all of the resources to the simulation task
         self.rec.reallocate(None, "sim", self.rec.unallocated_slots)
 
-    @task_submitter(task_type="sim", n_slots=1)
+    @agent
     def simulation_dispatcher(self):
         """Dispatch tasks"""
-        with self.queue_lock:
-            self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
+
+        # Until done, request resources and then submit task once available
+        while not self.done.is_set():
+            while not self.rec.acquire("sim", 1, timeout=1):
+                if self.done.is_set():
+                    return
+            with self.queue_lock:
+                self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
 
     @result_processor(topic="doer")
     def simulation_receiver(self, result: Result):
@@ -279,17 +285,17 @@ if __name__ == '__main__':
     )
     config.run_dir = os.path.join(out_dir, 'run-info')
 
-    # Create the method server and task generator
+    # Create the task server and task generator
     my_ackley = partial(ackley, mean_rt=args.runtime, std_rt=args.runtime_var)
     update_wrapper(my_ackley, ackley)
 
     my_rep = partial(reprioritize_queue, opt_delay=args.opt_delay)
     update_wrapper(my_rep, reprioritize_queue)
-    doer = ParslMethodServer([my_ackley, my_rep],
-                             server_queues, config)
+    doer = ParslTaskServer([my_ackley, my_rep],
+                           server_queues, config)
     thinker = Thinker(client_queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
                       batch_size=args.num_parallel)
-    logging.info('Created the method server and task generator')
+    logging.info('Created the task server and task generator')
 
     try:
         # Launch the servers
@@ -303,5 +309,5 @@ if __name__ == '__main__':
     finally:
         client_queues.send_kill_signal()
 
-    # Wait for the method server to complete
+    # Wait for the task server to complete
     doer.join()

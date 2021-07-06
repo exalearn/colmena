@@ -1,42 +1,35 @@
 Building a Colmena Application
 ==============================
 
-Creating a new application with Colmena involves building a "method server" to
+Creating a new application with Colmena involves defining a "tasks server" to
 that deploys expensive functions and a "thinker" application that
-decides which methods to invoke with what inputs.
+decides which tasks to submit.
 We describe each topic separately.
 
 See `Design <./design.html>`_ for details on Colmena architecture.
 
-Configuring a Method Server
----------------------------
+Configuring a Task Server
+-------------------------
 
-The method server for Colmena is configured with the list of methods, a
-list available computational resources and a mapping between those two.
+The task server for Colmena is configured with the list of methods, a
+list available computational resources and a mapping of which methods
+can use each resource.
 
 Defining Methods
 ++++++++++++++++
 
 Methods in Colmena are defined as Python functions.
-Any Python function can be serviced by Colmena, but
+Any Python function can be served by Colmena, but
 there are several limitations in practice:
 
 1. *Functions must be serializable.* We recommend defining functions in Python
-   modules that are accessible from the Python PATH. Consider creating a Python
-   module with the functions needed for your application and installing that function
-   to the Python path with Pip.
+   in the script that creates the task server or in modules that are accessible
+   from the Python Path (e.g., part of packages installed with ``pip``)
 2. *Inputs must be serializable.* Parsl makes a best effort to serialize function
    inputs with JSON, Pickle and other serialization libraries but some object types
    (e.g., thread locks) cannot be serialized.
 3. *Functions must be pure.* Colmena is designed with the assumption that the order
    in which you execute tasks does not change the outcomes.
-
-We recommend creating simple Python wrappers for methods which require calling other executables.
-The methods will be responsible for generating any required input files and processing the outputs
-generated from this method.
-Note that we are considering an improved model where the pre- and post-processing methods can
-be separate tasks to avoid holding on to large number of nodes
-during pre- or post-processing (see `Issue #4 <https://github.com/exalearn/colmena/issues/4>`_).
 
 Common Example: Launching MPI Applications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -95,6 +88,13 @@ This basic pattern has many points for further optimization that could be critic
    consider using separate methods to pre- and postprocessing. We are planning to streamline this process in
    the future (see `Issue #4 <https://github.com/exalearn/colmena/issues/4>`_).
 
+.. note::
+
+    We are considering an improved model where the pre- and post-processing methods can
+    be separate tasks to avoid holding on to large number of nodes
+    during pre- or post-processing (see `Issue #4 <https://github.com/exalearn/colmena/issues/4>`_).
+
+
 Specifying Computational Resources
 ++++++++++++++++++++++++++++++++++
 
@@ -105,24 +105,18 @@ We use an complex example that specifies running a mix of single-node and multi-
 
 .. code-block:: python
 
+    from parsl.addresses import address_by_hostname
+    from parsl.config import Config
+    from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
+    from parsl.launchers import AprunLauncher, SimpleLauncher
+    from parsl.providers import LocalProvider
+
+
     example_config = Config(
         executors=[
-            HighThroughputExecutor(
-                address=address_by_hostname(),
+            ThreadPoolExecutor(
                 label="multi_node",
-                max_workers=8,
-                provider=LocalProvider(
-                    nodes_per_block=1,
-                    init_blocks=1,
-                    max_blocks=1,
-                    launcher=SimpleLauncher(),  # Places worker on the launch node
-                    worker_init='''
-    module load miniconda-3
-    export PATH=~/software/psi4/bin:$PATH
-    conda activate /lus/theta-fs0/projects/CSC249ADCD08/colmena/env
-    export NODE_COUNT=4
-    ''',
-                ),
+                max_threads=8
             ),
             HighThroughputExecutor(
                 address=address_by_hostname(),
@@ -148,16 +142,16 @@ The overall configuration is broken into two types of "executors:"
 
 ``multi_node``
   The ``multi_node`` executor provides resources for applications that use multiple nodes.
-  Note that the executor is deployed using the :class:`parsl.launcher.SimpleLauncher`,
-  which means that it will be placed on the same node as the Method Server.
+  We use the ``ThreadPoolExecutor`` to run the pre- and post-processing Python code
+  on the same Python process as the task server, which can save significant computational resources.
   The maximum number of tasks being run on this resource is defined by ``max_workers``.
-  Colmena users are responsible for providing the appropriate ``aprun`` invocation in methods
+  Colmena users are responsible for providing the appropriate ``mpirun`` invocation in methods
   deployed on this resource and for controlling the number of nodes used for each task.
 
 ``single_node``
   The ``single_node`` executor handles tasks that do not require inter-node communication.
   Parsl places workers on two nodes (see the ``nodes_per_block`` setting) with the ``aprun``
-  launcher, as required by Theta. Each node spawns 2 workers and can therefore perform
+  launcher, as required by Theta. Each node spawns 2 workers and can perform
   two tasks concurrently.
 
 
@@ -170,9 +164,9 @@ on behalf of the application (e.g., from an HPC job scheduler).
 Mapping Methods to Resources
 ++++++++++++++++++++++++++++
 
-The constructor of :class:`colmena.method_server.ParslMethodServer` takes a list of
+The constructor of :class:`colmena.task_server.ParslTaskServer` takes a list of
 Python function objects as an input.
-Internally, the method server converts these to Parsl "apps" by calling
+Internally, the task server converts these to Parsl "apps" by calling
 :py:func:`python_app` function from Parsl.
 You can pass the keyword arguments for this function along with each function
 to map functions to specific resources.
@@ -182,7 +176,7 @@ method to the "multi_node" resource and the ML task to the "single_node" resourc
 
 .. code-block:: python
 
-    server = ParslMethodServer([
+    server = ParslTaskServer([
         (launch_mpi_application, {'executor': 'multi_node'}),
         (generate_designs_with_ml, {'executor': 'single_node'})
     ])
@@ -193,18 +187,15 @@ Creating a "Thinker" Application
 Colmena is designed to support many different algorithms for creating tasks and
 responding to results.
 Such "thinking" applications take the form of threads that send and receive results
-to/from the method server(s) using the Redis queues.
+to/from the task server(s) using the Redis queues.
 Colmena provides as :class:`colmena.thinker.BaseThinker` class to simplify creating
 multi-threaded applications.
-
-This part of the guide describes the high-level features of the ``BaseThinker`` class.
-Advanced features are described in `the next section <./thinker.html>`_.
 
 Working with ``BaseThinker``
 ++++++++++++++++++++++++++++
 
 Creating a new ``BaseThinker`` subclass involves defining different "agents"
-that interact with each other and the method server.
+that interact with each other and the task server.
 The class itself provides a template for defining information shared between agents
 and a mechanism for launching them as separate threads.
 
@@ -226,7 +217,7 @@ A minimal Thinker is as follows:
 
 The example shows us a few key concepts:
 
-1. You communicate with the method server using ``self.queues``, which provides
+1. You communicate with the task server using ``self.queues``, which provides
    `a wrapper over the Redis queues <https://colmena.readthedocs.io/en/latest/source/colmena.redis.html#colmena.redis.queue.ClientQueues>`_.
 2. Operations within the a Thinker are marked with the ``@agent`` decorator.
 3. Calling ``thinker.run()`` launches all agent threads within that class
@@ -235,14 +226,14 @@ The example shows us a few key concepts:
 Submitting Tasks
 ~~~~~~~~~~~~~~~~
 
-:class:`colmena.redis.queue.ClientQueues` provides communication to the method server
+:class:`colmena.redis.queue.ClientQueues` provides communication to the task server
 and is available as the ``self.queues`` class attribute.
 
-Submit requests to the method server with the ``send_inputs`` function.
+Submit requests to the task server with the ``send_inputs`` function.
 Besides the input arguments and method name, the function also accepts a
 "topic" for the method queue used when filtering the output results.
 
-The ``get_result`` function retrieves the next result from the method server
+The ``get_result`` function retrieves the next result from the task server
 as a :class:`colmena.models.Result` object.
 The ``Result`` object contains the output task and the performance information
 (e.g., how long communication to the client required).
@@ -447,13 +438,13 @@ Creating a ``main.py``
 ----------------------
 
 The script used to launch a Colmena application must create the Redis queues and
-launch the method server and thinking application.
+launch the task server and thinking application.
 
 A common pattern is as follows:
 
 .. code-block:: python
 
-    from colmena.method_server import ParslMethodServer
+    from colmena.task_server import ParslTaskServer
     from colmena.redis.queue import make_queue_pairs
 
     if __name__ == "__main__":
@@ -462,8 +453,8 @@ A common pattern is as follows:
         # Generate the queue pairs
         client_queues, server_queues = make_queue_pairs('localhost', serialization_method='json')
 
-        # Instantiate the method server and thinker
-        method_server = ParslMethodServer(functions, server_queues, config)
+        # Instantiate the task server and thinker
+        task_server = ParslTaskServer(functions, server_queues, config)
         thinker = Thinker(client_queues)
 
         try:
@@ -474,20 +465,20 @@ A common pattern is as follows:
             # Wait for the thinking application to complete
             thinker.join()
         finally:
-            # Send a shutdown signal to the method server
+            # Send a shutdown signal to the task server
             client_queues.send_kill_signal()
 
-        # Wait for the method server to complete
+        # Wait for the task server to complete
         doer.join()
 
 The above script can be run as any other python code (e.g., ``python run.py``)
 once you have started Redis (e.g., calling ``redis-server``).
 
-We have described configuration options for method server and thinker applications earlier.
+We have described configuration options for task server and thinker applications earlier.
 The key options to discuss here are those of the communication queues.
 
 The :meth:`colmena.redis.queue.create_queue_pairs` function creates Redis queues with matching options
-for the thinking application (client) and method server.
+for the thinking application (client) and task server.
 These options include the network address of the Redis server,
 a list of "topics" that define separate queues for certain types of tasks,
 and a few communication options, such as:

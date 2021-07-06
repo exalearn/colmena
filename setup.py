@@ -19,6 +19,7 @@ setup(
     include_package_data=True,
     description='colmena: Intelligent Steerable Pipelines on HPC',
     long_description=long_desc,
+    long_description_content_type='text/markdown',
     install_requires=install_requires,
     python_requires=">=3.6.*",
     classifiers=[
@@ -32,7 +33,6 @@ setup(
     ],
     keywords=[
         "parsl",
-        "pipeline",
         "HPC",
     ],
     author="Globus Labs",

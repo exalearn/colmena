@@ -6,7 +6,7 @@ from math import inf
 from parsl import HighThroughputExecutor
 from parsl.config import Config
 
-from colmena.method_server import ParslMethodServer
+from colmena.task_server import ParslTaskServer
 from colmena.redis.queue import make_queue_pairs
 from colmena.thinker import BaseThinker, agent
 
@@ -33,7 +33,7 @@ if __name__ == "__main__":
     # Define the worker configuration
     config = Config(executors=[HighThroughputExecutor()])
 
-    doer = ParslMethodServer([target_function, task_generator], server_queues, config)
+    doer = ParslTaskServer([target_function, task_generator], server_queues, config)
 
     # Define the thinker
     class Thinker(BaseThinker):
@@ -66,7 +66,7 @@ if __name__ == "__main__":
                 self.queues.send_inputs(result.value, method='target_function', topic='simulate')
 
     thinker = Thinker(client_queues)
-    logging.info('Created the method server and task generator')
+    logging.info('Created the task server and task generator')
 
     try:
         # Launch the servers
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     finally:
         client_queues.send_kill_signal()
 
-    # Wait for the method server to complete
+    # Wait for the task server to complete
     doer.join()
 
     # Print the output result

@@ -24,9 +24,9 @@ model or selecting a new simulation with Bayesian optimization.
 
 Colmena provides a few main components to enable building thinking applications:
 
-    1. A "Method Server" that provides a simplified interface to HPC-ready workflow systems
-    2. A high-performance queuing system for interacting with method server(s) from thinking applications
-    3. An extensible base class for building thinking applications with a dataflow programming model
+    #. An extensible base class for building thinking applications with a dataflow-like programming model
+    #. A "Tasks Server" that provides a simplified interface to HPC-ready workflow systems
+    #. A high-performance queuing system communicating between tasks server(s) from thinking applications
 
 The `demo applications <https://github.com/exalearn/colmena/tree/master/demo_apps/optimizer-examples>`_
 illustrate how to implement different thinking applications that solve optimization problems.
