@@ -16,7 +16,7 @@ from parsl.config import Config
 from parsl.launchers import AprunLauncher, SimpleLauncher
 from parsl.providers import LocalProvider, CobaltProvider
 
-from colmena.method_server import ParslMethodServer
+from colmena.task_server import ParslTaskServer
 from colmena.redis.queue import make_queue_pairs, ClientQueues
 from colmena.thinker import BaseThinker, agent
 
@@ -183,7 +183,7 @@ if __name__ == "__main__":
 
     config = Config(executors=executors, run_dir=out_dir)
 
-    doer = ParslMethodServer([target_function], server_queues, config)
+    doer = ParslTaskServer([target_function], server_queues, config)
 
     thinker = Thinker(
         queue=client_queues,
@@ -195,7 +195,7 @@ if __name__ == "__main__":
         reuse_data=args.reuse_data,
     )
 
-    logging.info('Created the method server and task generator')
+    logging.info('Created the task server and task generator')
     logging.info(thinker)
 
     start_time = time.time()
@@ -212,7 +212,7 @@ if __name__ == "__main__":
     finally:
         client_queues.send_kill_signal()
 
-    # Wait for the method server to complete
+    # Wait for the task server to complete
     doer.join()
 
     # Print the output result

@@ -1,8 +1,9 @@
 """Perform GPR Active Learning where one threads continually re-prioritizes a list of
 simulations to run and a second thread sebmits """
-from colmena.models import Result
-from colmena.thinker import BaseThinker, agent, result_processor
-from colmena.method_server import ParslMethodServer
+
+
+from colmena.thinker import BaseThinker, agent
+from colmena.task_server import ParslTaskServer
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
@@ -100,7 +101,7 @@ class Thinker(BaseThinker):
             dim (int): Dimensionality of optimization space
             batch_size (int): Number of simulations to run in parallel
             n_guesses (int): Number of guesses the Thinker can make
-            queues (ClientQueues): Queues for communicating with method server
+            queues (ClientQueues): Queues for communicating with task server
         """
         super().__init__(queues)
         self.n_guesses = n_guesses
@@ -120,36 +121,40 @@ class Thinker(BaseThinker):
         self.queue_lock = Lock()
         self.done = Event()
 
-    @result_processor(topic='doer')
-    def simulation_worker(self, result: Result):
+    @agent
+    def simulation_worker(self):
         """Dispatch tasks and update"""
-
-        # Immediately send out a new one
-        with self.queue_lock:
+        # Send out the initial tasks
+        for _ in range(self.batch_size):
             self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
 
-        # Add the old task to the database
-        self.database.append((result.args[0], result.value))
+        # Pull and re-submit
+        while not self.done.is_set():
+            # Get a result
+            result = self.queues.get_result(topic='doer')
 
-        # Append it to the output deck
-        with open(self.output_path, 'a') as fp:
-            print(result.json(exclude={'inputs'}), file=fp)
+            # Immediately send out a new one
+            with self.queue_lock:
+                self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
 
-        # If have required amount, terminate program
-        if len(self.database) == self.n_guesses:
-            logging.info('Done running new calculations')
-            self.done.set()
+            # Add the old task to the database
+            self.database.append((result.args[0], result.value))
 
-        # Mark that we have some data now
-        self.has_data.set()
+            # Append it to the output deck
+            with open(self.output_path, 'a') as fp:
+                print(result.json(exclude={'inputs'}), file=fp)
+
+            # If have required amount, terminate program
+            if len(self.database) == self.n_guesses:
+                logging.info('Done running new calculations')
+                self.done.set()
+
+            # Mark that we have some data now
+            self.has_data.set()
 
     @agent
     def thinker_worker(self):
         """Reprioritize task list"""
-
-        # Send out the initial tasks
-        for _ in range(self.batch_size):
-            self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
 
         # Make the GPR model
         gpr = Pipeline([
@@ -159,6 +164,7 @@ class Thinker(BaseThinker):
 
         # Wait until we have data
         self.has_data.wait()
+        logging.info('Task reprioritization worker has started')
 
         while not self.done.is_set():
             # Send out an update task
@@ -259,18 +265,18 @@ if __name__ == '__main__':
     )
     config.run_dir = os.path.join(out_dir, 'run-info')
 
-    # Create the method server and task generator
+    # Create the task server and task generator
     my_ackley = partial(ackley, mean_rt=args.runtime, std_rt=args.runtime_var)
     update_wrapper(my_ackley, ackley)
 
     my_rep = partial(reprioritize_queue, opt_delay=args.opt_delay)
     update_wrapper(my_rep, reprioritize_queue)
-    doer = ParslMethodServer([(my_ackley, {'executors': ['simulation']}),
-                              (my_rep, {'executors': ['task_generator']})],
-                             server_queues, config)
+    doer = ParslTaskServer([(my_ackley, {'executors': ['simulation']}),
+                            (my_rep, {'executors': ['task_generator']})],
+                           server_queues, config)
     thinker = Thinker(client_queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
                       batch_size=args.num_parallel)
-    logging.info('Created the method server and task generator')
+    logging.info('Created the task server and task generator')
 
     try:
         # Launch the servers
@@ -284,5 +290,5 @@ if __name__ == '__main__':
     finally:
         client_queues.send_kill_signal()
 
-    # Wait for the method server to complete
+    # Wait for the task server to complete
     doer.join()

@@ -14,8 +14,8 @@ Several objects are available to all "agent" threads available in a Thinker appl
 Queues
 ++++++
 
-The ``self.queue`` attribute of a Thinker class manages communication to the method server.
-Each agent can use it to submit tasks or wait for results from the method server.
+The ``self.queue`` attribute of a Thinker class manages communication to the task server.
+Each agent can use it to submit tasks or wait for results from the task server.
 
 The :class:`colmena.redis.queue.ClientQueues` object must be provided to the constructor.
 
@@ -71,40 +71,5 @@ must decorate a function that takes Result object as an input.
     class Thinker(BaseThinker):
         @result_processor(topic='simulation')
         def process(self, result: Result):
-            # Do some compute that that result
-            self.database.append((result.args, results.value))
+            # Process results
 
-Task Submission Agents
-++++++++++++++++++++++
-
-The task submission agents react to the availability of computational resources.
-The :func:`colmena.thinker.task_submitter` decorator tasks the pool of resources
-to draw from and the number of slots needed for this agent to begin processing.
-Agent functions have no arguments.
-
-.. code-block:: python
-
-    class Thinker(BaseThinker)
-        @task_submitter(n_slots=4, task_type="simulation")
-        def submit_new_simulation(self):
-            self.queues.submit_task(self.task_queue.pop(), method='simulate')
-
-
-Event Responder Agent
-+++++++++++++++++++++
-
-The :func:`colmena.thinker.event_responder` waits for an event associated with an thinker being set.
-The ``event_name`` is the name of a class attribute of the thinker class.
-
-.. code-block:: python
-
-    class Thinker(BaseThinker):
-
-        def __init__(self, queues):
-            super().__init__(queues)
-            self.flag = Event()
-
-        @event_responder(event_name="flag")
-        def responder(self):
-            self.flag.clear()  # Mark that we saw the event
-            # Do something about it

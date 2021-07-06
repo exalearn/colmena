@@ -83,7 +83,7 @@ class Result(BaseModel):
 
     # Performance tracking
     time_created: float = Field(None, description="Time this value object was created")
-    time_input_received: float = Field(None, description="Time the inputs was received by the method server")
+    time_input_received: float = Field(None, description="Time the inputs was received by the task server")
     time_compute_started: float = Field(None, description="Time workflow process began executing a task")
     time_result_sent: float = Field(None, description="Time message was sent from the server")
     time_result_received: float = Field(None, description="Time value was received by client")
@@ -130,7 +130,7 @@ class Result(BaseModel):
         self.time_result_received = datetime.now().timestamp()
 
     def mark_input_received(self):
-        """Mark that a method server has received a value"""
+        """Mark that a task server has received a value"""
         self.time_input_received = datetime.now().timestamp()
 
     def mark_compute_started(self):
@@ -138,7 +138,7 @@ class Result(BaseModel):
         self.time_compute_started = datetime.now().timestamp()
 
     def mark_result_sent(self):
-        """Mark when a result is sent from the method server"""
+        """Mark when a result is sent from the task server"""
         self.time_result_sent = datetime.now().timestamp()
 
     def set_result(self, result: Any, runtime: float = None):

@@ -29,7 +29,7 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
                      value_server_threshold: Optional[int] = None,
                      value_server_hostname: Optional[str] = None,
                      value_server_port: Optional[int] = None)\
-        -> Tuple['ClientQueues', 'MethodServerQueues']:
+        -> Tuple['ClientQueues', 'TaskServerQueues']:
     """Make a pair of queues for a server and client
 
     Args:
@@ -48,17 +48,17 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
             the redis server for the task queues will be used.
         value_server_port (int): See `value_server_hostname`
     Returns:
-        (ClientQueues, MethodServerQueues): Pair of communicators set to use the correct channels
+        (ClientQueues, TaskServerQueues): Pair of communicators set to use the correct channels
     """
 
     return (ClientQueues(hostname, port, name, serialization_method, keep_inputs,
                          topics, value_server_threshold, value_server_hostname,
                          value_server_port),
-            MethodServerQueues(hostname, port, name, topics=topics, clean_slate=clean_slate))
+            TaskServerQueues(hostname, port, name, topics=topics, clean_slate=clean_slate))
 
 
 class RedisQueue:
-    """A basic redis queue for communications used by the method server
+    """A basic redis queue for communications used by the task server
 
     A queue is defined by its prefix and a "topic" designation.
     The full list of available topics is defined when creating the queue,
@@ -179,7 +179,7 @@ class RedisQueue:
         queue = f'{self.prefix}_{topic}'
         assert queue in self._all_queues, f'Unrecognized topic: {topic}'
 
-        # Send it to the method server
+        # Send it to the task server
         try:
             self.redis_client.rpush(queue, input_data)
         except redis.exceptions.ConnectionError:
@@ -204,7 +204,7 @@ class RedisQueue:
 
 
 class ClientQueues:
-    """Provides communication of method requests and results with the method server
+    """Provides communication of method requests and results with the task server
 
     This queue wraps communication with the underlying Redis queue and also handles communicating
     requests using the :class:`Result` messaging format.
@@ -310,7 +310,7 @@ class ClientQueues:
             value_server_threshold=self.value_server_threshold
         )
 
-        # Push the serialized value to the method server
+        # Push the serialized value to the task server
         result.time_serialize_inputs = result.serialize()
         self.outbound.put(result.json(exclude_unset=True), topic=topic)
         logger.info(f'Client sent a {method} task with topic {topic}')
@@ -345,12 +345,12 @@ class ClientQueues:
         return result_obj
 
     def send_kill_signal(self):
-        """Send the kill signal to the method server"""
+        """Send the kill signal to the task server"""
         self.outbound.put("null")
 
 
-class MethodServerQueues:
-    """Communication wrapper for the method server
+class TaskServerQueues:
+    """Communication wrapper for the task server
 
     Handles receiving tasks
     """

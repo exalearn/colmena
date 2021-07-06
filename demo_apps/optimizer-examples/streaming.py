@@ -2,7 +2,7 @@
 calculation as soon as one calculation completes"""
 
 from colmena.thinker import BaseThinker, agent
-from colmena.method_server import ParslMethodServer
+from colmena.task_server import ParslTaskServer
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
@@ -66,7 +66,7 @@ class Thinker(BaseThinker):
             dim (int): Dimensionality of optimization space
             batch_size (int): Number of simulations to run in parallel
             n_guesses (int): Number of guesses the Thinker can make
-            queues (ClientQueues): Queues for communicating with method server
+            queues (ClientQueues): Queues for communicating with task server
             opt_delay (float): Minimum runtime for the optimizer algorithm
         """
         super().__init__(queues)
@@ -181,13 +181,13 @@ if __name__ == '__main__':
     )
     config.run_dir = os.path.join(out_dir, 'run-info')
 
-    # Create the method server and task generator
+    # Create the task server and task generator
     my_ackley = partial(ackley, mean_rt=args.runtime, std_rt=args.runtime_var)
     update_wrapper(my_ackley, ackley)
-    doer = ParslMethodServer([my_ackley], server_queues, config, default_executors=['htex'])
+    doer = ParslTaskServer([my_ackley], server_queues, config, default_executors=['htex'])
     thinker = Thinker(client_queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
                       batch_size=args.num_parallel, opt_delay=args.opt_delay)
-    logging.info('Created the method server and task generator')
+    logging.info('Created the task server and task generator')
 
     try:
         # Launch the servers
@@ -201,5 +201,5 @@ if __name__ == '__main__':
     finally:
         client_queues.send_kill_signal()
 
-    # Wait for the method server to complete
+    # Wait for the task server to complete
     doer.join()

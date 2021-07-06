@@ -1,5 +1,5 @@
 from colmena.models import SerializationMethod
-from colmena.redis.queue import RedisQueue, ClientQueues, MethodServerQueues, make_queue_pairs
+from colmena.redis.queue import RedisQueue, ClientQueues, TaskServerQueues, make_queue_pairs
 import pickle as pkl
 import pytest
 
@@ -61,16 +61,16 @@ def test_flush(queue):
 def test_client_method_pair():
     """Make sure method client/server can talk and back and forth"""
     client = ClientQueues('localhost')
-    server = MethodServerQueues('localhost')
+    server = TaskServerQueues('localhost')
 
     # Ensure client and server are talking to the same queue
     assert client.outbound.prefix == server.inbound.prefix
     assert client.inbound.prefix == server.outbound.prefix
 
-    # Push inputs to method server and make sure it is received
+    # Push inputs to task server and make sure it is received
     client.send_inputs(1)
     topic, task = server.get_task()
-    task.deserialize()  # Method server does not deserialize automatically
+    task.deserialize()  # task server does not deserialize automatically
     assert topic == 'default'
     assert task.args == (1,)
     assert task.time_input_received is not None
@@ -94,7 +94,7 @@ def test_methods():
     """Test sending a method name"""
     client, server = make_queue_pairs('localhost')
 
-    # Push inputs to method server and make sure it is received
+    # Push inputs to task server and make sure it is received
     client.send_inputs(1, method='test')
     _, task = server.get_task()
     task.deserialize()
@@ -149,7 +149,7 @@ def test_filtering():
     """Test filtering tasks by topic"""
     client, server = make_queue_pairs('localhost', clean_slate=True, topics=['priority'])
 
-    # Simulate a result being sent through the method server
+    # Simulate a result being sent through the task server
     client.send_inputs("hello", topic="priority")
     topic, task = server.get_task()
     task.deserialize()

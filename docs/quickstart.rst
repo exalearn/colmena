@@ -58,10 +58,10 @@ Any input/output object of a target function larger than :code:`value_server_thr
 By default, the value server uses the Redis server passed to :code:`make_queue_pairs`.
 An alternative Redis server for the value server can be specified via the :code:`value_server_hostname` and :code:`value_server_port` parameters of :code:`make_queue_pairs`.
 
-2. Build a method server
-------------------------
+2. Build a task server
+----------------------
 
-The "method server" in Colmena distributes request to run functions across distributed resources.
+The "task server" in Colmena distributes request to run functions across distributed resources.
 We create one by defining a list of functions and the resources to run them across.
 
 Colmena uses `Parsl <http://parsl-project.org/>`_ to manage executing tasks.
@@ -72,7 +72,7 @@ it to only use up to 4 processes on a single machine:
 
     config = Config(executors=[HighThroughputExecutor(max_workers=4)])
 
-The list of methods and resources are used to define the "method server":
+The list of methods and resources are used to define the "task server":
 
 .. code-block:: python
 
@@ -83,7 +83,7 @@ The list of methods and resources are used to define the "method server":
 
 Colmena provides a "BaseThinker" class to create steering applications.
 These applications run multiple operations (called agents) that send tasks and receive results
-from the method server.
+from the task server.
 
 Our thinker has two agents that each are class methods marked with the ``@agent`` decorator:
 
@@ -118,7 +118,7 @@ Our thinker has two agents that each are class methods marked with the ``@agent`
                 self.logger.info(f'Created a new guess: {result.value:.2f}')
                 self.queues.send_inputs(result.value, method='target_function', topic='simulate')
 
-"Producer" creates new tasks by calling the "task_generator" method (defined with the method server)
+"Producer" creates new tasks by calling the "task_generator" method (defined with the task server)
 and then using that new task as input to the "target_function."
 
 "Consumer" retrieves completed tasks and determines whether to update the best result so far.
@@ -133,7 +133,7 @@ A few things to note:
 4. Launching the application
 ----------------------------
 
-The method server and thinker objects are run asynchronously.
+The task server and thinker objects are run asynchronously.
 Accordingly, we call their ``.start()`` methods to launch them.
 
 .. code-block:: python
@@ -150,7 +150,7 @@ Accordingly, we call their ``.start()`` methods to launch them.
     finally:
         client_queues.send_kill_signal()
 
-    # Wait for the method server to complete
+    # Wait for the task server to complete
     doer.join()
 
 5. Running the application
@@ -164,7 +164,7 @@ The application will produce a prolific about of log messages, including:
 
     ``... - thinker.producer - INFO - Created a new guess: 9.51``
 
-2. Messages from the Colmena queue or method server
+2. Messages from the Colmena queue or task server
 
     ``... - colmena.redis.queue - INFO - Client received a task_generator result with topic generate```
 

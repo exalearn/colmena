@@ -177,7 +177,7 @@ class BaseThinker(Thread):
 
     Each agent communicates with others via `queues <https://docs.python.org/3/library/queue.html>`_
     or other `threading objects <https://docs.python.org/3/library/threading.html#>`_ and
-    the Colmena method server via the :class:`ClientQueues`.
+    the Colmena task server via the :class:`ClientQueues`.
     The only communication method available by default is a class attribute named ``done``
     that is used to signal that the program should terminate.
 
@@ -203,7 +203,7 @@ class BaseThinker(Thread):
                  daemon: bool = True, **kwargs):
         """
             Args:
-                queue: Queue wrapper used to communicate with method server
+                queue: Queue wrapper used to communicate with task server
                 resource_counter: Utility to used track resource utilization
                 daemon: Whether to launch this as a daemon thread
                 **kwargs: Options passed to :class:`Thread`
