@@ -40,6 +40,7 @@ illustrate how to implement different thinking applications that solve optimizat
    quickstart
    design
    how-to
+   thinker
    source/modules
 
 Why the name "Colmena?"

@@ -444,7 +444,7 @@ A common pattern is as follows:
 
 .. code-block:: python
 
-    from colmena.method_server import ParslMethodServer
+    from colmena.task_server import ParslTaskServer
     from colmena.redis.queue import make_queue_pairs
 
     if __name__ == "__main__":
@@ -454,7 +454,7 @@ A common pattern is as follows:
         client_queues, server_queues = make_queue_pairs('localhost', serialization_method='json')
 
         # Instantiate the task server and thinker
-        method_server = ParslMethodServer(functions, server_queues, config)
+        task_server = ParslTaskServer(functions, server_queues, config)
         thinker = Thinker(client_queues)
 
         try:

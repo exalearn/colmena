@@ -86,7 +86,7 @@ workflows in Python.
 We create :class:`parsl.app.PythonApp` for each of the methods available in the task server,
 which allows us to use them as part of Parsl workflows and execute them on distributed resources.
 
-The :class:`colmena.method_server.ParslMethodServer` itself is a multi-process, multi-threaded Python application:
+The :class:`colmena.task_server.ParslMethodServer` itself is a multi-process, multi-threaded Python application:
 
 1. *Intake Thread*: The intake thread reads task requests from the input Redis queue(s), deserializes
    them and submits the appropriate tasks to Parsl. Submitting a task to Parsl involves calling
