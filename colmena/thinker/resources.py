@@ -1,5 +1,5 @@
 """Utilities for tracking resources"""
-from threading import Semaphore, Lock, Event
+from threading import Semaphore, Lock, Event, Thread
 from typing import List, Dict, Optional
 from time import monotonic
 from math import inf
@@ -212,3 +212,57 @@ class ResourceCounter:
             #   system that resources allocated to ``from_task`` should be released
 
         return acq_success
+
+
+class ReallocatorThread(Thread):
+    """Thread that reallocates resources until an event is set.
+
+    Create a thread by defining the procedure the thread should follow for reallocation
+    (e.g., from where to gather resources, where to store them)
+    and an event that will signal for it to exit.
+
+    Runs as a daemon thread."""
+
+    def __init__(self, resource_counter: ResourceCounter, stop_event: Event,
+                 gather_from: Optional[str], gather_to: Optional[str],
+                 disperse_to: Optional[str], max_slots: Optional[int] = None,
+                 slot_step: int = 1, logger_name: Optional[str] = None):
+        """
+        Args:
+            resource_counter: Resource counter used to track resources
+            stop_event: Event which controls when the thread should give resources back
+            logger_name: Name of the logger, if desired
+            gather_from: Name of a resource pool from which to acquire resources
+            gather_to: Name of the resource pool to place re-allocated resources
+            disperse_to: Name of the resource pool to move resources to after function completes
+            max_slots: Maximum number of resource slots to acquire
+            slot_step: Number of slots to acquire per request
+        """
+        super().__init__(daemon=True)
+
+        self.resource_counter = resource_counter
+        self.stop_event = stop_event
+        self.gather_from = gather_from
+        self.gather_to = gather_to
+        self.disperse_to = disperse_to
+        self.max_slots = max_slots
+        self.slot_step = slot_step
+
+        self.logger = logger if logger_name is None else logging.getLogger(logger_name)
+
+    def run(self) -> None:
+        self.logger.info('Starting resource allocation thread')
+
+        # Acquire resources until either the maximum is reached, or the event is triggered
+        n_acquired = 0
+        while (self.max_slots is None or n_acquired < self.max_slots) and not self.stop_event.is_set():
+            success = self.resource_counter.reallocate(self.gather_from, self.gather_to,
+                                                       self.slot_step, cancel_if=self.stop_event)
+            if success:
+                n_acquired += self.slot_step
+
+        # Once the stop event is triggered, move the resources to a specified pool
+        self.logger.info('Waiting for stop condition to be set')
+        self.stop_event.wait()
+        self.resource_counter.reallocate(self.gather_to, self.disperse_to, n_acquired)
+        self.logger.info('Resource allocation thread exiting')

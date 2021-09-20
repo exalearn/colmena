@@ -1,8 +1,9 @@
 from threading import Timer, Event
+from time import sleep
 
 from pytest import fixture
 
-from colmena.thinker.resources import ResourceCounter
+from colmena.thinker.resources import ResourceCounter, ReallocatorThread
 
 
 @fixture
@@ -61,3 +62,36 @@ def test_allocations(rec):
     assert not rec.acquire("sim", n_slots=5, cancel_if=stop)
     assert rec.available_slots("sim") == 4
     assert stop.is_set()
+
+
+def test_reallocator(rec):
+    # Start with everything allocated to "simulation"
+    rec.reallocate(None, "sim", 8)
+
+    # Test allocating up to the maximum
+    stop = Event()
+    alloc = ReallocatorThread(rec, stop, gather_from="sim", gather_to="ml", disperse_to=None, max_slots=2)
+    alloc.start()
+    sleep(0.2)
+    assert alloc.is_alive()
+    assert rec.allocated_slots("ml") == 2
+
+    # Once you set "stop," the thread should move resources to "unallocated"
+    stop.set()
+    sleep(0.2)
+    assert not alloc.is_alive()
+    assert rec.unallocated_slots == 2
+
+    # Test without a maximum allocation
+    stop.clear()
+    alloc = ReallocatorThread(rec, stop, gather_from="sim", gather_to="ml", disperse_to=None)
+    alloc.start()
+    sleep(0.2)
+    assert alloc.is_alive()
+    assert rec.available_slots("sim") == 0
+
+    # Once you trigger the "stop event," the thread should move all resources to "None" and then exit
+    stop.set()
+    sleep(2)  # We check for the flag every 1s
+    assert not alloc.is_alive()
+    assert rec.unallocated_slots == 8
