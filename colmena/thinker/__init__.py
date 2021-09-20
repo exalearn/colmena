@@ -103,6 +103,7 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
 
     # Loop until the thinker is completed
     func_is_done = Event()
+    reallocator_thread: Optional[ReallocatorThread] = None
     while not thinker.done.is_set():
         if event.wait(_DONE_REACTION_TIME):
             # Reset the "function is done" event
@@ -123,6 +124,10 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
 
             # When complete, set the Event flag (killing the resource allocator)
             func_is_done.set()
+
+            # Wait for the resource allocator to die
+            if reallocator_thread is not None:
+                reallocator_thread.join()
 
 
 def event_responder(func: Optional[Callable] = None, event_name: str = None,
