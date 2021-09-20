@@ -194,6 +194,9 @@ class ResourceCounter:
             Whether request was fulfilled
         """
 
+        if task_to == task_from:
+            raise ValueError(f'Resources cannot be moved between the same pool. task_from = "{task_from}" = task_to')
+
         # Pull nodes from the remaining
         acq_success = self.acquire(task_from, n_slots, timeout, cancel_if)
 
@@ -264,5 +267,6 @@ class ReallocatorThread(Thread):
         # Once the stop event is triggered, move the resources to a specified pool
         self.logger.info('Waiting for stop condition to be set')
         self.stop_event.wait()
-        self.resource_counter.reallocate(self.gather_to, self.disperse_to, n_acquired)
+        if self.gather_to != self.disperse_to:
+            self.resource_counter.reallocate(self.gather_to, self.disperse_to, n_acquired)
         self.logger.info('Resource allocation thread exiting')

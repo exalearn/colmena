@@ -38,10 +38,13 @@ class ExampleThinker(BaseThinker):
         assert self.rec.available_slots(None) == 0
         self.submitted = True
 
-    @event_responder(event_name='event')
+    @event_responder(event_name='event', reallocate_resources=True,
+                     gather_from=None, gather_to="event", disperse_to="event")
     def responder(self):
+        self.rec.acquire("event", 1)
         self.event_responded = True
         self.event.clear()
+        self.rec.release("event", 1)
 
 
 @fixture()
@@ -66,7 +69,7 @@ def test_run(queues):
     # Make the server and thinker
     client, server = queues
     flag = Event()
-    rec = ResourceCounter(1, [])
+    rec = ResourceCounter(1, ["event"])
     rec.acquire(None, 1)
     th = ExampleThinker(client, rec, flag, daemon=True)
 
@@ -93,13 +96,16 @@ def test_run(queues):
     assert th.submitted
     assert rec.available_slots(None) == 0
 
-    # Test event responder: Trigger events and see if it triggers
+    # Test event responder: Trigger event, see if it triggers and acquires resources
     assert not th.event.is_set()
     assert not th.event_responded
     th.event.set()
+    for _ in range(3):
+        th.rec.release(None, 1)  # Repeat as submit_task/responder are competing for resources
     sleep(0.1)
     assert th.is_alive()
     assert th.event_responded
+    assert th.rec.available_slots("event") >= 1
     assert not th.event.is_set()
 
     # Set the "finish" flag

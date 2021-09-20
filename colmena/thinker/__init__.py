@@ -10,7 +10,7 @@ import os
 import logging
 
 from colmena.redis.queue import ClientQueues
-from colmena.thinker.resources import ResourceCounter
+from colmena.thinker.resources import ResourceCounter, ReallocatorThread
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,10 @@ def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slo
     return decorator(func)
 
 
-def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event_name: str):
+def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event_name: str,
+                           reallocate_resources: bool, gather_from: Optional[str],
+                           gather_to: Optional[str], disperse_to: Optional[str],
+                           max_slots: Optional[int], slot_step: int):
     """Wrapper for event processing agents"""
 
     # Get the event
@@ -98,14 +101,44 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
         raise ValueError(f'Thinker lacks an event named {event_name}')
     event: Event = getattr(thinker, event_name)
 
+    # Loop until the thinker is completed
+    func_is_done = Event()
     while not thinker.done.is_set():
-        # Wait until resources are free or thinker.done is set
         if event.wait(_DONE_REACTION_TIME):
+            # Reset the "function is done" event
+            func_is_done.clear()
+
+            # If desired, launch the resource-allocation thread
+            if reallocate_resources:
+                reallocator_thread = ReallocatorThread(
+                    thinker.rec, func_is_done,
+                    gather_from=gather_from, gather_to=gather_to,
+                    disperse_to=disperse_to, max_slots=max_slots,
+                    slot_step=slot_step, logger_name=thinker.logger.name + ".allocate"
+                )
+                reallocator_thread.start()
+
+            # Launch the function
             process_func(thinker)
 
+            # When complete, set the Event flag (killing the resource allocator)
+            func_is_done.set()
 
-def event_responder(func: Optional[Callable] = None, event_name: str = None):
-    """Decorator that builds agents which respond to an event being set
+
+def event_responder(func: Optional[Callable] = None, event_name: str = None,
+                    reallocate_resources: bool = False,
+                    gather_from: Optional[str] = None, gather_to: Optional[str] = None,
+                    disperse_to: Optional[str] = None, max_slots: Optional[int] = None,
+                    slot_step: int = 1):
+    """Decorator that builds agents which respond to an event being set.
+
+    The event responder can launch a thread to acquire resource temporarily.
+    The thread is created if you set ``reallocate_resources=True`` in the decorator
+    and transfers resources to a specific pool until the decorated function completes
+    or a user-defined resource cap is set.
+    You must configure from where these resources are acquired, in which resource pool
+    they are placed, and where they are re-allocated after the thread completes.
+
 
     The Thinker associated with this agent must have a class attribute that is an :class:`Event`
     with the same name as ``event_name``.
@@ -113,10 +146,22 @@ def event_responder(func: Optional[Callable] = None, event_name: str = None):
     Args:
         func: Do not directly pass this variable. It is used as an argument to the decorator
         event_name: Name of the event to watch
+        reallocate_resources: Whether to re-allocate resources while function is running
+        gather_from: Name of a resource pool from which to acquire resources
+        gather_to: Name of the resource pool to place re-allocated resources
+        disperse_to: Name of the resource pool to move resources to after function completes
+        max_slots: Maximum number of resource slots to acquire
+        slot_step: Number of slots to acquire per request
     """
 
+    # Make sure the re-allocation logic is configured reasonably
+    if reallocate_resources and gather_to == gather_from:
+        raise ValueError('Resources should be drawn and stored in different pools')
+
     def decorator(f: Callable):
-        output = partial(_event_responder_agent, process_func=f, event_name=event_name)
+        output = partial(_event_responder_agent, process_func=f, event_name=event_name,
+                         reallocate_resources=reallocate_resources, gather_from=gather_from, gather_to=gather_to,
+                         disperse_to=disperse_to, max_slots=max_slots, slot_step=slot_step)
         output = agent(output)
         return update_wrapper(output, f)
     if func is None:
@@ -226,8 +271,7 @@ class BaseThinker(Thread):
         return self.local_details.logger
 
     def make_logging_handler(self) -> Optional[logging.Handler]:
-        """Override to create a distinct logging handler for log messages emitted
-        from this object"""
+        """Override to create a distinct logging handler for log messages emitted from this object"""
         return None
 
     def make_logger(self, name: Optional[str] = None):
