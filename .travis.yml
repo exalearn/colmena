@@ -17,11 +17,11 @@ script:
     - pytest colmena
 deploy:
   provider: pypi
-  user: wardlt
+  user: __token__
   skip_existing: true
   distributions: sdist bdist_wheel
   password:
-    secure: AgEIcHlwaS5vcmcCJGM5MGY1YjJiLTkyZDEtNDNlZS1iNDMzLWYzZmU1YTRkMDk2OQACOHsicGVybWlzc2lvbnMiOiB7InByb2plY3RzIjogWyJjb2xtZW5hIl19LCAidmVyc2lvbiI6IDF9AAAGINQwg7FnxqbcUmZZOCDVyiF4AOpyM8BnqCHalxj_RfT0
+    secure: "oyUn7Crz3Puqgv6Tmo2hNlWSIKVURlMT5bmuHiRlWMwoQGWnU9JhzSqz1ET4ixYnfKYSYcKPRlcPiYovDZqDSF8mi3fxjcoJJ+Jy3s4xmWxOD/YxQVbuWgH6gvRToV2wCOu+nE3q9b1KbslUf0hjzq9DYtTqUEjToKFg0yqFpxvWoJCaBjsdCJKwgXc6SErLpqF3GxXkUZPhZefR5JnmQmDitU803SVMWx3RVopJ0heZUzZVCZAZuMVYAtBU+qjP0zdhFwJlDINbIrF5V4bh7UfVcpc1B/0ZZg/eqkwF43xNohDNUnLgeXNZyXIXYwF4XPKdSNjgWgdFtFDzJUcX1m9t1jpnKjrpP4KMbUvyBrb4Q3XCrw4yZSt578lbxcNtfpndj+6jWSiiEliD2/SdwwuEV6lY9xR/3jQiKZxqPC7WD2j0hJBJLxaonhaScWd/oa8yeb+FrxuKY26k6hDGX/afziwlYUDPB1LmdFEI2E6hJeUkik7n407Si60xiuZtkafo3/8W1cXPQJlsOsSubmlmdGLVbo7bCtHh3cTI4Zk5U5GFuM1c4c2BKkrIozZhgjUPvtH+eNtUB8volwBkG9abIbxXKzh3rrDdf2Dc0I+2j+k5xQ0kfwS5kYGZKKQV9Xer3gJ2Rd4z3wRLsh/BHIuS0wQmqGmCVVKOJMszJaM="
   on:
     tags: true
     branch: master
