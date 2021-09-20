@@ -21,13 +21,13 @@ of new simulations have completed.
 
 ## Implementation
 
-![implementation-fig](./figures/reallocation.png)
+![implementation-fig](./figures/reallocation.svg)
 
-We divide the application into three threads: simulation submitter, simulation receiver, and thinker.
+We divide the application into three threads: simulation submitter, simulation receiver, and prioritizer.
 The threads communicate data between them using a shared database (a Python dictionary),
-a task queue, and a "resource tracker" (see [Colmena Docs](https://colmena.readthedocs.io/en/latest/source/colmena.thinker.html#module-colmena.thinker.resources)).
+a task queue, event, and a "resource tracker" (see [Colmena Docs](https://colmena.readthedocs.io/en/latest/source/colmena.thinker.html#module-colmena.thinker.resources)).
 
-The allocation states with an empty database, a task queue filled with tasks in a random order,
+The allocation starts with an empty database, a task queue filled with tasks in a random order,
 and all resources dedicated to simulation tasks.
 
 *Submitter*: The submitter waits for resources to become available for simulation tasks and then submits 
@@ -36,12 +36,11 @@ the next task on the task queue.
 *Receiver*: Receives simulation results. 
 Receiving a result triggers the thread to mark resources as available for simulation tasks and
 then add the result to the database.
+It also checks the database size to determine whether to begin the prioritizer.
 
-*Thinker*: Waits until the database increases to a certain size before running an ML task to determine a better order
-for the task queue.
-Once the database reaches the target size, requests resources to be re-allocated from simulation to machine learning
-then submits a task to train a Gaussian process regression model and run inference on the remaining tasks in the
+*Prioritizer*: Performs Bayesian Optimization to (re-)prioritize the task queue based on previous simulations.
+Submits a task to train a Gaussian process regression model and run inference on the remaining tasks in the
 task queue to determine which have the largest "expected improvement" over the current optimum.
-The results from this task are used to reorder the task queue.
-Once the task queue is reordered, the thinker reallocates its resources back to the pool for simulation tasks
-and waits again for the database to increase by a specified size.
+The results are used to re-order tasks from most to least valuable.
+The worker automatically reallocates resources from the simulation resource pool.  
+

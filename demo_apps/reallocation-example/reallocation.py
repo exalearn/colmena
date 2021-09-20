@@ -1,7 +1,7 @@
 """Perform GPR Active Learning where we periodicially dedicate resources to
 re-prioritizing a list of simulations to run"""
 from colmena.models import Result
-from colmena.thinker import BaseThinker, agent, result_processor
+from colmena.thinker import BaseThinker, agent, result_processor, task_submitter, event_responder
 from colmena.task_server import ParslTaskServer
 from colmena.thinker.resources import ResourceCounter
 from colmena.redis.queue import ClientQueues, make_queue_pairs
@@ -125,50 +125,47 @@ class Thinker(BaseThinker):
         self.database = []
 
         # Synchronization bits
-        self.sim_complete = Event()
+        self.retrain_size = retrain_after
+        self.retrain = Event()
         self.queue_lock = Lock()
         self.done = Event()
 
         # Start by allocating all of the resources to the simulation task
         self.rec.reallocate(None, "sim", self.rec.unallocated_slots)
 
-    @agent
+    @task_submitter(task_type="sim", n_slots=1)
     def simulation_dispatcher(self):
-        """Dispatch tasks"""
-
-        # Until done, request resources and then submit task once available
-        while not self.done.is_set():
-            while not self.rec.acquire("sim", 1, timeout=1):
-                if self.done.is_set():
-                    return
-            with self.queue_lock:
-                self.queues.send_inputs(self.task_queue.pop(), method='ackley', topic='doer')
+        """Submit simulation tasks"""
+        with self.queue_lock:
+            self.queues.send_inputs(self.task_queue.pop(0), method='ackley', topic='doer')
 
     @result_processor(topic="doer")
     def simulation_receiver(self, result: Result):
+        """Process simulation results"""
         self.logger.info("Received a task result")
-
-        # Notify all that we have data!
-        self.sim_complete.set()
-        self.sim_complete.clear()
-
-        # Free up new resources
-        self.rec.release("sim", 1, rerequest=False)
 
         # Add the result to the database
         self.database.append((result.args[0], result.value))
-
-        # Append it to the output deck
-        with open(self.result_path, 'a') as fp:
-            print(result.json(exclude={'inputs'}), file=fp)
 
         # If we hit the database size, stop receiving tasks
         if len(self.database) >= self.n_guesses:
             self.done.set()
 
-    @agent
-    def thinker_worker(self):
-        """Reprioritize task list"""
+        # If the database is large enough, trigger the 'retrain' event
+        if len(self.database) >= self.retrain_after:
+            self.retrain.set()
+
+        # Free up new resources
+        self.rec.release("sim", 1, rerequest=False)
+
+        # Append it to the output deck
+        with open(self.result_path, 'a') as fp:
+            print(result.json(exclude={'inputs'}), file=fp)
+
+    @event_responder(event_name='retrain', reallocate_resources=True,
+                     gather_from="sim", gather_to="ml", disperse_to="sim", max_slots=1)
+    def prioritizer(self):
+        """Perform an active learning step"""
 
         # Make the GPR model
         gpr = Pipeline([
@@ -176,55 +173,50 @@ class Thinker(BaseThinker):
             ('gpr', GaussianProcessRegressor(normalize_y=True, kernel=kernels.RBF() * kernels.ConstantKernel()))
         ])
 
-        while not self.done.is_set():
-            # Wait until database reaches a certain size
-            retrain_size = len(self.database) + self.retrain_after
-            self.logger.info(f"Waiting for dataset to reach {retrain_size}")
-            while len(self.database) < retrain_size:
-                self.sim_complete.wait(timeout=5)
-                if self.done.is_set():
-                    return
+        # Request a node
+        self.rec.acquire("ml", 1)
 
-            # Request a node
-            self.rec.reallocate("sim", "ml", 1)
+        # Send out an update task
+        with self.queue_lock:
+            self.queues.send_inputs(self.database, gpr, self.task_queue,
+                                    method='reprioritize_queue',
+                                    topic='thinker')
 
-            # Send out an update task
-            with self.queue_lock:
-                self.queues.send_inputs(self.database, gpr, self.task_queue,
-                                        method='reprioritize_queue',
-                                        topic='thinker')
+        # Wait until it is complete
+        result = self.queues.get_result(topic='thinker')
+        new_order = result.value
+        self.rec.release("ml", 1)  # Mark we are done with this slot
 
-            # Wait until it is complete
-            result = self.queues.get_result(topic='thinker')
-            new_order = result.value
+        # Update the queue (requires locking)
+        with self.queue_lock:
+            self.logger.info('Reordering task queue')
+            # Copy out the old values
+            current_queue = self.task_queue.copy()
+            self.task_queue.clear()
 
-            # Update the queue (requires locking)
-            with self.queue_lock:
-                self.logger.info('Reordering task queue')
-                # Copy out the old values
-                current_queue = self.task_queue.copy()
-                self.task_queue.clear()
+            # Note how many of the tasks have been started
+            num_started = len(new_order) - len(current_queue)
+            self.logger.info(f'{num_started} jobs have completed in the meanwhile')
 
-                # Note how many of the tasks have been started
-                num_started = len(new_order) - len(current_queue)
-                self.logger.info(f'{num_started} jobs have completed in the meanwhile')
+            # Compute the new position of tasks
+            new_order -= num_started
 
-                # Compute the new position of tasks
-                new_order -= num_started
+            # Re-submit tasks to the queue
+            for i in new_order:
+                if i < 0:  # Task has already been sent out
+                    continue
+                self.task_queue.append(current_queue[i])
+            self.logger.info(f'New queue contains {len(self.task_queue)} tasks')
 
-                # Re-submit tasks to the queue
-                for i in new_order:
-                    if i < 0:  # Task has already been sent out
-                        continue
-                    self.task_queue.append(current_queue[i])
-                self.logger.info(f'New queue contains {len(self.task_queue)} tasks')
+        # Set the new size for triggering re-training
+        self.retrain_size = len(self.database) + self.retrain_after
 
-            # Give the nodes back to the simulation tasks
-            self.rec.reallocate("ml", "sim", 1)
+        # Mark that we are ready for re-training
+        self.retrain.clear()
 
-            # Save the result to disk
-            with open(self.retrain_path, 'a') as fp:
-                print(result.json(exclude={'inputs', 'value'}), file=fp)
+        # Save the result to disk
+        with open(self.retrain_path, 'a') as fp:
+            print(result.json(exclude={'inputs', 'value'}), file=fp)
 
 
 if __name__ == '__main__':
@@ -236,7 +228,7 @@ if __name__ == '__main__':
                         help="Port on which redis is available")
     parser.add_argument("--num-guesses", "-n", help="Total number of guesses", type=int, default=100)
     parser.add_argument("--num-parallel", "-p", help="Number of guesses to evaluate in parallel (i.e., the batch size)",
-                        type=int, default=os.cpu_count())
+                        type=int, default=4)
     parser.add_argument("--retrain-wait", type=int, help="Number of simulations to complete before retraining models",
                         default=20)
     parser.add_argument("--dim",  help="Dimensionality of the Ackley function", type=int, default=4)
