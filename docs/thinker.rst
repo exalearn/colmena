@@ -59,6 +59,9 @@ There are a few common patterns of agents within Colmena,
 such as agents that wait for results to become available in a queue.
 We provide decorators that simplify creating agents for such tasks.
 
+The `reallocation example application <https://github.com/exalearn/colmena/tree/master/demo_apps/reallocation-example>`_
+demonstrates all three of these agent types.
+
 Result Processing Agents
 ++++++++++++++++++++++++
 
@@ -71,5 +74,56 @@ must decorate a function that takes Result object as an input.
     class Thinker(BaseThinker):
         @result_processor(topic='simulation')
         def process(self, result: Result):
-            # Process results
+            self.database.append(result)
 
+The above example runs the ``process`` function whenever a complete task with a "simulation" topic is received.
+
+Task Submission Agents
+++++++++++++++++++++++
+
+Task submission agents execute a function as soon as resources are available.
+The agent runs a decorated function once resources are acquired from a certain resource pool.
+Task submission agents are often paired with a `result processor <#result-processing-agents>`_ that
+receives the result and marks resources as available once a task completes.
+
+.. code-block:: python
+
+    class Thinker(BaseThinker):
+        @task_submitter(task_type="sim", n_slots=1)
+        def submit(self):
+            task = self.queue.pop(0)
+            self.queues.send_inputs(task, method='simulate', topic='simulation')
+
+The above function submits a task from the front of a task queue once 1 slot is
+available from the "sim" resource pool.
+
+Event Responder Agents
+++++++++++++++++++++++
+
+The :func:`colmena.thinker.event_responder` runs a function when a certain event is triggered.
+The event responder agents can be configured to request resources in a background thread that are
+then deallocated after the function completes.
+
+.. code-block:: python
+
+    class Thinker(BaseThinker):
+        @event_responder(event_name='retrain_now', reallocate_resources=True,
+                         gather_from="sim", gather_to="ml", disperse_to="sim", max_slots=1)
+        def reorder(self):
+            self.retrain_now.clear()  # Clear the event flag
+
+            # Submit a task to re-order task queue given
+            self.rec.allocate('ml', 1)  # Blocks until resources are free
+            self.queues.send_inputs(self.database, self.queue, method='reorder', topic='plan')
+
+            # Wait for task to complete
+            result = self.queues.get_result(topic='plan')
+            self.rec.release('ml', 1)  # Mark that resources are unneeded
+
+            # Store the new task queue
+            self.queue = result.value
+
+
+The above example performs a task to reorder the task queue when the ``retrain_now`` event is set.
+Colmena will automatically re-allocate resources from simulation to machine learning when the event
+is set and then re-allocate them back to simulation after the function completes.
