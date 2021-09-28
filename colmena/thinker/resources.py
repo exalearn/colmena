@@ -126,7 +126,7 @@ class ResourceCounter:
             return self.acquire(task, n_slots, timeout=timeout)
         return None
 
-    def acquire(self, task: Optional[str], n_slots: int, timeout: float = -1, cancel_if: Optional[Event] = None) -> bool:
+    def acquire(self, task: Optional[str], n_slots: int, timeout: float = -1., cancel_if: Optional[Event] = None) -> bool:
         """Request a certain number of nodes for a particular task
 
         Draws only from the pool of nodes allocated to this task
@@ -163,7 +163,7 @@ class ResourceCounter:
         n_acquired = 0
         success = True
         while n_acquired < n_slots:
-            acq_success = self._availability[task].acquire(timeout=timeout)
+            acq_success = self._availability[task].acquire(timeout=timeout if timeout > 0 else None)
             if (cancel_if is not None and cancel_if.is_set()) or monotonic() > end_time:
                 success = False
                 break
@@ -257,16 +257,15 @@ class ReallocatorThread(Thread):
         self.logger.info('Starting resource allocation thread')
 
         # Acquire resources until either the maximum is reached, or the event is triggered
-        n_acquired = 0
-        while (self.max_slots is None or n_acquired < self.max_slots) and not self.stop_event.is_set():
-            success = self.resource_counter.reallocate(self.gather_from, self.gather_to,
-                                                       self.slot_step, cancel_if=self.stop_event)
-            if success:
-                n_acquired += self.slot_step
+        while (self.max_slots is None or self.resource_counter.allocated_slots(self.gather_to) < self.max_slots) \
+                and not self.stop_event.is_set():
+            self.resource_counter.reallocate(self.gather_from, self.gather_to,
+                                             self.slot_step, cancel_if=self.stop_event)
 
         # Once the stop event is triggered, move the resources to a specified pool
         self.logger.info('Waiting for stop condition to be set')
         self.stop_event.wait()
         if self.gather_to != self.disperse_to:
-            self.resource_counter.reallocate(self.gather_to, self.disperse_to, n_acquired)
+            self.resource_counter.reallocate(self.gather_to, self.disperse_to,
+                                             self.resource_counter.allocated_slots(self.gather_to))
         self.logger.info('Resource allocation thread exiting')
