@@ -181,7 +181,10 @@ class RedisQueue:
 
         # Send it to the task server
         try:
-            self.redis_client.rpush(queue, input_data)
+            assert len(input_data) < 512 * 1024 * 1024, "Value too large for Redis. Task will fail"
+            output = self.redis_client.rpush(queue, input_data)
+            if not isinstance(output, int):
+                raise ValueError(f'Message failed to push to {queue}')
         except redis.exceptions.ConnectionError:
             logger.warning(f"ConnectionError while trying to connect to Redis@{self.hostname}:{self.port}")
             raise

@@ -20,6 +20,7 @@ class ExampleThinker(BaseThinker):
         self.submitted = None
         self.event = Event()
         self.event_responded = False
+        self.n_slots = 1
 
     @agent(critical=False)
     def function(self):
@@ -33,7 +34,7 @@ class ExampleThinker(BaseThinker):
     def process_results(self, result: Result):
         self.last_value = result.value
 
-    @task_submitter(n_slots=1)
+    @task_submitter(n_slots='n_slots')  # Look it up from the class attribute at runtime
     def submit_task(self):
         assert self.rec.available_slots(None) == 0
         self.submitted = True

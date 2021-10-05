@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial, update_wrapper
 from threading import Event, local, Thread
 from traceback import TracebackException
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Union
 
 import os
 
@@ -61,8 +61,12 @@ def result_processor(func: Optional[Callable] = None, topic: Optional[str] = Non
     return decorator(func)
 
 
-def _task_submitter_agent(thinker: 'BaseThinker', process_func: Callable, task_type: str, n_slots: int):
+def _task_submitter_agent(thinker: 'BaseThinker', process_func: Callable, task_type: str, n_slots: Union[int, str]):
     """Wrapper function for task submission agents"""
+    # Determine the number of threads
+    if not isinstance(n_slots, int):
+        n_slots = getattr(thinker, n_slots)
+
     while not thinker.done.is_set():
         # Wait until resources are free or thinker.done is set
         acq_success = thinker.rec.acquire(task_type, n_slots, cancel_if=thinker.done)
@@ -70,7 +74,7 @@ def _task_submitter_agent(thinker: 'BaseThinker', process_func: Callable, task_t
             process_func(thinker)
 
 
-def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slots: int = 1):
+def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slots: Union[int, str] = 1):
     """Decorator that builds agents which respond to computing resources becoming available
 
     Decorated functions should assume that resources are available and reserved when the function is called
@@ -78,7 +82,7 @@ def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slo
     Args:
         func: Do not directly pass this variable. It is used as an argument to the decorator
         task_type: Name of task pool from which to request resources
-        n_slots: Number of resources to request
+        n_slots: Number of resources to request. Must be either a integer or the name of a class attribute
     """
 
     def decorator(f: Callable):
@@ -143,6 +147,8 @@ def event_responder(func: Optional[Callable] = None, event_name: str = None,
     or a user-defined resource cap is set.
     You must configure from where these resources are acquired, in which resource pool
     they are placed, and where they are re-allocated after the thread completes.
+    The thread will allocate up to the maximum number of slots defined and
+    then reallocate _all slots available to that pool_ to the designated resource.
 
 
     The Thinker associated with this agent must have a class attribute that is an :class:`Event`
