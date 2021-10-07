@@ -39,7 +39,7 @@ class ExampleThinker(BaseThinker):
         assert self.rec.available_slots(None) == 0
         self.submitted = True
 
-    @event_responder(event_name='event', reallocate_resources=True,
+    @event_responder(event_name='event', reallocate_resources=True, max_slots='n_slots',
                      gather_from=None, gather_to="event", disperse_to="event")
     def responder(self):
         self.rec.acquire("event", 1)

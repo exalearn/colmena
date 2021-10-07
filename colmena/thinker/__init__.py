@@ -97,13 +97,17 @@ def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slo
 def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event_name: str,
                            reallocate_resources: bool, gather_from: Optional[str],
                            gather_to: Optional[str], disperse_to: Optional[str],
-                           max_slots: Optional[int], slot_step: int):
+                           max_slots: Union[int, str, None], slot_step: int):
     """Wrapper for event processing agents"""
 
     # Get the event
     if not hasattr(thinker, event_name):
         raise ValueError(f'Thinker lacks an event named {event_name}')
     event: Event = getattr(thinker, event_name)
+
+    # Get the max_slots if set to a class attribute
+    if not isinstance(max_slots, int) and max_slots is not None:
+        max_slots = getattr(thinker, max_slots)
 
     # Loop until the thinker is completed
     func_is_done = Event()
@@ -137,7 +141,7 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
 def event_responder(func: Optional[Callable] = None, event_name: str = None,
                     reallocate_resources: bool = False,
                     gather_from: Optional[str] = None, gather_to: Optional[str] = None,
-                    disperse_to: Optional[str] = None, max_slots: Optional[int] = None,
+                    disperse_to: Optional[str] = None, max_slots: Union[int, str, None] = None,
                     slot_step: int = 1):
     """Decorator that builds agents which respond to an event being set.
 
@@ -161,7 +165,8 @@ def event_responder(func: Optional[Callable] = None, event_name: str = None,
         gather_from: Name of a resource pool from which to acquire resources
         gather_to: Name of the resource pool to place re-allocated resources
         disperse_to: Name of the resource pool to move resources to after function completes
-        max_slots: Maximum number of resource slots to acquire
+        max_slots: Maximum number of resource slots to acquire. Can be an integer,
+            the name of a class attribute of the thinker, or 'none' it no maximum is needed
         slot_step: Number of slots to acquire per request
     """
 
