@@ -1,27 +1,27 @@
 language: python
 python:
-  - "3.7"
+- '3.7'
 services:
-  - redis
+- redis
 before_install:
-  - python$PY -m pip install Cython
-  - python$PY -m pip install numpy
-  - python$PY --version
-  - python$PY -m cython --version
-  - python$PY -c "import numpy;print(numpy.__version__)"
+- python$PY -m pip install Cython
+- python$PY -m pip install numpy
+- python$PY --version
+- python$PY -m cython --version
+- python$PY -c "import numpy;print(numpy.__version__)"
 install:
-  - pip install .
+- pip install .
 script:
-    - pip install -r test-requirements.txt
-    - flake8 colmena/
-    - pytest colmena
+- pip install -r test-requirements.txt
+- flake8 colmena/
+- pytest colmena
 deploy:
   provider: pypi
   user: __token__
   skip_existing: true
   distributions: sdist bdist_wheel
   password:
-    secure: "oyUn7Crz3Puqgv6Tmo2hNlWSIKVURlMT5bmuHiRlWMwoQGWnU9JhzSqz1ET4ixYnfKYSYcKPRlcPiYovDZqDSF8mi3fxjcoJJ+Jy3s4xmWxOD/YxQVbuWgH6gvRToV2wCOu+nE3q9b1KbslUf0hjzq9DYtTqUEjToKFg0yqFpxvWoJCaBjsdCJKwgXc6SErLpqF3GxXkUZPhZefR5JnmQmDitU803SVMWx3RVopJ0heZUzZVCZAZuMVYAtBU+qjP0zdhFwJlDINbIrF5V4bh7UfVcpc1B/0ZZg/eqkwF43xNohDNUnLgeXNZyXIXYwF4XPKdSNjgWgdFtFDzJUcX1m9t1jpnKjrpP4KMbUvyBrb4Q3XCrw4yZSt578lbxcNtfpndj+6jWSiiEliD2/SdwwuEV6lY9xR/3jQiKZxqPC7WD2j0hJBJLxaonhaScWd/oa8yeb+FrxuKY26k6hDGX/afziwlYUDPB1LmdFEI2E6hJeUkik7n407Si60xiuZtkafo3/8W1cXPQJlsOsSubmlmdGLVbo7bCtHh3cTI4Zk5U5GFuM1c4c2BKkrIozZhgjUPvtH+eNtUB8volwBkG9abIbxXKzh3rrDdf2Dc0I+2j+k5xQ0kfwS5kYGZKKQV9Xer3gJ2Rd4z3wRLsh/BHIuS0wQmqGmCVVKOJMszJaM="
+    secure: CaOLEtGFrDeBMiy4Op9O3tdyiUmdvZvl7JJvCt5WPDT0ZF5rU/gExeCPhOreJGQrUPbQErcERhZ3cCvbs5xQotUqF6zzxcViyVuQ/+UJ88n6npmi0FfBzMBlCz435Btj9ML8THqxoOlps5oF5vjTvTBrRppKh75035MLoFKvhhl5t8Z56R0KKd2S8WS9dqLUfyt8YHD32gnhu6ESx/q7c+MPLzeba1Xg4st2f8TaPsXK37uengJsJW0wiqRQNHNHnw3sToEKaStmWCznqUh+D3s7Cv0dCRvnql355Qzee37wCrTqKM4tHNOyGHbTf9MdB6/c2xTVYOLqi0XF+3guYwviYJqLlxq8MmBqTb4p+kERkpM1Z8e5TOTlr8SpvMHDC5X65QszNlRyL6N/q75nMMGuKeA/eQCFOXPpEgtI/bI8hlmkblbB2h7wrNWn+cT5JmCDdwErGA4UIcUOY+HZjuFmaahHgPC6QztmMT5fjwsnDIrTVy0XLD2KL51rEIib0zdyubBP1NEO2Jbnz7LuTQmBFj5Ra9Rl7n4KIQyTOdbJubmPfjllV1bPeClOiu21h25vG3Bs+0y860CDBfumdK+HWenlwrWLQUpYG0h+OGrRkO6eEjpwfWR5aYte96zrLLWPn84lA8/aAT3F0KAe9TXKpGl/RJ7rH498vwEEgro=
   on:
     tags: true
     branch: master
