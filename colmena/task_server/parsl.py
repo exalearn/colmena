@@ -8,7 +8,6 @@ from threading import Thread
 from concurrent.futures import wait, Future
 from time import sleep, perf_counter
 from typing import Optional, List, Callable, Tuple, Dict, Union, Set
-from traceback import TracebackException
 
 import parsl
 from parsl import python_app, ThreadPoolExecutor

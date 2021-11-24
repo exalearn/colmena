@@ -1,6 +1,5 @@
 """Tests for the Parsl implementation of the task server"""
 from typing import Tuple
-from sys import exit
 
 from parsl import ThreadPoolExecutor
 from parsl.config import Config
