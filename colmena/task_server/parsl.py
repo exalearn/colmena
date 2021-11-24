@@ -16,7 +16,7 @@ from parsl.config import Config
 from parsl.app.python import PythonApp
 from parsl.dataflow.futures import AppFuture
 
-from colmena.models import Result
+from colmena.models import Result, FailureInformation
 from colmena.task_server.base import BaseTaskServer
 from colmena.redis.queue import TaskServerQueues
 from colmena.proxy import resolve_proxies_async
@@ -50,14 +50,10 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     success = True
     try:
         output = func(*result.args, **result.kwargs)
-    except Exception as e:
+    except BaseException as e:
         output = None
         success = False
-        if result.task_info is None:
-            result.task_info = {}
-        result.task_info['exception'] = str(e)
-        tb = TracebackException.from_exception(e)
-        result.task_info['traceback'] = "".join(tb.format())
+        result.failure_info = FailureInformation.from_exception(e)
     finally:
         end_time = perf_counter()
 
@@ -138,8 +134,14 @@ class _ErrorHandler(Thread):
                     queues: TaskServerQueues = task.task_def['args'][0]
                     topic: str = task.task_def['args'][1]
                     method_task = task.task_def['depends'][0]
+                    task_exc = method_task.exception()
                     result_obj: Result = method_task.task_def['args'][0]
+
+                    # Mark it as unsuccessful and capture the exception information
                     result_obj.success = False
+                    result_obj.failure_info = FailureInformation.from_exception(task_exc)
+
+                    # Send it to the client
                     queues.send_result(result_obj, topic=topic)
 
                 # Display run information
@@ -260,8 +262,6 @@ class ParslTaskServer(BaseTaskServer):
         """Evaluate a single task from the queue"""
 
         # Get a result from the queue
-        # TODO (wardlt): Objects are deserialized here, serialized again and then sent to the worker.
-        #  We could implement a method to still read the task but ignore serialization
         topic, result = self.queues.get_task(self.timeout)
         logger.info(f'Received request for {result.method} with topic {topic}')
 

@@ -5,6 +5,7 @@ import sys
 from datetime import datetime
 from enum import Enum
 from time import perf_counter
+from traceback import TracebackException
 from typing import Any, Tuple, Dict, Optional, Union
 
 from pydantic import BaseModel, Field
@@ -59,6 +60,18 @@ class SerializationMethod(str, Enum):
             raise NotImplementedError(f'Method {method} not yet implemented')
 
 
+class FailureInformation(BaseModel):
+    """Stores information about a task failure"""
+
+    exception: str = Field(..., description="The exception returned by the failed task")
+    traceback: Optional[str] = Field(None, description="Full stack trace for exception, if available")
+
+    @classmethod
+    def from_exception(cls, exc: BaseException) -> 'FailureInformation':
+        tb = TracebackException.from_exception(exc)
+        return cls(exception=repr(exc), traceback="".join(tb.format()))
+
+
 class Result(BaseModel):
     """A class which describes the inputs and results of the calculations evaluated by the MethodServer
 
@@ -70,7 +83,7 @@ class Result(BaseModel):
     """
 
     # Core result information
-    inputs: Union[Tuple[Tuple[Any, ...], Dict[str, Any]], str] =\
+    inputs: Union[Tuple[Tuple[Any, ...], Dict[str, Any]], str] = \
         Field(None, description="Input to a function. Positional and keyword arguments. The `str` data type "
                                 "is for internal use and is used when communicating serialized objects.")
     value: Any = Field(None, description="Output of a function")
@@ -78,8 +91,9 @@ class Result(BaseModel):
     success: Optional[bool] = Field(None, description="Whether the task completed successfully")
 
     # Store task information
-    task_info: Optional[Dict[str, Any]] = Field(None, description="Task tracking information to be transmitted "
-                                                                  "along with inputs and results")
+    task_info: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Task tracking information to be transmitted "
+                                                                                  "along with inputs and results. User provided")
+    failure_info: Optional[FailureInformation] = Field(None, description="Messages about task failure. Provided by Task Server")
 
     # Performance tracking
     time_created: float = Field(None, description="Time this value object was created")
@@ -103,8 +117,8 @@ class Result(BaseModel):
     value_server_hostname: Optional[str] = Field(None, description="Value server hostname")
     value_server_port: Optional[str] = Field(None, description="Value server port")
     value_server_threshold: int = Field(
-            None, description="Object size threshold (bytes) at which input/value "
-                              "objects are stored in value server before serialization")
+        None, description="Object size threshold (bytes) at which input/value "
+                          "objects are stored in value server before serialization")
 
     def __init__(self, inputs: Tuple[Tuple[Any], Dict[str, Any]], **kwargs):
         """
@@ -178,9 +192,9 @@ class Result(BaseModel):
             )
 
             if (
-                self.value_server_threshold is not None and
-                sys.getsizeof(value_str) >= self.value_server_threshold and
-                not isinstance(value, ps.proxy.Proxy)
+                    self.value_server_threshold is not None and
+                    sys.getsizeof(value_str) >= self.value_server_threshold and
+                    not isinstance(value, ps.proxy.Proxy)
             ):
                 # Proxy the value. Note: we use the id of the object as the key
                 # so calling proxy() on the same object multiple times
