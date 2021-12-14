@@ -1,12 +1,11 @@
 """Parsl task server and related utilities"""
 import os
 import logging
-import platform
 from functools import partial
 from queue import Queue
 from threading import Thread
 from concurrent.futures import wait, Future
-from time import sleep, perf_counter
+from time import sleep
 from typing import Optional, List, Callable, Tuple, Dict, Union, Set
 
 import parsl
@@ -18,61 +17,9 @@ from parsl.dataflow.futures import AppFuture
 from colmena.models import Result, FailureInformation
 from colmena.task_server.base import BaseTaskServer
 from colmena.redis.queue import TaskServerQueues
-from colmena.proxy import resolve_proxies_async
+from task_server.base import run_and_record_timing
 
 logger = logging.getLogger(__name__)
-
-
-def run_and_record_timing(func: Callable, result: Result) -> Result:
-    """Run a function and also return the runtime
-
-    Args:
-        func: Function to invoke
-        result: Result object describing task request
-    Returns:
-        Result object with the serialized result
-    """
-    # Mark that compute has started on the worker
-    result.mark_compute_started()
-
-    # Unpack the inputs
-    result.time_deserialize_inputs = result.deserialize()
-
-    # Start resolving any proxies in the input asynchronously
-    start_time = perf_counter()
-    resolve_proxies_async(result.args)
-    resolve_proxies_async(result.kwargs)
-    result.time_async_resolve_proxies = perf_counter() - start_time
-
-    # Execute the function
-    start_time = perf_counter()
-    success = True
-    try:
-        output = func(*result.args, **result.kwargs)
-    except BaseException as e:
-        output = None
-        success = False
-        result.failure_info = FailureInformation.from_exception(e)
-    finally:
-        end_time = perf_counter()
-
-    # Store the results
-    result.set_result(output, end_time - start_time)
-    if not success:
-        result.success = False
-
-    # Add the worker information into the tasks, if available
-    if result.task_info is None:
-        result.task_info = {}
-    for tag in ['PARSL_WORKER_RANK', 'PARSL_WORKER_POOL_ID']:
-        if tag in os.environ:
-            result.task_info[tag] = os.environ[tag]
-    result.task_info['executor'] = platform.node()
-
-    # Re-pack the results
-    result.time_serialize_results = result.serialize()
-
-    return result
 
 
 @python_app(executors=['_output_workers'])
