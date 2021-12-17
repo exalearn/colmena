@@ -17,7 +17,7 @@ from parsl.dataflow.futures import AppFuture
 from colmena.models import Result, FailureInformation
 from colmena.task_server.base import BaseTaskServer
 from colmena.redis.queue import TaskServerQueues
-from task_server.base import run_and_record_timing
+from colmena.task_server.base import run_and_record_timing
 
 logger = logging.getLogger(__name__)
 

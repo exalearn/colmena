@@ -4,11 +4,9 @@ FuncX provides the ability to execute functions on remote "endpoints" that provi
 Tasks and results are communicated to/from the endpoint through a cloud service secured using Globus Auth."""
 
 import logging
-from queue import Queue
-from threading import Thread
 from functools import partial
 from typing import Dict, Callable, Optional, Tuple
-from concurrent.futures import wait, Future
+from concurrent.futures import Future
 
 from funcx import FuncXClient
 from funcx.sdk.executor import FuncXExecutor

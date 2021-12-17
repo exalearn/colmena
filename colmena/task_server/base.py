@@ -10,8 +10,8 @@ import logging
 
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.redis.queue import TaskServerQueues
-from models import Result, FailureInformation
-from proxy import resolve_proxies_async
+from colmena.models import Result, FailureInformation
+from colmena.proxy import resolve_proxies_async
 
 logger = logging.getLogger(__name__)
 
