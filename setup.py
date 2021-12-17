@@ -22,6 +22,9 @@ setup(
     long_description_content_type='text/markdown',
     install_requires=install_requires,
     python_requires=">=3.6.*",
+    extras_require={
+        'funcx': ['funcx>=0.3.4']
+    },
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Science/Research",
