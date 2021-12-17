@@ -23,7 +23,7 @@ setup(
     install_requires=install_requires,
     python_requires=">=3.6.*",
     extras_require={
-        'funcx': ['funcx>=0.3.4']
+        'funcx': ['funcx>=0.3.4', 'globus_sdk<3']  # TODO (wardlt): Remove Globus SDK version pinning once FuncX supports v3
     },
     classifiers=[
         "Development Status :: 3 - Alpha",
