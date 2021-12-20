@@ -1,4 +1,5 @@
 from concurrent.futures import Future
+from typing import Callable
 from time import sleep
 from uuid import uuid4
 
@@ -25,12 +26,12 @@ class FakeClient:
 class FakeExecutor:
     """Faked FuncXExecutor that generates "futures" but does not communicate with FuncX"""
 
-    def __init__(self, client: FakeClient, **kwargs):
-        self.funcs = client.my_funcs
+    def __init__(self, *args, **kwargs):
+        pass
 
-    def submit(self, func_id: str, task: Result, endpoint_id: str):
+    def submit(self, func: Callable, task: Result, endpoint_id: str):
         new_future = Future()
-        result = self.funcs[func_id][0](task)
+        result = func(task)
         new_future.set_result(result)
         return new_future
 
@@ -55,10 +56,6 @@ def test_mocked_server(mock_funcx):
         return x
     fts = FuncXTaskServer({func: 'fake_endp'}, client, server_q)
     fts.start()
-
-    # Make sure it registered exactly one function, named
-    assert len(client.my_funcs) == 1
-    assert list(client.my_funcs.values())[0][1] == 'func'
 
     # Submit a task to the queue and see how it works
     try:

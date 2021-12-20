@@ -4,7 +4,7 @@ FuncX provides the ability to execute functions on remote "endpoints" that provi
 Tasks and results are communicated to/from the endpoint through a cloud service secured using Globus Auth."""
 
 import logging
-from functools import partial
+from functools import partial, update_wrapper
 from typing import Dict, Callable, Optional, Tuple
 from concurrent.futures import Future
 
@@ -53,23 +53,15 @@ class FuncXTaskServer(BaseTaskServer):
         self.fx_client = funcx_client
 
         # Create a function with the latest version of the wrapper function
-        self.registered_funcs: Dict[str, Tuple[str, str]] = {}  # Function name -> (funcX id, endpoints)
-        for func, endpoints in methods.items():
+        self.registered_funcs: Dict[str, Tuple[Callable, str]] = {}  # Function name -> (funcX id, endpoints)
+        for func, endpoint in methods.items():
             # Make a wrapped version of the function
             func_name = func.__name__
             new_func = partial(run_and_record_timing, func)
-
-            # Register it with funcX
-            func_id = self.fx_client.register_function(
-                new_func,
-                function_name=func_name,
-                description='Colmena function',
-                searchable=False
-            )
-            logger.info(f'Registered "{func_name}" as {func_id}')
+            update_wrapper(new_func, func)
 
             # Store the FuncX information for the function
-            self.registered_funcs[func_name] = (func_id, endpoints)
+            self.registered_funcs[func_name] = (new_func, endpoint)
 
         # Create the executor and queue of tasks to be submitted back to the user
         self.fx_exec = FuncXExecutor(self.fx_client)
@@ -103,10 +95,11 @@ class FuncXTaskServer(BaseTaskServer):
             topic, task = self.queues.get_task(self.timeout)
 
             # Lookup the appropriate function ID and endpoint
-            func_id, endp_id = self.registered_funcs[task.method]
+            func, endp_id = self.registered_funcs[task.method]
 
             # Submit it to FuncX to be executed
-            future: Future = self.fx_exec.submit(func_id, task, endpoint_id=endp_id)
+            future: Future = self.fx_exec.submit(func, task, endpoint_id=endp_id)
+            logger.info(f'Submitted {task.method} to run on {endp_id}')
 
             # Create the callback
             future.add_done_callback(lambda x: self._perform_callback(x, task, topic))
