@@ -13,3 +13,11 @@ colmena.task\_server.base
    :members:
    :undoc-members:
    :show-inheritance:
+
+colmena.task\_server.funcx
+---------------------------
+
+.. automodule:: colmena.task_server.funcx
+   :members:
+   :undoc-members:
+   :show-inheritance:

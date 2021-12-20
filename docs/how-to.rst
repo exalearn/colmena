@@ -15,6 +15,9 @@ The task server for Colmena is configured with the list of methods, a
 list available computational resources and a mapping of which methods
 can use each resource.
 
+We describe the :class:`colmena.task_server.ParslTaskServer` in this document,
+although `more are available <task-servers.html>`_.
+
 Defining Methods
 ++++++++++++++++
 
