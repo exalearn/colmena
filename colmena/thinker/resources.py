@@ -254,7 +254,8 @@ class ReallocatorThread(Thread):
         self.logger = logger if logger_name is None else logging.getLogger(logger_name)
 
     def run(self) -> None:
-        self.logger.info('Starting resource allocation thread')
+        self.logger.info(f'Starting resource allocation thread. Allocating a maximum of {self.max_slots} to {self.gather_to} from'
+                         f' {self.gather_from} in steps of {self.slot_step}')
 
         # Acquire resources until either the maximum is reached, or the event is triggered
         while (self.max_slots is None or self.resource_counter.allocated_slots(self.gather_to) < self.max_slots) \
