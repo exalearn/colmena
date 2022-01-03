@@ -12,14 +12,14 @@ from funcx import FuncXClient
 from funcx.sdk.executor import FuncXExecutor
 
 from colmena.redis.queue import TaskServerQueues
-from colmena.task_server.base import BaseTaskServer, run_and_record_timing
+from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
 
-from colmena.models import Result, FailureInformation
+from colmena.models import Result
 
 logger = logging.getLogger(__name__)
 
 
-class FuncXTaskServer(BaseTaskServer):
+class FuncXTaskServer(FutureBasedTaskServer):
     """Task server that uses FuncX to execute tasks on remote systems
 
     Create a FuncXTaskServer by providing a dictionary of functions along with a FuncX endpoint ID
@@ -32,7 +32,7 @@ class FuncXTaskServer(BaseTaskServer):
     FuncX web service.
 
     The task server works using the :class:`FuncXExecutor` to communicate with FuncX via a websocket.
-    `FuncXExecutor` receives completed work and we use callbacks on the Python :class:`Future` objects
+    `FuncXExecutor` receives completed work, and we use callbacks on the Python :class:`Future` objects
     to send that completed work back to the task queue.
     """
 
@@ -66,43 +66,14 @@ class FuncXTaskServer(BaseTaskServer):
         # Create the executor and queue of tasks to be submitted back to the user
         self.fx_exec = FuncXExecutor(self.fx_client)
 
-    def _perform_callback(self, future: Future, result: Result, topic: str):
-        """Send a completed result back to queue. Used as a callback for complete tasks
+    def _submit(self, task: Result) -> Future:
+        # Lookup the appropriate function ID and endpoint
+        func, endp_id = self.registered_funcs[task.method]
 
-        Args:
-            future: Future created by FuncX
-            result: Initial result object. Used if the future throws an exception
-            topic: Topic used to send back to the user
-        """
-
-        task_exc = future.exception()
-
-        # If it was, send back a modified copy of the input structure
-        if future.exception() is not None:
-            # Mark it as unsuccessful and capture the exception information
-            result.success = False
-            result.failure_info = FailureInformation.from_exception(task_exc)
-        else:
-            # If not, the result object is the one we need
-            result = future.result()
-
-        # Put them back in the pipe with the proper topic
-        self.queues.send_result(result, topic)
-
-    def process_queue(self):
-        while True:
-            # Get the next task from the queue
-            topic, task = self.queues.get_task(self.timeout)
-
-            # Lookup the appropriate function ID and endpoint
-            func, endp_id = self.registered_funcs[task.method]
-
-            # Submit it to FuncX to be executed
-            future: Future = self.fx_exec.submit(func, task, endpoint_id=endp_id)
-            logger.info(f'Submitted {task.method} to run on {endp_id}')
-
-            # Create the callback
-            future.add_done_callback(lambda x: self._perform_callback(x, task, topic))
+        # Submit it to FuncX to be executed
+        future: Future = self.fx_exec.submit(func, task, endpoint_id=endp_id)
+        logger.info(f'Submitted {task.method} to run on {endp_id}')
+        return future
 
     def _cleanup(self):
         self.fx_exec.shutdown()
