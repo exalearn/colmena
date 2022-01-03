@@ -1,7 +1,7 @@
 from threading import Timer, Event
 from time import sleep
 
-from pytest import fixture
+from pytest import fixture, mark
 
 from colmena.thinker.resources import ResourceCounter, ReallocatorThread
 
@@ -63,6 +63,11 @@ def test_allocations(rec):
     assert rec.available_slots("sim") == 4
     assert stop.is_set()
 
+    # Test out reallocate all
+    rec.reallocate("sim", "ml", "all")
+    assert rec.allocated_slots("sim") == 0
+    assert rec.allocated_slots("ml") == 8
+
 
 def test_reallocator(rec):
     # Start with everything allocated to "simulation"
@@ -70,7 +75,7 @@ def test_reallocator(rec):
 
     # Test allocating up to the maximum
     stop = Event()
-    alloc = ReallocatorThread(rec, stop, gather_from="sim", gather_to="ml", disperse_to=None, max_slots=2)
+    alloc = ReallocatorThread(rec, stop_event=stop, gather_from="sim", gather_to="ml", disperse_to=None, max_slots=2)
     alloc.start()
     sleep(0.2)
     assert alloc.is_alive()
@@ -84,7 +89,7 @@ def test_reallocator(rec):
 
     # Test without a maximum allocation
     stop.clear()
-    alloc = ReallocatorThread(rec, stop, gather_from="sim", gather_to="ml", disperse_to=None)
+    alloc = ReallocatorThread(rec, stop_event=stop, gather_from="sim", gather_to="ml", disperse_to=None)
     alloc.start()
     sleep(0.2)
     assert alloc.is_alive()
@@ -95,3 +100,33 @@ def test_reallocator(rec):
     sleep(2)  # We check for the flag every 1s
     assert not alloc.is_alive()
     assert rec.unallocated_slots == 8
+
+
+@mark.timeout(2)
+@mark.repeat(4)
+def test_reallocator_deadlock(rec):
+    """Creates the deadlock reported in https://github.com/exalearn/colmena/issues/43"""
+    rec.reallocate(None, "sim", 8)
+    assert rec.available_slots("sim") == 8
+
+    # Create two allocators: One that pulls from sim and another that pulls from ml
+    ml_alloc = ReallocatorThread(rec, gather_from="sim", gather_to="ml", disperse_to="sim", max_slots=8)
+    sim_alloc = ReallocatorThread(rec, gather_from="ml", gather_to="sim", disperse_to="ml", max_slots=8)
+
+    # Start the ML allocator, which will pull resources from sim to ml
+    ml_alloc.start()
+    assert not ml_alloc.stop_event.is_set()
+    assert rec.available_slots("ml") == 8
+    assert rec.acquire("ml", 8)
+    assert rec.available_slots("ml") == 0
+
+    # Start the sim allocator, which will ask to pull resources from ml over to sim
+    sim_alloc.start()
+    sleep(0.001)
+    assert rec.available_slots("ml") == 0
+
+    # Send the stop signal and wait for ml_alloc to exit
+    ml_alloc.stop_event.set()
+    rec.release("ml", 8)
+    ml_alloc.join(1)
+    assert not ml_alloc.is_alive()

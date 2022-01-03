@@ -1,6 +1,6 @@
 """Utilities for tracking resources"""
 from threading import Semaphore, Lock, Event, Thread
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from time import monotonic
 from math import inf
 import logging
@@ -180,39 +180,41 @@ class ResourceCounter:
 
         return success
 
-    def reallocate(self, task_from: Optional[str], task_to: Optional[str], n_slots: int,
+    def reallocate(self, task_from: Optional[str], task_to: Optional[str], n_slots: Union[int, str],
                    timeout: float = -1, cancel_if: Optional[Event] = None) -> bool:
         """Transfer computer resources from one task to another
 
         Args:
             task_from: Which task to pull resources from (None to request un-allocated nodes)
             task_to: Which task to add resources to (None to de-allocate nodes)
-            n_slots: Number of nodes to request
+            n_slots: Number of nodes to request. Set to "all" to reallocate all slots (all allocated slots, not just all available slots)
             timeout: Maximum time to wait for the request to be filled
             cancel_if: Cancel the request if this event happens
         Returns:
             Whether request was fulfilled
         """
-
         if task_to == task_from:
             raise ValueError(f'Resources cannot be moved between the same pool. task_from = "{task_from}" = task_to')
 
         # Pull nodes from the remaining
-        acq_success = self.acquire(task_from, n_slots, timeout, cancel_if)
+        with self._allocation_lock[task_from]:
+            if n_slots == "all":
+                n_slots = self.allocated_slots(task_from)
+            acq_success = self.acquire(task_from, n_slots, timeout, cancel_if)
 
-        # If successful, push those resources to the target pool
-        if acq_success:
-            # Mark resources as available
-            for _ in range(n_slots):
-                self._availability[task_to].release()
+            # If successful, push those resources to the target pool
+            if acq_success:
+                # Mark resources as available
+                for _ in range(n_slots):
+                    self._availability[task_to].release()
 
-            # Record changes to the total pool size
-            with self._allocation_lock[task_from], self._allocation_lock[task_to]:
-                self._allocation[task_from] -= n_slots
-                self._allocation[task_to] += n_slots
-            logger.info(f'Transferred {n_slots} slots from {task_from} to {task_to}')
-            # TODO (wardlt): Eventually provide some mechanism to inform a batch
-            #   system that resources allocated to ``from_task`` should be released
+                # Record changes to the total pool size
+                with self._allocation_lock[task_to]:
+                    self._allocation[task_from] -= n_slots
+                    self._allocation[task_to] += n_slots
+                logger.info(f'Transferred {n_slots} slots from {task_from} to {task_to}')
+                # TODO (wardlt): Eventually provide some mechanism to inform a batch
+                #   system that resources allocated to ``from_task`` should be released
 
         return acq_success
 
@@ -221,19 +223,23 @@ class ReallocatorThread(Thread):
     """Thread that reallocates resources until an event is set.
 
     Create a thread by defining the procedure the thread should follow for reallocation
-    (e.g., from where to gather resources, where to store them)
-    and an event that will signal for it to exit.
+    (e.g., from where to gather resources, where to store them, where to put them when done).
+
+    The resource allocation thread is stopped by calling ``obj.stop_event.set()``.
+    Note that you can provide an Event object to the initializer to use instead of
+    the ``stop_event`` attribute.
 
     Runs as a daemon thread."""
 
-    def __init__(self, resource_counter: ResourceCounter, stop_event: Event,
+    def __init__(self, resource_counter: ResourceCounter,
                  gather_from: Optional[str], gather_to: Optional[str],
                  disperse_to: Optional[str], max_slots: Optional[int] = None,
+                 stop_event: Optional[Event] = None,
                  slot_step: int = 1, logger_name: Optional[str] = None):
         """
         Args:
             resource_counter: Resource counter used to track resources
-            stop_event: Event which controls when the thread should give resources back
+            stop_event: Event which controls when the thread should give resources back. If unset, a new Event is created.
             logger_name: Name of the logger, if desired
             gather_from: Name of a resource pool from which to acquire resources
             gather_to: Name of the resource pool to place re-allocated resources
@@ -244,7 +250,10 @@ class ReallocatorThread(Thread):
         super().__init__(daemon=True)
 
         self.resource_counter = resource_counter
-        self.stop_event = stop_event
+        if stop_event is not None:
+            self.stop_event = stop_event
+        else:
+            self.stop_event = Event()
         self.gather_from = gather_from
         self.gather_to = gather_to
         self.disperse_to = disperse_to
@@ -254,7 +263,8 @@ class ReallocatorThread(Thread):
         self.logger = logger if logger_name is None else logging.getLogger(logger_name)
 
     def run(self) -> None:
-        self.logger.info('Starting resource allocation thread')
+        self.logger.info(f'Starting resource allocation thread. Allocating a maximum of {self.max_slots} to {self.gather_to} from'
+                         f' {self.gather_from} in steps of {self.slot_step}')
 
         # Acquire resources until either the maximum is reached, or the event is triggered
         while (self.max_slots is None or self.resource_counter.allocated_slots(self.gather_to) < self.max_slots) \
@@ -266,6 +276,5 @@ class ReallocatorThread(Thread):
         self.logger.info('Waiting for stop condition to be set')
         self.stop_event.wait()
         if self.gather_to != self.disperse_to:
-            self.resource_counter.reallocate(self.gather_to, self.disperse_to,
-                                             self.resource_counter.allocated_slots(self.gather_to))
+            self.resource_counter.reallocate(self.gather_to, self.disperse_to, "all")
         self.logger.info('Resource allocation thread exiting')

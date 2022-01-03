@@ -2,3 +2,4 @@ flake8
 pytest
 pytest-timeout
 pytest-mock
+pytest-repeat

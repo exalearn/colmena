@@ -110,18 +110,13 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
         max_slots = getattr(thinker, max_slots)
 
     # Loop until the thinker is completed
-    func_is_done = Event()
     reallocator_thread: Optional[ReallocatorThread] = None
     while not thinker.done.is_set():
         if event.wait(_DONE_REACTION_TIME):
-            # Reset the "function is done" event
-            func_is_done.clear()
-
             # If desired, launch the resource-allocation thread
             if reallocate_resources:
                 reallocator_thread = ReallocatorThread(
-                    thinker.rec, func_is_done,
-                    gather_from=gather_from, gather_to=gather_to,
+                    thinker.rec, gather_from=gather_from, gather_to=gather_to,
                     disperse_to=disperse_to, max_slots=max_slots,
                     slot_step=slot_step, logger_name=thinker.logger.name + ".allocate"
                 )
@@ -130,11 +125,9 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
             # Launch the function
             process_func(thinker)
 
-            # When complete, set the Event flag (killing the resource allocator)
-            func_is_done.set()
-
-            # Wait for the resource allocator to die
+            # If we are using resource re-allocation, set the stop condition and wait for resources to be freed
             if reallocator_thread is not None:
+                reallocator_thread.stop_event.set()
                 reallocator_thread.join()
 
 
