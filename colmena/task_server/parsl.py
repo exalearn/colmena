@@ -1,104 +1,23 @@
 """Parsl task server and related utilities"""
 import os
 import logging
+from concurrent.futures import Future
 from functools import partial
-from queue import Queue
-from threading import Thread
-from concurrent.futures import wait, Future
-from time import sleep
-from typing import Optional, List, Callable, Tuple, Dict, Union, Set
+from typing import Optional, List, Callable, Tuple, Dict, Union
 
 import parsl
-from parsl import python_app, ThreadPoolExecutor
+from parsl import ThreadPoolExecutor
 from parsl.config import Config
 from parsl.app.python import PythonApp
-from parsl.dataflow.futures import AppFuture
 
-from colmena.models import Result, FailureInformation
-from colmena.task_server.base import BaseTaskServer
+from colmena.models import Result
 from colmena.redis.queue import TaskServerQueues
-from colmena.task_server.base import run_and_record_timing
+from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
 
 logger = logging.getLogger(__name__)
 
 
-@python_app(executors=['_output_workers'])
-def output_result(queues: TaskServerQueues, topic: str, result_obj: Result):
-    """Submit the function result to the Redis queue
-
-    Args:
-        queues: Queues used to communicate with Redis
-        topic: Topic to assign in output queue
-        result_obj: Result object containing the inputs, to be sent back with outputs
-    """
-    return queues.send_result(result_obj, topic=topic)
-
-
-class _ErrorHandler(Thread):
-    """Keeps track of the Parsl futures and reports back errors"""
-
-    def __init__(self, future_queue: Queue, timeout: float = 5):
-        """
-        Args:
-            future_queue (Queue): A queue on which to receive
-            timeout (float): How long to wait before checking for new futures
-        """
-        super().__init__(daemon=True, name='error_handler')
-        self.future_queue = future_queue
-        self.timeout = timeout
-        self.kill = False
-
-    def run(self) -> None:
-        # Initialize the list of futures
-        logger.info('Starting the error-handler thread')
-        futures: Set[Future] = set()
-
-        # Continually look for new jobs
-        while not self.kill:
-            # Pull from the queue until empty
-            #  This operation assumes we have only one thread reading from the queue
-            #  Otherwise, the queue could become empty between checking status and then pulling
-            while not self.future_queue.empty():
-                futures.add(self.future_queue.get())
-
-            # If no futures, wait for the timeout
-            if len(futures) == 0:
-                sleep(self.timeout)
-            else:
-                done, not_done = wait(futures, timeout=self.timeout)
-
-                # If there are entries that are complete, check if they have errors
-                for task in done:
-                    # Check if an exception was raised
-                    exc = task.exception()
-                    if exc is None:
-                        logger.debug(f'Task completed: {task}')
-                        continue
-                    logger.warning(f'Task {task} with an exception: {exc}')
-
-                    # Pull out the result objects
-                    queues: TaskServerQueues = task.task_def['args'][0]
-                    topic: str = task.task_def['args'][1]
-                    method_task = task.task_def['depends'][0]
-                    task_exc = method_task.exception()
-                    result_obj: Result = method_task.task_def['args'][0]
-
-                    # Mark it as unsuccessful and capture the exception information
-                    result_obj.success = False
-                    result_obj.failure_info = FailureInformation.from_exception(task_exc)
-
-                    # Send it to the client
-                    queues.send_result(result_obj, topic=topic)
-
-                # Display run information
-                if len(done) > 0:
-                    logger.debug(f'Cleared {len(done)} futures from Parsl task queue')
-
-                # Loop through the incomplete tasks
-                futures = not_done
-
-
-class ParslTaskServer(BaseTaskServer):
+class ParslTaskServer(FutureBasedTaskServer):
     """Task server based on Parsl
 
     Create a Parsl task server by first creating a resource configuration following
@@ -200,43 +119,19 @@ class ParslTaskServer(BaseTaskServer):
         if self.default_method_ is not None:
             logger.info(f'There is only one method, so we are using {self.default_method_} as a default')
 
-        # Create a thread to check if tasks completed successfully
-        self.task_queue: Optional[Queue] = None
-        self.error_checker: Optional[_ErrorHandler] = None
-
-    def process_queue(self):
-        """Evaluate a single task from the queue"""
-
-        # Get a result from the queue
-        topic, result = self.queues.get_task(self.timeout)
-        logger.info(f'Received request for {result.method} with topic {topic}')
-
+    def _submit(self, task: Result) -> Future:
         # Determine which method to run
-        if self.default_method_ and result.method is None:
+        if self.default_method_ and task.method is None:
             method = self.default_method_
         else:
-            method = result.method
+            method = task.method
 
         # Submit the application
-        future = self.submit_application(method, result)
-        # TODO (wardlt): Implement "resubmit if task returns a new future."
-        #  Requires waiting on two streams: input_queue and the queues
-
-        # Pass the future of that operation to the output queue
-        result_future = output_result(self.queues, topic, future)
+        future = self.methods_[method](task)
         logger.debug('Pushed task to Parsl')
+        # TODO (wardlt): Implement "resubmit if task returns a new future." or the ability to launch Parsl workflows with >1 step
 
-        # Pass the task to the "error handler"
-        self.task_queue.put(result_future)
-
-    def submit_application(self, method_name: str, result: Result) -> AppFuture:
-        """Submit an application to run via Parsl
-
-        Args:
-            method_name (str): Name of the method to invoke
-            result: Task description
-        """
-        return self.methods_[method_name](result)
+        return future
 
     def _cleanup(self):
         """Close out any resources needed by the task server"""
@@ -245,18 +140,10 @@ class ParslTaskServer(BaseTaskServer):
         dfk.wait_for_current_tasks()
         logger.info(f"All tasks have completed for {self.__class__.__name__} on {self.ident}")
 
-        logger.info("Shutting down the error handling thread")
-        self.error_checker.kill = True
-
     def run(self) -> None:
         # Launch the Parsl workflow engine
         parsl.load(self.config)
         logger.info(f"Launched Parsl DFK. Process id: {os.getpid()}")
-
-        # Create the error checker
-        self.task_queue = Queue()
-        self.error_checker = _ErrorHandler(self.task_queue)
-        self.error_checker.start()
 
         # Start the loop
         super().run()
