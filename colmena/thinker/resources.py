@@ -193,7 +193,6 @@ class ResourceCounter:
         Returns:
             Whether request was fulfilled
         """
-
         if task_to == task_from:
             raise ValueError(f'Resources cannot be moved between the same pool. task_from = "{task_from}" = task_to')
 
@@ -221,21 +220,25 @@ class ReallocatorThread(Thread):
     """Thread that reallocates resources until an event is set.
 
     Create a thread by defining the procedure the thread should follow for reallocation
-    (e.g., from where to gather resources, where to store them)
-    and an event that will signal for it to exit.
+    (e.g., from where to gather resources, where to store them, where to put them when done).
+
+    The resource allocation thread is stopped by calling ``obj.stop_event.set()``.
+    Note that you can provide an Event object to the initializer to use instead of
+    the ``stop_event`` attribute.
 
     Runs as a daemon thread."""
 
-    def __init__(self, resource_counter: ResourceCounter, stop_event: Event,
+    def __init__(self, resource_counter: ResourceCounter,
                  gather_from: Optional[str], gather_to: Optional[str],
                  disperse_to: Optional[str], max_slots: Optional[int] = None,
+                 stop_event: Optional[Event] = None,
                  slot_step: int = 1, logger_name: Optional[str] = None):
         """
         Args:
             resource_counter: Resource counter used to track resources
-            stop_event: Event which controls when the thread should give resources back
+            stop_event: Event which controls when the thread should give resources back. If unset, a new Event is created.
             logger_name: Name of the logger, if desired
-            gather_from: Name of a resource pool from which to acquire resources
+            gather_from: Name of a resource pool from which to acquire resourc
             gather_to: Name of the resource pool to place re-allocated resources
             disperse_to: Name of the resource pool to move resources to after function completes
             max_slots: Maximum number of resource slots to acquire
@@ -244,7 +247,10 @@ class ReallocatorThread(Thread):
         super().__init__(daemon=True)
 
         self.resource_counter = resource_counter
-        self.stop_event = stop_event
+        if stop_event is not None:
+            self.stop_event = stop_event
+        else:
+            self.stop_event = Event()
         self.gather_from = gather_from
         self.gather_to = gather_to
         self.disperse_to = disperse_to
