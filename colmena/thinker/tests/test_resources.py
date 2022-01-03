@@ -98,6 +98,7 @@ def test_reallocator(rec):
 
 
 @mark.timeout(2)
+@mark.repeat(4)
 def test_reallocator_deadlock(rec):
     """Creates the deadlock reported in https://github.com/exalearn/colmena/issues/43"""
     rec.reallocate(None, "sim", 8)
