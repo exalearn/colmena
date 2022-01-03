@@ -68,6 +68,7 @@ def test_allocations(rec):
     assert rec.allocated_slots("sim") == 0
     assert rec.allocated_slots("ml") == 8
 
+
 def test_reallocator(rec):
     # Start with everything allocated to "simulation"
     rec.reallocate(None, "sim", 8)
