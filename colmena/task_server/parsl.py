@@ -2,7 +2,7 @@
 import os
 import logging
 from concurrent.futures import Future
-from functools import partial
+from functools import partial, update_wrapper
 from typing import Optional, List, Callable, Tuple, Dict, Union
 
 import parsl
@@ -108,6 +108,7 @@ class ParslTaskServer(FutureBasedTaskServer):
 
             # Wrap the function in the timer class
             wrapped_function = partial(run_and_record_timing, function)
+            wrapped_function = update_wrapper(wrapped_function, function)
             app = PythonApp(wrapped_function, **options)
 
             # Store it
