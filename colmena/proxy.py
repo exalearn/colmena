@@ -1,85 +1,53 @@
 """Utilities for interacting with ProxyStore"""
+import warnings
 import proxystore as ps
 
-from typing import Any, Optional, Union
-
-from colmena.models import SerializationMethod
+from typing import Any, Union
 
 
-class ColmenaSerializationFactory(ps.store.redis.RedisFactory):
-    """Custom Factory for using Colmena serialization utilities"""
-    def __init__(self,
-                 key: str,
-                 name: str,
-                 hostname: str,
-                 port: int,
-                 serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
-                 **kwargs) -> None:
-        """Init ColmenaSerialization Factory
+def proxy_json_encoder(proxy: ps.proxy.Proxy) -> Any:
+    """Custom encoder function for proxies
 
-        Args:
-            key (str): key corresponding to object in Redis.
-            name (str): name of store to retrive objects from.
-            hostname (str): hostname of Redis server containing object.
-            port (int): port of Redis server containing object.
-            serialization_method (str): Colmena serialization method to use
-                for deserializing the object when resolved from Redis.
-            kwargs: keyword arguments to pass to the RedisFactory.
-        """
-        self.serialization_method = serialization_method
-        self.kwargs = kwargs
-        super(ColmenaSerializationFactory, self).__init__(
-            key, name, hostname, port, **kwargs
-        )
+    Proxy objects are not JSON serializable so this function, when passed to
+    `json.dumps()`, will attempt to JSON serialize the wrapped object. If the
+    proxy is not resolved, a warning will be raised for the user and the
+    proxy will be replaced with a placeholder string for the proxy. This
+    1) prevents JSON serialization from failing and 2) avoid unintended
+    resolutions of proxies that may invoke expensive communication operations
+    without the user being aware.
 
-    def __getnewargs_ex__(self):
-        """Helper method for pickling
-
-        Note:
-            We override default pickling behavior because a Factory may contain
-            a Future if it is being asynchronously resolved and Futures cannot
-            be pickled.
-        """
-        return (self.key, self.name, self.hostname, self.port), {
-            'serialization_method': self.serialization_method,
-            **self.kwargs
-        }
-
-    def resolve(self) -> Any:
-        obj_str = super(ColmenaSerializationFactory, self).resolve()
-        return SerializationMethod.deserialize(self.serialization_method, obj_str)
-
-
-def proxy(obj: Any,
-          key: Optional[str] = None,
-          is_serialized: bool = False,
-          serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
-          **kwargs) -> ps.proxy.Proxy:
-    """Place object in Value Server and return Proxy
+    Usage:
+        >>> # With JSON dump/dumps
+        >>> json.dumps(json_obj_containing_proxy, default=proxy_json_encoder)
+        >>> # With Pydantic
+        >>> my_basemodel_instance.json(encoder=proxy_json_encoder)
 
     Args:
-        obj: object to be placed in Value Server and proxied.
-        key (str): optional key to associate with object. By default, ProxyStore
-            will create a key for the object (default: None).
-        is_serialized (bool): True if obj is already serialized (default: False).
-        serialization_method (str): serialization method to use for the object
-            (default: SerializationMethod.PICKLE).
-        kwargs (dict): keyword arguments to pass to ProxyStore.store.redis.RedisStore.proxy().
+        proxy (Proxy): proxy to convert to JSON encodable object
 
     Returns:
-        ps.proxy.Proxy
+        The object wrapped by the proxy if the proxy has already been resolved
+        otherwise a placeholder string.
+
+    Raises:
+        TypeError:
+            if `proxy` is not an instance of a Proxy.
     """
-    store = ps.store.get_store('redis')
-    if not is_serialized:
-        obj = SerializationMethod.serialize(serialization_method, obj)
-    return store.proxy(
-        obj,
-        key,
-        serialize=False,  # Do not use ProxyStore serialization utilities
-        serialization_method=serialization_method,
-        factory=ColmenaSerializationFactory,
-        **kwargs
+    if not isinstance(proxy, ps.proxy.Proxy):
+        # The JSON encoder will catch this TypeError and handle appropriately
+        raise TypeError
+
+    if ps.proxy.is_resolved(proxy):
+        # Proxy is already resolved so encode the underlying object
+        # rather than the proxy
+        return ps.proxy.extract(proxy)
+
+    warnings.warn(
+        "Attemping to JSON serialize an unresolved proxy. To prevent "
+        "an unintended proxy resolve, the resulting JSON object will "
+        "have unresolved proxies replaced with a placeholder string."
     )
+    return f"<Unresolved Proxy at {hex(id(proxy))}>"
 
 
 def resolve_proxies_async(args: Union[object, list, tuple, dict]) -> None:

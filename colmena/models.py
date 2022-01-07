@@ -10,8 +10,9 @@ from typing import Any, Tuple, Dict, Optional, Union
 
 from pydantic import BaseModel, Field
 
-import colmena
 import proxystore as ps
+
+from colmena.proxy import proxy_json_encoder
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +115,8 @@ class Result(BaseModel):
                                                       description="Method used to serialize input data")
     keep_inputs: bool = Field(True, description="Whether to keep the inputs with the result object or delete "
                                                 "them after the method has completed")
-    value_server_hostname: Optional[str] = Field(None, description="Value server hostname")
-    value_server_port: Optional[str] = Field(None, description="Value server port")
-    value_server_threshold: int = Field(
-        None, description="Object size threshold (bytes) at which input/value "
-                          "objects are stored in value server before serialization")
+    proxystore_name: Optional[str] = Field(None, description="Name of ProxyStore backend yo use for transferring large objects")
+    proxystore_threshold: Optional[int] = Field(None, description="Proxy all input/output objects larger than this threshold in bytes")
 
     def __init__(self, inputs: Tuple[Tuple[Any], Dict[str, Any]], **kwargs):
         """
@@ -138,6 +136,15 @@ class Result(BaseModel):
     @property
     def kwargs(self) -> Dict[str, Any]:
         return self.inputs[1]
+
+    def json(self, **kwargs: Dict[str, Any]) -> str:
+        """Override json encoder to use a custom encoder with proxy support"""
+        if 'encoder' not in kwargs:
+            # Only use the Colmena custom encoder if the user did not specify
+            # one. If the user specifies a custom encoder, we trust that they
+            # know what they are doing.
+            kwargs['encoder'] = proxy_json_encoder
+        return super().json(**kwargs)
 
     def mark_result_received(self):
         """Mark that a completed computation was received by a client"""
@@ -186,29 +193,27 @@ class Result(BaseModel):
         def _serialize_and_proxy(value, evict=False):
             """Helper function for serializing and proxying"""
             # Serialized object before proxying to compare size of serialized
-            # object to value server threshold
+            # object to value server threshold. Using sys.getsizeof would be
+            # faster but sys.getsizeof does not account for the memory
+            # consumption of objects that value refers to
             value_str = SerializationMethod.serialize(
                 self.serialization_method, value
             )
 
             if (
-                    self.value_server_threshold is not None and
-                    sys.getsizeof(value_str) >= self.value_server_threshold and
+                    self.proxystore_threshold is not None and
+                    sys.getsizeof(value_str) >= self.proxystore_threshold and
                     not isinstance(value, ps.proxy.Proxy)
             ):
-                # Proxy the value. Note: we use the id of the object as the key
-                # so calling proxy() on the same object multiple times
-                # does not create multiple copies in the value server.
-                value_proxy = colmena.proxy.proxy(
-                    value_str,
-                    key=str(id(value)),
-                    is_serialized=True,
-                    serialization_method=self.serialization_method,
-                    evict=evict
+                # Proxy the value. We use the id of the object as the key
+                # so multiple copies of the object are not added to ProxyStore,
+                # but the value in ProxyStore will still be updated.
+                value_proxy = ps.store.get_store(self.proxystore_name).proxy(
+                    value, key=str(id(value)), evict=evict,
                 )
                 logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
-                # Serialize the proxy. This is efficient since the proxy is
-                # just a reference + metadata about the value
+                # Serialize the proxy with Colmena's utilities. This is
+                # efficient since the proxy is just a reference and metadata
                 value_str = SerializationMethod.serialize(
                     self.serialization_method, value_proxy
                 )

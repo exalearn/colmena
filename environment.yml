@@ -19,4 +19,4 @@ dependencies:
       - -e .
       - parsl>=1.*
       - pydantic
-      - proxystore==0.2.*
+      - proxystore==0.3.*

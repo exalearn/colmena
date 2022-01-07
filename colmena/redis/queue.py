@@ -26,9 +26,8 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
                      keep_inputs: bool = True,
                      clean_slate: bool = True,
                      topics: Optional[Iterable[str]] = None,
-                     value_server_threshold: Optional[int] = None,
-                     value_server_hostname: Optional[str] = None,
-                     value_server_port: Optional[int] = None)\
+                     proxystore_name: Optional[str] = None,
+                     proxystore_threshold: Optional[int] = None)\
         -> Tuple['ClientQueues', 'TaskServerQueues']:
     """Make a pair of queues for a server and client
 
@@ -40,20 +39,18 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
         keep_inputs (bool): Whether to keep the inputs after the method has finished executing
         clean_slate (bool): Whether to flush the queues before launching
         topics ([str]): List of topics used when having the client filter different types of tasks
-        value_server_threshold (int): Input/output objects larger than this threshold
-            (in bytes) will be stored in the value server. If None, value server
-            is ignored
-        value_server_hostname (str): Optional redis server hostname for value server.
-            If the value server is being used but this option is not provided,
-            the redis server for the task queues will be used.
-        value_server_port (int): See `value_server_hostname`
+        proxystore_name (str): Optional name of ProxyStore instance to use for
+            proxying input/output objects.
+        proxystore_threshold (int): Input/output objects larger than this
+            threshold (in bytes) will be stored in the ProxyStore backend
+            specified by `proxystore_name`. If None, proxies will not be used
+            for passing objects.
     Returns:
         (ClientQueues, TaskServerQueues): Pair of communicators set to use the correct channels
     """
 
     return (ClientQueues(hostname, port, name, serialization_method, keep_inputs,
-                         topics, value_server_threshold, value_server_hostname,
-                         value_server_port),
+                         topics, proxystore_name, proxystore_threshold),
             TaskServerQueues(hostname, port, name, topics=topics, clean_slate=clean_slate))
 
 
@@ -223,9 +220,8 @@ class ClientQueues:
                  serialization_method: Union[str, SerializationMethod] = SerializationMethod.JSON,
                  keep_inputs: bool = True,
                  topics: Optional[Iterable] = None,
-                 value_server_threshold: Optional[int] = None,
-                 value_server_hostname: Optional[str] = None,
-                 value_server_port: Optional[int] = None):
+                 proxystore_name: Optional[str] = None,
+                 proxystore_threshold: Optional[int] = None):
         """
         Args:
             hostname (str): Hostname of the Redis server
@@ -234,39 +230,40 @@ class ClientQueues:
             serialization_method (SerializationMethod): Method used to store the input
             keep_inputs (bool): Whether to keep inputs after method results are stored
             topics ([str]): List of topics used when having the client filter different types of tasks
-            value_server_threshold (int): Threshold (bytes) to store objects in
-                value server. If None, the value server is not used.
-            value_server_hostname (str): Optional redis server hostname for the
-                value server. If not provided and the value server is used,
-                defaults to `hostname`.
-            value_server_port (str): Optional redis server port for the
-                value server. If not provided and the value server is used,
-                defaults to `port`.
+            proxystore_name (str): Optional name of ProxyStore instance to use for
+                proxying input/output objects.
+            proxystore_threshold (int): Input/output objects larger than this
+                threshold (in bytes) will be stored in the ProxyStore backend
+                specified by `proxystore_name`. If None, proxies will not be used
+                for passing objects.
         """
 
         # Store the result communication options
         self.serialization_method = serialization_method
         self.keep_inputs = keep_inputs
-        self.value_server_threshold = value_server_threshold
+        self.proxystore_name = proxystore_name
+        self.proxystore_threshold = proxystore_threshold
 
-        if self.value_server_threshold is not None:
+        if self.proxystore_threshold is not None:
+            if self.proxystore_name is None:
+                raise ValueError('Non-zero ProxyStore threshold was specified '
+                                 'but proxystore_name was not provided')
             if self.serialization_method.lower() != 'pickle':
-                raise ValueError('Serialization method must be pickle to use the value server')
-            if value_server_hostname is None:
-                value_server_hostname = hostname
-            if value_server_port is None:
-                value_server_port = port
-            ps.store.init_store(
-                ps.store.STORES.REDIS,
-                name='redis',
-                hostname=value_server_hostname,
-                port=value_server_port
+                raise ValueError('Serialization method must be pickle to use '
+                                 'the value server')
+            store = ps.store.get_store(proxystore_name)
+            if store is None:
+                raise ValueError(
+                    f'ProxyStore backend with name {proxystore_name} was not '
+                    'found. This is likely because the store needs to be '
+                    'initialized prior to initializing the Colmena queues.'
+                )
+            logger.debug(
+                f'The ProxyStore backend {store} is registered with Colmena '
+                f'with a threshold of {proxystore_threshold} bytes'
             )
-            logger.debug('Initialized value server using Redis server at '
-                         f'{value_server_hostname}:{value_server_port}')
-
-        self.value_server_hostname = value_server_hostname
-        self.value_server_port = value_server_port
+        else:
+            logger.debug('A ProxyStore backend is not registered with Colmena')
 
         # Make the queues
         self.outbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
@@ -308,9 +305,8 @@ class ClientQueues:
             keep_inputs=_keep_inputs,
             serialization_method=self.serialization_method,
             task_info=task_info,
-            value_server_hostname=self.value_server_hostname,
-            value_server_port=self.value_server_port,
-            value_server_threshold=self.value_server_threshold
+            proxystore_name=self.proxystore_name,
+            proxystore_threshold=self.proxystore_threshold
         )
 
         # Push the serialized value to the task server
