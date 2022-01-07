@@ -136,7 +136,7 @@ class Thinker(BaseThinker):
                 self.logger.info(f'Retrieved remaining task {i+1}/{self.parallel_tasks}')
                 
 
-    @agent(critical=False)
+    @agent(startup=False)
     def startup(self):
         """Submit the initial tasks"""
         for _ in range(self.parallel_tasks):
