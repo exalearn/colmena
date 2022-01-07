@@ -47,16 +47,31 @@ We setup the Redis queues in Python using Colmena's "queue building" function:
 This command connects to a server on localhost and creates separates queues for simulation and task
 generation results.
 
-Using the Value Server
-++++++++++++++++++++++
+Using ProxyStore
+++++++++++++++++
 
-Colmena uses `ProxyStore <https://github.com/gpauloski/ProxyStore>`_ to implement a Redis-based value server.
-The value server can be used to efficiently transfer large objects, typically on the order of 100KB or larger, between the thinker and workers directly.
-To enable the value server, a threshold value (bytes) can be passed via the parameter :code:`value_server_threshold` to :code:`make_queue_pairs`.
-Any input/output object of a target function larger than :code:`value_server_threshold` will be automatically passed via the value server.
+Colmena can use `ProxyStore <https://github.com/gpauloski/ProxyStore>`_ to efficiently transfer large objects, typically on the order of 100KB or larger, between the thinker and workers directly.
+To enable the use of ProxyStore, a ProxyStore backend must be initialized.
+The name of the ProxyStore backend and a threshold value (bytes) can be passed via the parameters :code:`proxystore_name` and :code:`proxystore_threshold` to :code:`make_queue_pairs`.
+Any input/output object of a target function larger than :code:`proxystore_threshold` will be automatically passed via ProxyStore.
 
-By default, the value server uses the Redis server passed to :code:`make_queue_pairs`.
-An alternative Redis server for the value server can be specified via the :code:`value_server_hostname` and :code:`value_server_port` parameters of :code:`make_queue_pairs`.
+For example, a common use case is to initialize ProxyStore to use the same Redis server that Colmena uses for the queues.
+
+.. code-block:: python
+
+    import proxystore as ps
+    from colmena.redis.queue import make_queue_pairs
+
+    ps.store.init_store(
+        'redis', name='default-store', hostname=REDISHOST, port=REDISPORT
+    )
+
+    client_queues, server_queues = make_queue_pairs(
+        REDISHOST, REDISPORT, serialization_method='pickle',
+        proxystore_name='default-store', proxystore_threshold=100000
+    )
+
+More details on initializing ProxyStore backends can be found in the `docs <https://proxystore.readthedocs.io/en/latest/source/proxystore.store.html>`_.
 
 2. Build a task server
 ----------------------
