@@ -139,12 +139,12 @@ class Result(BaseModel):
 
     def json(self, **kwargs: Dict[str, Any]) -> str:
         """Override json encoder to use a custom encoder with proxy support"""
-        if 'encoder' not in kwargs:
-            # Only use the Colmena custom encoder if the user did not specify
-            # one. If the user specifies a custom encoder, we trust that they
-            # know what they are doing.
-            kwargs['encoder'] = proxy_json_encoder
-        return super().json(**kwargs)
+        data = {
+            'inputs': self.inputs,
+            'value': self.value,
+            **super().dict(exclude={'inputs', 'value'}
+        }
+        return json.dumps(data, default=proxy_json_encoder)
 
     def mark_result_received(self):
         """Mark that a completed computation was received by a client"""
