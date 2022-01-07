@@ -5,6 +5,10 @@ import proxystore as ps
 from typing import Any, Union
 
 
+class ProxyJSONSerializationWarning(Warning):
+    pass
+
+
 def proxy_json_encoder(proxy: ps.proxy.Proxy) -> Any:
     """Custom encoder function for proxies
 
@@ -45,7 +49,8 @@ def proxy_json_encoder(proxy: ps.proxy.Proxy) -> Any:
     warnings.warn(
         "Attemping to JSON serialize an unresolved proxy. To prevent "
         "an unintended proxy resolve, the resulting JSON object will "
-        "have unresolved proxies replaced with a placeholder string."
+        "have unresolved proxies replaced with a placeholder string.",
+        category=ProxyJSONSerializationWarning
     )
     return f"<Unresolved Proxy at {hex(id(proxy))}>"
 
