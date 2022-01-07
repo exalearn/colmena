@@ -25,11 +25,13 @@ def agent(func: Optional[Callable] = None, startup: bool = False):
         func: Do not directly pass this variable. It is used as an argument to the decorator
         startup: Whether this agent exiting should trigger other agents to stop. All agents will still stop if it exits with an exception
     """
+
     def decorator(f: Callable):
         f._colmena_agent = True
         f._colmena_startup = startup
         f._colmena_agent_type = 'agent'
         return f
+
     if func is None:
         return decorator
     return decorator(func)
@@ -60,6 +62,7 @@ def result_processor(func: Optional[Callable] = None, topic: Optional[str] = Non
         output = agent(output)
         output._colmena_agent_type = 'result_processor'
         return update_wrapper(output, f)
+
     if func is None:
         return decorator
     return decorator(func)
@@ -94,6 +97,7 @@ def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slo
         output = agent(output)
         output._colmena_agent_type = 'task_submitter'
         return update_wrapper(output, f)
+
     if func is None:
         return decorator
     return decorator(func)
@@ -189,6 +193,7 @@ def event_responder(func: Optional[Callable] = None, event_name: str = None,
         output._event_name = event_name
         output._colmena_agent_type = 'event_responder'
         return update_wrapper(output, f)
+
     if func is None:
         return decorator
     return decorator(func)
@@ -212,7 +217,7 @@ def _launch_agent(func: Callable, thinker: 'BaseThinker'):
     exc = False
     try:
         func(thinker)
-    except:
+    except BaseException:
         exc = True
     finally:
         # If a "critical" function, set the "done" flag
