@@ -44,7 +44,6 @@ class ExampleThinker(BaseThinker):
     def responder(self):
         self.rec.acquire("event", 1)
         self.event_responded = True
-        self.event.clear()
         self.rec.release("event", 1)
 
 
@@ -54,6 +53,7 @@ def queues():
 
 
 def test_detection():
+    # Test that the wrappers set the appropriate attributes
     assert hasattr(ExampleThinker.startup_function, '_colmena_agent')
     assert getattr(ExampleThinker.startup_function, '_colmena_startup')
     assert hasattr(ExampleThinker.function, '_colmena_agent')
@@ -61,6 +61,8 @@ def test_detection():
     assert hasattr(ExampleThinker.process_results, '_colmena_agent')
     assert hasattr(ExampleThinker.submit_task, '_colmena_agent')
     assert hasattr(ExampleThinker.responder, '_colmena_agent')
+
+    # Test detecting the agents
     assert len(ExampleThinker.list_agents()) == 5
     assert 'function' in [a.__name__ for a in ExampleThinker.list_agents()]
 
@@ -98,6 +100,8 @@ def test_run(queues):
     assert rec.available_slots(None) == 0
 
     # Test event responder: Trigger event, see if it triggers and acquires resources
+    assert len(th.barriers) == 1
+    assert th.barriers['event'].n_waiting == 0
     assert not th.event.is_set()
     assert not th.event_responded
     th.event.set()

@@ -1,9 +1,10 @@
 """Base classes for 'thinking' applications that respond to tasks completing"""
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial, update_wrapper
-from threading import Event, local, Thread
+from threading import Event, local, Thread, Barrier
 from traceback import TracebackException
-from typing import Optional, Callable, List, Union
+from typing import Optional, Callable, List, Union, Dict
 
 import os
 
@@ -27,12 +28,14 @@ def agent(func: Optional[Callable] = None, startup: bool = False):
     def decorator(f: Callable):
         f._colmena_agent = True
         f._colmena_startup = startup
+        f._colmena_agent_type = 'agent'
         return f
     if func is None:
         return decorator
     return decorator(func)
 
 
+# TODO (wardlt): Write these functions as a subclass of Callable so we make less use of hidden attributes of function objects.
 def _result_event_agent(thinker: 'BaseThinker', process_func: Callable, topic: Optional[str]):
     """Wrapper function for result processing agents"""
     # Wait until we get a result
@@ -55,6 +58,7 @@ def result_processor(func: Optional[Callable] = None, topic: Optional[str] = Non
     def decorator(f: Callable):
         output = partial(_result_event_agent, process_func=f, topic=topic)
         output = agent(output)
+        output._colmena_agent_type = 'result_processor'
         return update_wrapper(output, f)
     if func is None:
         return decorator
@@ -82,12 +86,13 @@ def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slo
     Args:
         func: Do not directly pass this variable. It is used as an argument to the decorator
         task_type: Name of task pool from which to request resources
-        n_slots: Number of resources to request. Must be either a integer or the name of a class attribute
+        n_slots: Number of resources to request. Must be either an integer or the name of a class attribute
     """
 
     def decorator(f: Callable):
         output = partial(_task_submitter_agent, process_func=f, task_type=task_type, n_slots=n_slots)
         output = agent(output)
+        output._colmena_agent_type = 'task_submitter'
         return update_wrapper(output, f)
     if func is None:
         return decorator
@@ -104,6 +109,9 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
     if not hasattr(thinker, event_name):
         raise ValueError(f'Thinker lacks an event named {event_name}')
     event: Event = getattr(thinker, event_name)
+
+    # Get the barrier that is met when all agents finish
+    barrier = thinker.barriers[event_name]
 
     # Get the max_slots if set to a class attribute
     if not isinstance(max_slots, int) and max_slots is not None:
@@ -130,6 +138,11 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
                 reallocator_thread.stop_event.set()
                 reallocator_thread.join()
 
+            # Wait until all agents that responded to this event finish
+            my_id = barrier.wait()
+            if my_id == 0:
+                event.clear()
+
 
 def event_responder(func: Optional[Callable] = None, event_name: str = None,
                     reallocate_resources: bool = False,
@@ -137,6 +150,11 @@ def event_responder(func: Optional[Callable] = None, event_name: str = None,
                     disperse_to: Optional[str] = None, max_slots: Union[int, str, None] = None,
                     slot_step: int = 1):
     """Decorator that builds agents which respond to an event being set.
+
+    The Thinker associated with this agent must have a class attribute that is an :class:`Event`
+    with the same name as ``event_name``.
+    The agent will run once the event is set and will reset the event once the function completes (i.e., ``event.clear``).
+    If more than one agent is started by an event, the event will be reset only after all agents finish.
 
     The event responder can launch a thread to acquire resource temporarily.
     The thread is created if you set ``reallocate_resources=True`` in the decorator
@@ -146,10 +164,6 @@ def event_responder(func: Optional[Callable] = None, event_name: str = None,
     they are placed, and where they are re-allocated after the thread completes.
     The thread will allocate up to the maximum number of slots defined and
     then reallocate _all slots available to that pool_ to the designated resource.
-
-
-    The Thinker associated with this agent must have a class attribute that is an :class:`Event`
-    with the same name as ``event_name``.
 
     Args:
         func: Do not directly pass this variable. It is used as an argument to the decorator
@@ -172,6 +186,8 @@ def event_responder(func: Optional[Callable] = None, event_name: str = None,
                          reallocate_resources=reallocate_resources, gather_from=gather_from, gather_to=gather_to,
                          disperse_to=disperse_to, max_slots=max_slots, slot_step=slot_step)
         output = agent(output)
+        output._event_name = event_name
+        output._colmena_agent_type = 'event_responder'
         return update_wrapper(output, f)
     if func is None:
         return decorator
@@ -274,6 +290,9 @@ class BaseThinker(Thread):
         # Create some basic events and locks
         self.done: Event = Event()
 
+        # Create barriers shared by event_responder agents
+        self.barriers: Dict[str, Barrier] = {}
+
         # Thread-local stuff, like the default queue and name
         self.local_details = _AgentData(self.make_logger())
 
@@ -332,8 +351,19 @@ class BaseThinker(Thread):
         """
         self.logger.info(f"{self.__class__.__name__} started. Process id: {os.getpid()}")
 
-        threads = []
+        # Find the agents and create primitives needed to coordinate between them
         functions = self.list_agents()
+        barrier_counts = defaultdict(int)
+        for func in functions:
+            if func._colmena_agent_type == 'event_responder':
+                barrier_counts[func._event_name] += 1
+
+        self.barriers.clear()
+        for name, count in barrier_counts.items():
+            self.barriers[name] = Barrier(count)
+
+        # Launch the thread
+        threads = []
         with ThreadPoolExecutor(max_workers=len(functions)) as executor:
             # Submit all worker threads
             for f in functions:
