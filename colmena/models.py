@@ -142,7 +142,7 @@ class Result(BaseModel):
         data = {
             'inputs': self.inputs,
             'value': self.value,
-            **super().dict(exclude={'inputs', 'value'}
+            **super().dict(exclude={'inputs', 'value'})
         }
         return json.dumps(data, default=proxy_json_encoder)
 
