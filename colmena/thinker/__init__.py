@@ -17,16 +17,16 @@ logger = logging.getLogger(__name__)
 _DONE_REACTION_TIME = 1
 
 
-def agent(func: Optional[Callable] = None, critical: bool = True):
+def agent(func: Optional[Callable] = None, startup: bool = False):
     """Decorator that denotes a function as an "agent" thread that is launched when a Thinker process is started
 
     Args:
         func: Do not directly pass this variable. It is used as an argument to the decorator
-        critical: Whether the "done" flag should be set once this thread finishes
+        startup: Whether this agent exiting should trigger other agents to stop. All agents will still stop if it exits with an exception
     """
     def decorator(f: Callable):
         f._colmena_agent = True
-        f._colmena_critical = critical
+        f._colmena_startup = startup
         return f
     if func is None:
         return decorator
@@ -193,11 +193,14 @@ def _launch_agent(func: Callable, thinker: 'BaseThinker'):
     thinker.logger.info(f'{name} started')
 
     # Launch it
+    exc = False
     try:
         func(thinker)
+    except:
+        exc = True
     finally:
         # If a "critical" function, set the "done" flag
-        if getattr(func, '_colmena_critical', False):
+        if exc or not getattr(func, '_colmena_startup', False):
             thinker.done.set()
 
         # Mark that the thread has crashed
@@ -332,12 +335,12 @@ class BaseThinker(Thread):
         threads = []
         functions = self.list_agents()
         with ThreadPoolExecutor(max_workers=len(functions)) as executor:
-            # Submit all of the worker threads
+            # Submit all worker threads
             for f in functions:
                 threads.append(executor.submit(_launch_agent, f, self))
             self.logger.info(f'Launched all {len(functions)} functions')
 
-            # Wait until any one completes, then set the "gen_done" event to
+            # Wait until any completes, then set the "gen_done" event to
             #  signal all remaining threads to finish after completing their work
             for finished in as_completed(threads):
                 exc = finished.exception()

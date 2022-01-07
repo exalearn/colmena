@@ -22,12 +22,12 @@ class ExampleThinker(BaseThinker):
         self.event_responded = False
         self.n_slots = 1
 
-    @agent(critical=False)
-    def function(self):
+    @agent(startup=True)
+    def startup_function(self):
         self.func_ran = True
 
     @agent
-    def critical_function(self):
+    def function(self):
         self.flag.wait(timeout=3)
 
     @result_processor
@@ -54,10 +54,10 @@ def queues():
 
 
 def test_detection():
+    assert hasattr(ExampleThinker.startup_function, '_colmena_agent')
+    assert getattr(ExampleThinker.startup_function, '_colmena_startup')
     assert hasattr(ExampleThinker.function, '_colmena_agent')
-    assert not getattr(ExampleThinker.function, '_colmena_critical')
-    assert hasattr(ExampleThinker.critical_function, '_colmena_agent')
-    assert getattr(ExampleThinker.critical_function, '_colmena_critical')
+    assert not getattr(ExampleThinker.function, '_colmena_startup')
     assert hasattr(ExampleThinker.process_results, '_colmena_agent')
     assert hasattr(ExampleThinker.submit_task, '_colmena_agent')
     assert hasattr(ExampleThinker.responder, '_colmena_agent')
