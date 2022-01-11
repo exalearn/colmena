@@ -214,14 +214,16 @@ def _launch_agent(func: Callable, thinker: 'BaseThinker'):
     thinker.logger.info(f'{name} started')
 
     # Launch it
-    exc = False
+    was_exc = False
     try:
         func(thinker)
-    except BaseException:
-        exc = True
+    except BaseException as exc:
+        thinker.logger.warning(f'Raised an exception. {exc}')
+        was_exc = True
+        raise
     finally:
         # If a "critical" function, set the "done" flag
-        if exc or not getattr(func, '_colmena_startup', False):
+        if was_exc or not getattr(func, '_colmena_startup', False):
             thinker.done.set()
 
         # Mark that the thread has crashed
