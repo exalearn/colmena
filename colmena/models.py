@@ -201,9 +201,10 @@ class Result(BaseModel):
             )
 
             if (
+                    self.proxystore_name is not None and
                     self.proxystore_threshold is not None and
-                    sys.getsizeof(value_str) >= self.proxystore_threshold and
-                    not isinstance(value, ps.proxy.Proxy)
+                    not isinstance(value, ps.proxy.Proxy) and
+                    sys.getsizeof(value_str) >= self.proxystore_threshold
             ):
                 # Proxy the value. We use the id of the object as the key
                 # so multiple copies of the object are not added to ProxyStore,

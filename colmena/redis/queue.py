@@ -254,8 +254,8 @@ class ClientQueues:
             self.proxystore_name = defaultdict(lambda: proxystore_name)
         elif isinstance(proxystore_name, dict):
             self.proxystore_name = defaultdict(lambda: None)
-            for topic, name in proxystore_name:
-                self.proxystore_name[topic] = name
+            for topic, ps_name in proxystore_name:
+                self.proxystore_name[topic] = ps_name
         elif proxystore_name is None:
             self.proxystore_name = defaultdict(lambda: None)
         else:
@@ -266,21 +266,21 @@ class ClientQueues:
             self.proxystore_threshold = defaultdict(lambda: proxystore_threshold)
         elif isinstance(proxystore_threshold, dict):
             self.proxystore_threshold = defaultdict(lambda: None)
-            for topic, name in proxystore_threshold:
-                self.proxystore_threshold[topic] = name
+            for topic, threshold in proxystore_threshold:
+                self.proxystore_threshold[topic] = threshold
         elif proxystore_threshold is None:
             self.proxystore_threshold = defaultdict(lambda: None)
         else:
             raise ValueError(f'Unexpected type {type(proxystore_threshold)} for proxystore_threshold')
 
         # Verify that ProxyStore backends exist
-        for name in set(self.proxystore_name.values()):
-            if name is None:
+        for ps_name in set(self.proxystore_name.values()):
+            if ps_name is None:
                 continue
-            store = ps.store.get_store(name)
+            store = ps.store.get_store(ps_name)
             if store is None:
                 raise ValueError(
-                    f'ProxyStore backend with name {proxystore_name} was not '
+                    f'ProxyStore backend with name {ps_name} was not '
                     'found. This is likely because the store needs to be '
                     'initialized prior to initializing the Colmena queues.'
                 )
@@ -293,14 +293,15 @@ class ClientQueues:
 
         # Log the ProxyStore configuration
         for topic in _topics:
-            name = self.proxystore_name[topic]
-            threshold = self.proxystore_threshold[topic]
-            if name is None or threshold is None:
+            ps_name = self.proxystore_name[topic]
+            ps_threshold = self.proxystore_threshold[topic]
+
+            if ps_name is None or ps_threshold is None:
                 logger.debug(f'Topic {topic} will not use ProxyStore')
             else:
                 logger.debug(
-                    f'Topic {topic} will use ProxyStore backend {name} with a '
-                    f'threshold of {threshold} bytes'
+                    f'Topic {topic} will use ProxyStore backend {ps_name} '
+                    f'with a threshold of {ps_threshold} bytes'
                 )
 
         # Make the queues
