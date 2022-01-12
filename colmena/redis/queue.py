@@ -1,6 +1,7 @@
 """Wrappers for Redis queues."""
 
 import logging
+from collections import defaultdict
 from typing import Optional, Any, Tuple, Dict, Iterable, Union
 
 import redis
@@ -26,8 +27,8 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
                      keep_inputs: bool = True,
                      clean_slate: bool = True,
                      topics: Optional[Iterable[str]] = None,
-                     proxystore_name: Optional[str] = None,
-                     proxystore_threshold: Optional[int] = None)\
+                     proxystore_name: Optional[Union[str, Dict[str, str]]] = None,
+                     proxystore_threshold: Optional[Union[int, Dict[str, int]]] = None)\
         -> Tuple['ClientQueues', 'TaskServerQueues']:
     """Make a pair of queues for a server and client
 
@@ -39,12 +40,15 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
         keep_inputs (bool): Whether to keep the inputs after the method has finished executing
         clean_slate (bool): Whether to flush the queues before launching
         topics ([str]): List of topics used when having the client filter different types of tasks
-        proxystore_name (str): Optional name of ProxyStore instance to use for
-            proxying input/output objects.
-        proxystore_threshold (int): Input/output objects larger than this
-            threshold (in bytes) will be stored in the ProxyStore backend
-            specified by `proxystore_name`. If None, proxies will not be used
-            for passing objects.
+        proxystore_name (str, dict): Name of ProxyStore backend to use for all
+            topics or a mapping of topic to ProxyStore backend for specifying
+            backends for certain tasks. If a mapping is provided but a topic is
+            not in the mapping, ProxyStore will not be used.
+        proxystore_threshold (int, dict): Threshold in bytes for using
+            ProxyStore to transfer objects. Optionally can pass a dict
+            mapping topics to threshold to use different threshold values
+            for different topics. None values in the mapping will exclude
+            ProxyStore use with that topic.
     Returns:
         (ClientQueues, TaskServerQueues): Pair of communicators set to use the correct channels
     """
@@ -220,8 +224,8 @@ class ClientQueues:
                  serialization_method: Union[str, SerializationMethod] = SerializationMethod.JSON,
                  keep_inputs: bool = True,
                  topics: Optional[Iterable] = None,
-                 proxystore_name: Optional[str] = None,
-                 proxystore_threshold: Optional[int] = None):
+                 proxystore_name: Optional[Union[str, Dict[str, str]]] = None,
+                 proxystore_threshold: Optional[Union[int, Dict[str, int]]] = None):
         """
         Args:
             hostname (str): Hostname of the Redis server
@@ -230,40 +234,74 @@ class ClientQueues:
             serialization_method (SerializationMethod): Method used to store the input
             keep_inputs (bool): Whether to keep inputs after method results are stored
             topics ([str]): List of topics used when having the client filter different types of tasks
-            proxystore_name (str): Optional name of ProxyStore instance to use for
-                proxying input/output objects.
-            proxystore_threshold (int): Input/output objects larger than this
-                threshold (in bytes) will be stored in the ProxyStore backend
-                specified by `proxystore_name`. If None, proxies will not be used
-                for passing objects.
+            proxystore_name (str, dict): Name of ProxyStore backend to use for all
+                topics or a mapping of topic to ProxyStore backend for specifying
+                backends for certain tasks. If a mapping is provided but a topic is
+                not in the mapping, ProxyStore will not be used.
+            proxystore_threshold (int, dict): Threshold in bytes for using
+                ProxyStore to transfer objects. Optionally can pass a dict
+                mapping topics to threshold to use different threshold values
+                for different topics. None values in the mapping will exclude
+                ProxyStore use with that topic.
         """
 
         # Store the result communication options
         self.serialization_method = serialization_method
         self.keep_inputs = keep_inputs
-        self.proxystore_name = proxystore_name
-        self.proxystore_threshold = proxystore_threshold
 
-        if self.proxystore_threshold is not None:
-            if self.proxystore_name is None:
-                raise ValueError('Non-zero ProxyStore threshold was specified '
-                                 'but proxystore_name was not provided')
-            if self.serialization_method.lower() != 'pickle':
-                raise ValueError('Serialization method must be pickle to use '
-                                 'the value server')
-            store = ps.store.get_store(proxystore_name)
+        # Create {topic: proxystore_name} mapping
+        if isinstance(proxystore_name, str):
+            self.proxystore_name = defaultdict(lambda: proxystore_name)
+        elif isinstance(proxystore_name, dict):
+            self.proxystore_name = defaultdict(None)
+            for topic, name in proxystore_name:
+                self.proxystore_name[topic] = name
+        elif proxystore_name is None:
+            self.proxystore_name = defaultdict(None)
+        else:
+            raise ValueError(f'Unexpected type {type(proxystore_name)} for proxystore_name')
+
+        # Create {topic: proxystore_threshold} mapping
+        if isinstance(proxystore_threshold, int):
+            self.proxystore_threshold = defaultdict(lambda: proxystore_threshold)
+        elif isinstance(proxystore_threshold, dict):
+            self.proxystore_threshold = defaultdict(None)
+            for topic, name in proxystore_threshold:
+                self.proxystore_threshold[topic] = name
+        elif proxystore_threshold is None:
+            self.proxystore_threshold = defaultdict(None)
+        else:
+            raise ValueError(f'Unexpected type {type(proxystore_threshold)} for proxystore_threshold')
+
+        # Verify that ProxyStore backends exist
+        for name in set(self.proxystore_name.values()):
+            if name is None:
+                continue
+            store = ps.store.get_store(name)
             if store is None:
                 raise ValueError(
                     f'ProxyStore backend with name {proxystore_name} was not '
                     'found. This is likely because the store needs to be '
                     'initialized prior to initializing the Colmena queues.'
                 )
-            logger.debug(
-                f'The ProxyStore backend {store} is registered with Colmena '
-                f'with a threshold of {proxystore_threshold} bytes'
-            )
+
+        if topics is None:
+            _topics = set()
         else:
-            logger.debug('A ProxyStore backend is not registered with Colmena')
+            _topics = set(topics)
+        _topics.add("default")
+
+        # Log the ProxyStore configuration
+        for topic in _topics:
+            name = self.proxystore_name[topic]
+            threshold = self.proxystore_threshold[name]
+            if name is None or threshold is None:
+                logger.debug(f'Topic {topic} will not use ProxyStore')
+            else:
+                logger.debug(
+                    f'Topic {topic} will use ProxyStore backend {name} with a '
+                    f'threshold of {threshold} bytes'
+                )
 
         # Make the queues
         self.outbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
@@ -305,8 +343,8 @@ class ClientQueues:
             keep_inputs=_keep_inputs,
             serialization_method=self.serialization_method,
             task_info=task_info,
-            proxystore_name=self.proxystore_name,
-            proxystore_threshold=self.proxystore_threshold
+            proxystore_name=self.proxystore_name[topic],
+            proxystore_threshold=self.proxystore_threshold[topic]
         )
 
         # Push the serialized value to the task server
