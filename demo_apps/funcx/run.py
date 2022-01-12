@@ -136,7 +136,7 @@ if __name__ == '__main__':
     parser.add_argument('--opt-delay', help="Minimum runtime for the optimizer", type=float, default=0.0)
     parser.add_argument('--runtime', help="Natural logarithm of average runtime for the target function", type=float, default=2)
     parser.add_argument('--runtime-var', help="Natural logarithm of runtime variance for the target function", type=float, default=0.1)
-    parser.add_argument('--proxystore-threshold', help="Threshold (bytes) for using ProxyStore with a Redis backend for moving inputs/results", type=int, default=None)
+    parser.add_argument('--proxystore-threshold', help="Threshold (bytes) for using ProxyStore with a Redis backend for moving inputs/results. This requires the FuncX endpoint and driver being on the same system.", type=int, default=None)
     parser.add_argument('endpoint', help='FuncX endpoing on which to execute tasks', type=str)
     args = parser.parse_args()
 
