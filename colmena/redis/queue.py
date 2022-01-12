@@ -253,11 +253,11 @@ class ClientQueues:
         if isinstance(proxystore_name, str):
             self.proxystore_name = defaultdict(lambda: proxystore_name)
         elif isinstance(proxystore_name, dict):
-            self.proxystore_name = defaultdict(None)
+            self.proxystore_name = defaultdict(lambda: None)
             for topic, name in proxystore_name:
                 self.proxystore_name[topic] = name
         elif proxystore_name is None:
-            self.proxystore_name = defaultdict(None)
+            self.proxystore_name = defaultdict(lambda: None)
         else:
             raise ValueError(f'Unexpected type {type(proxystore_name)} for proxystore_name')
 
@@ -265,11 +265,11 @@ class ClientQueues:
         if isinstance(proxystore_threshold, int):
             self.proxystore_threshold = defaultdict(lambda: proxystore_threshold)
         elif isinstance(proxystore_threshold, dict):
-            self.proxystore_threshold = defaultdict(None)
+            self.proxystore_threshold = defaultdict(lambda: None)
             for topic, name in proxystore_threshold:
                 self.proxystore_threshold[topic] = name
         elif proxystore_threshold is None:
-            self.proxystore_threshold = defaultdict(None)
+            self.proxystore_threshold = defaultdict(lambda: None)
         else:
             raise ValueError(f'Unexpected type {type(proxystore_threshold)} for proxystore_threshold')
 
@@ -294,7 +294,7 @@ class ClientQueues:
         # Log the ProxyStore configuration
         for topic in _topics:
             name = self.proxystore_name[topic]
-            threshold = self.proxystore_threshold[name]
+            threshold = self.proxystore_threshold[topic]
             if name is None or threshold is None:
                 logger.debug(f'Topic {topic} will not use ProxyStore')
             else:
