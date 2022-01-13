@@ -181,12 +181,13 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
         result.success = False
 
     # Add the worker information into the tasks, if available
-    if result.task_info is None:
-        result.task_info = {}
+    worker_info = {}
+    # TODO (wardlt): Move this information into a separate, parsl-specific wrapper
     for tag in ['PARSL_WORKER_RANK', 'PARSL_WORKER_POOL_ID']:
         if tag in os.environ:
-            result.task_info[tag] = os.environ[tag]
-    result.task_info['executor'] = platform.node()
+            worker_info[tag] = os.environ[tag]
+    worker_info['hostname'] = platform.node()
+    result.worker_info = worker_info
 
     # Re-pack the results
     result.time_serialize_results = result.serialize()
