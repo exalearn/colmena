@@ -146,7 +146,7 @@ class Result(BaseModel):
     def kwargs(self) -> Dict[str, Any]:
         return self.inputs[1]
 
-    def json(self, **kwargs: Dict[str, Any]) -> str:
+    def json(self, *args, **kwargs: Dict[str, Any]) -> str:
         """Override json encoder to use a custom encoder with proxy support"""
         if 'exclude' in kwargs:
             # Make a shallow copy of the user passed excludes
@@ -161,7 +161,7 @@ class Result(BaseModel):
             user_exclude = set()
             kwargs['exclude'] = {'inputs', 'value'}
 
-        # Use pydantic's encoding for everything but inputs/values
+        # Use pydantic's encoding for everything except `inputs` and `values`
         data = super().dict(**kwargs)
 
         # Add inputs/values back to data unless the user excluded them
@@ -178,6 +178,10 @@ class Result(BaseModel):
 
         # Jsonify with custom proxy encoder
         return json.dumps(data, default=proxy_json_encoder)
+        
+        #assert 'encoder' not in kwargs, "Colmena already sets a default encoder."
+        #kwargs['encoder'] = proxy_json_encoder
+        #return super(Result, self).json(*args, **kwargs)
 
     def mark_result_received(self):
         """Mark that a completed computation was received by a client"""

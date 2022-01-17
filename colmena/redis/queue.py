@@ -338,7 +338,10 @@ class ClientQueues:
 
         # Gather ProxyStore info if we are using it with this topic
         proxystore_kwargs = {}
-        if self.proxystore_name[topic] is not None:
+        if (
+            self.proxystore_name[topic] is not None and
+            self.proxystore_threshold[topic] is not None
+        ):
             store = ps.store.get_store(self.proxystore_name[topic])
             # proxystore_kwargs contains all the information we would need to
             # reconnect to the ProxyStore backend on any worker
