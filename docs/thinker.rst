@@ -47,8 +47,8 @@ Configuring General Agents
 --------------------------
 
 Agent threads in Colmena take a few different configuration options.
-For example, the ``critical`` keyword argument means that the ``self.done`` attribute will not
-be flagged when this thread executes.
+For example, the ``startup`` keyword argument means that the ``self.done`` event will not
+be set when this agent completes.
 
 See :func:`colmena.thinker.agent` for more details.
 

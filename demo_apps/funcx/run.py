@@ -98,6 +98,12 @@ class Thinker(BaseThinker):
             result = self.queues.get_result()
             with open(self.output_path, 'a') as fp:
                 print(result.json(), file=fp)
+
+            # Print the error and halt if one occurred
+            if not result.success:
+                raise ValueError(f'Task failed:\n{result.failure_info.traceback}')
+
+            # Update the dataset
             train_X.append(result.args)
             train_y.append(result.value)
 

@@ -8,7 +8,7 @@ from time import perf_counter
 from traceback import TracebackException
 from typing import Any, Tuple, Dict, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Extra
 
 import proxystore as ps
 
@@ -73,6 +73,12 @@ class FailureInformation(BaseModel):
         return cls(exception=repr(exc), traceback="".join(tb.format()))
 
 
+class WorkerInformation(BaseModel, extra=Extra.allow):
+    """Information about the worker that executed this task"""
+
+    hostname: Optional[str] = Field(None, description='Hostname of the worker who executed this task')
+
+
 class Result(BaseModel):
     """A class which describes the inputs and results of the calculations evaluated by the MethodServer
 
@@ -95,6 +101,7 @@ class Result(BaseModel):
     task_info: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Task tracking information to be transmitted "
                                                                                   "along with inputs and results. User provided")
     failure_info: Optional[FailureInformation] = Field(None, description="Messages about task failure. Provided by Task Server")
+    worker_info: Optional[WorkerInformation] = Field(None, description="Information about the worker which executed a task. Provided by Task Server")
 
     # Performance tracking
     time_created: float = Field(None, description="Time this value object was created")

@@ -303,6 +303,7 @@ class ClientQueues:
                 )
 
         # Make the queues
+        self.topics = topics
         self.outbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
         self.inbound = RedisQueue(hostname, port, 'results' if name is None else f'{name}_results', topics=topics)
 
@@ -382,7 +383,11 @@ class ClientQueues:
 
     def send_kill_signal(self):
         """Send the kill signal to the task server"""
-        self.outbound.put("null")
+        if self.topics is not None:
+            for topic in self.topics:
+                self.outbound.put("null", topic=topic)
+        else:
+            self.outbound.put("null")
 
 
 class TaskServerQueues:

@@ -1,5 +1,5 @@
 from colmena.models import SerializationMethod
-from colmena.redis.queue import RedisQueue, ClientQueues, TaskServerQueues, make_queue_pairs
+from colmena.redis.queue import RedisQueue, ClientQueues, TaskServerQueues, make_queue_pairs, KillSignalException
 import pickle as pkl
 import pytest
 
@@ -209,3 +209,17 @@ def test_task_info():
     server.send_result(result)
     result = client.get_result()
     assert result.task_info == {'id': 'test'}
+
+
+def test_kill_signal():
+    # Test without extra topics
+    client, server = make_queue_pairs('localhost', keep_inputs=False)
+    client.send_kill_signal()
+    with pytest.raises(KillSignalException):
+        server.get_task()
+
+    # Test with topics
+    client, server = make_queue_pairs('localhost', keep_inputs=False, topics=['simulation'])
+    client.send_kill_signal()
+    with pytest.raises(KillSignalException):
+        server.get_task()
