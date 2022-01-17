@@ -336,6 +336,21 @@ class ClientQueues:
         if keep_inputs is not None:
             _keep_inputs = keep_inputs
 
+        # Gather ProxyStore info if we are using it with this topic
+        proxystore_kwargs = {}
+        if self.proxystore_name[topic] is not None:
+            store = ps.store.get_store(self.proxystore_name[topic])
+            # proxystore_kwargs contains all the information we would need to
+            # reconnect to the ProxyStore backend on any worker
+            proxystore_kwargs.update({
+                'proxystore_name': self.proxystore_name[topic],
+                'proxystore_threshold': self.proxystore_threshold[topic],
+                # Pydantic prefers to not have types as attributes so we
+                # get the string corresponding to the type of the store we use
+                'proxystore_type': ps.store.STORES.get_str_by_type(type(store)),
+                'proxystore_kwargs': store.kwargs
+            })
+
         # Create a new Result object
         result = Result(
             (input_args, input_kwargs),
@@ -343,8 +358,7 @@ class ClientQueues:
             keep_inputs=_keep_inputs,
             serialization_method=self.serialization_method,
             task_info=task_info,
-            proxystore_name=self.proxystore_name[topic],
-            proxystore_threshold=self.proxystore_threshold[topic]
+            **proxystore_kwargs
         )
 
         # Push the serialized value to the task server

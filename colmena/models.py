@@ -123,6 +123,8 @@ class Result(BaseModel):
     keep_inputs: bool = Field(True, description="Whether to keep the inputs with the result object or delete "
                                                 "them after the method has completed")
     proxystore_name: Optional[str] = Field(None, description="Name of ProxyStore backend yo use for transferring large objects")
+    proxystore_type: Optional[str] = Field(None, description="Type of ProxyStore backend being used")
+    proxystore_kwargs: Optional[Dict] = Field(None, description="Kwargs to reinitialize ProxyStore backend")
     proxystore_threshold: Optional[int] = Field(None, description="Proxy all input/output objects larger than this threshold in bytes")
 
     def __init__(self, inputs: Tuple[Tuple[Any], Dict[str, Any]], **kwargs):
@@ -146,11 +148,35 @@ class Result(BaseModel):
 
     def json(self, **kwargs: Dict[str, Any]) -> str:
         """Override json encoder to use a custom encoder with proxy support"""
-        data = {
-            'inputs': self.inputs,
-            'value': self.value,
-            **super().dict(exclude={'inputs', 'value'})
-        }
+        if 'exclude' in kwargs:
+            # Make a shallow copy of the user passed excludes
+            user_exclude = kwargs['exclude'].copy()
+            if isinstance(kwargs['exclude'], dict):
+                kwargs['exclude'].update({'inputs': True, 'value': True})
+            if isinstance(kwargs['exclude'], set):
+                kwargs['exclude'].update({'inputs', 'value'})
+            else:
+                raise ValueError(f'Unsupported type {type(kwargs["exclude"])} for argument "exclude". Expected set or dict')
+        else:
+            user_exclude = set()
+            kwargs['exclude'] = {'inputs', 'value'}
+
+        # Use pydantic's encoding for everything but inputs/values
+        data = super().dict(**kwargs)
+
+        # Add inputs/values back to data unless the user excluded them
+        if isinstance(user_exclude, set):
+            if 'inputs' not in user_exclude:
+                data['inputs'] = self.inputs
+            if 'value' not in user_exclude:
+                data['value'] = self.value
+        elif isinstance(user_exclude, dict):
+            if not user_exclude['inputs']:
+                data['inputs'] = self.inputs
+            if not user_exclude['value']:
+                data['value'] = self.value
+
+        # Jsonify with custom proxy encoder
         return json.dumps(data, default=proxy_json_encoder)
 
     def mark_result_received(self):
@@ -216,9 +242,14 @@ class Result(BaseModel):
                 # Proxy the value. We use the id of the object as the key
                 # so multiple copies of the object are not added to ProxyStore,
                 # but the value in ProxyStore will still be updated.
-                value_proxy = ps.store.get_store(self.proxystore_name).proxy(
-                    value, key=str(id(value)), evict=evict,
-                )
+                store = ps.store.get_store(self.proxystore_name)
+                if store is None:
+                    store = ps.store.init_store(
+                        self.proxystore_type,
+                        name=self.proxystore_name,
+                        **self.proxystore_kwargs
+                    )
+                value_proxy = store.proxy(value, key=str(id(value)), evict=evict)
                 logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
                 # Serialize the proxy with Colmena's utilities. This is
                 # efficient since the proxy is just a reference and metadata
