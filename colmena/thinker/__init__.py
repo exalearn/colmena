@@ -218,7 +218,7 @@ def _launch_agent(func: Callable, thinker: 'BaseThinker'):
     try:
         func(thinker)
     except BaseException as exc:
-        thinker.logger.warning(f'Raised an exception. {exc}')
+        thinker.logger.error(f'Raised an exception. {exc}')
         was_exc = True
         raise
     finally:
@@ -385,6 +385,6 @@ class BaseThinker(Thread):
                     self.logger.info('Thread completed without problems')
                 else:
                     tb = TracebackException.from_exception(exc)
-                    self.logger.warning(f'Thread failed: {exc}.\nTraceback: {"".join(tb.format())}')
+                    self.logger.error(f'Thread failed: {exc}.\nTraceback: {"".join(tb.format())}')
 
         self.logger.info(f"{self.__class__.__name__} completed")

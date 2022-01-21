@@ -16,6 +16,7 @@ import logging
 import json
 import sys
 import os
+import proxystore as ps
 
 
 # Hard code the function to be optimized
@@ -141,14 +142,9 @@ if __name__ == '__main__':
     parser.add_argument('--opt-delay', help="Minimum runtime for the optimizer", type=float, default=0.0)
     parser.add_argument('--runtime', help="Natural logarithm of average runtime for the target function", type=float, default=2)
     parser.add_argument('--runtime-var', help="Natural logarithm of runtime variance for the target function", type=float, default=0.1)
+    parser.add_argument('--proxystore-threshold', help="Threshold (bytes) for using ProxyStore with a Redis backend for moving inputs/results. This requires the FuncX endpoint and driver being on the same system.", type=int, default=None)
     parser.add_argument('endpoint', help='FuncX endpoing on which to execute tasks', type=str)
     args = parser.parse_args()
-
-    # Connect to the redis server
-    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport, serialization_method='json')
-
-    # Log in to FuncX
-    fx_client = FuncXClient()
 
     # Make the output directory
     out_dir = os.path.join('runs',
@@ -165,6 +161,29 @@ if __name__ == '__main__':
                         level=logging.INFO,
                         handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
                                   logging.StreamHandler(sys.stdout)])
+
+    if args.proxystore_threshold is not None:
+        ps.store.init_store(
+            ps.store.STORES.REDIS,
+            name='default',
+            hostname=args.redishost,
+            port=args.redisport
+        )
+        serialization_method = 'pickle'
+    else:
+        serialization_method = 'json'
+
+    # Connect to the redis server
+    client_queues, server_queues = make_queue_pairs(
+        args.redishost,
+        args.redisport,
+        serialization_method=serialization_method,
+        proxystore_name='default',
+        proxystore_threshold=args.proxystore_threshold
+    )
+
+    # Log in to FuncX
+    fx_client = FuncXClient()
 
     # Create the task server and task generator
     my_ackley = partial(ackley, mean_rt=args.runtime, std_rt=args.runtime_var)

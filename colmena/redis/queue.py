@@ -1,6 +1,7 @@
 """Wrappers for Redis queues."""
 
 import logging
+from collections import defaultdict
 from typing import Optional, Any, Tuple, Dict, Iterable, Union
 
 import redis
@@ -26,9 +27,8 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
                      keep_inputs: bool = True,
                      clean_slate: bool = True,
                      topics: Optional[Iterable[str]] = None,
-                     value_server_threshold: Optional[int] = None,
-                     value_server_hostname: Optional[str] = None,
-                     value_server_port: Optional[int] = None)\
+                     proxystore_name: Optional[Union[str, Dict[str, str]]] = None,
+                     proxystore_threshold: Optional[Union[int, Dict[str, int]]] = None)\
         -> Tuple['ClientQueues', 'TaskServerQueues']:
     """Make a pair of queues for a server and client
 
@@ -40,20 +40,21 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
         keep_inputs (bool): Whether to keep the inputs after the method has finished executing
         clean_slate (bool): Whether to flush the queues before launching
         topics ([str]): List of topics used when having the client filter different types of tasks
-        value_server_threshold (int): Input/output objects larger than this threshold
-            (in bytes) will be stored in the value server. If None, value server
-            is ignored
-        value_server_hostname (str): Optional redis server hostname for value server.
-            If the value server is being used but this option is not provided,
-            the redis server for the task queues will be used.
-        value_server_port (int): See `value_server_hostname`
+        proxystore_name (str, dict): Name of ProxyStore backend to use for all
+            topics or a mapping of topic to ProxyStore backend for specifying
+            backends for certain tasks. If a mapping is provided but a topic is
+            not in the mapping, ProxyStore will not be used.
+        proxystore_threshold (int, dict): Threshold in bytes for using
+            ProxyStore to transfer objects. Optionally can pass a dict
+            mapping topics to threshold to use different threshold values
+            for different topics. None values in the mapping will exclude
+            ProxyStore use with that topic.
     Returns:
         (ClientQueues, TaskServerQueues): Pair of communicators set to use the correct channels
     """
 
     return (ClientQueues(hostname, port, name, serialization_method, keep_inputs,
-                         topics, value_server_threshold, value_server_hostname,
-                         value_server_port),
+                         topics, proxystore_name, proxystore_threshold),
             TaskServerQueues(hostname, port, name, topics=topics, clean_slate=clean_slate))
 
 
@@ -223,9 +224,8 @@ class ClientQueues:
                  serialization_method: Union[str, SerializationMethod] = SerializationMethod.JSON,
                  keep_inputs: bool = True,
                  topics: Optional[Iterable] = None,
-                 value_server_threshold: Optional[int] = None,
-                 value_server_hostname: Optional[str] = None,
-                 value_server_port: Optional[int] = None):
+                 proxystore_name: Optional[Union[str, Dict[str, str]]] = None,
+                 proxystore_threshold: Optional[Union[int, Dict[str, int]]] = None):
         """
         Args:
             hostname (str): Hostname of the Redis server
@@ -234,39 +234,73 @@ class ClientQueues:
             serialization_method (SerializationMethod): Method used to store the input
             keep_inputs (bool): Whether to keep inputs after method results are stored
             topics ([str]): List of topics used when having the client filter different types of tasks
-            value_server_threshold (int): Threshold (bytes) to store objects in
-                value server. If None, the value server is not used.
-            value_server_hostname (str): Optional redis server hostname for the
-                value server. If not provided and the value server is used,
-                defaults to `hostname`.
-            value_server_port (str): Optional redis server port for the
-                value server. If not provided and the value server is used,
-                defaults to `port`.
+            proxystore_name (str, dict): Name of ProxyStore backend to use for all
+                topics or a mapping of topic to ProxyStore backend for specifying
+                backends for certain tasks. If a mapping is provided but a topic is
+                not in the mapping, ProxyStore will not be used.
+            proxystore_threshold (int, dict): Threshold in bytes for using
+                ProxyStore to transfer objects. Optionally can pass a dict
+                mapping topics to threshold to use different threshold values
+                for different topics. None values in the mapping will exclude
+                ProxyStore use with that topic.
         """
 
         # Store the result communication options
         self.serialization_method = serialization_method
         self.keep_inputs = keep_inputs
-        self.value_server_threshold = value_server_threshold
 
-        if self.value_server_threshold is not None:
-            if self.serialization_method.lower() != 'pickle':
-                raise ValueError('Serialization method must be pickle to use the value server')
-            if value_server_hostname is None:
-                value_server_hostname = hostname
-            if value_server_port is None:
-                value_server_port = port
-            ps.store.init_store(
-                ps.store.STORES.REDIS,
-                name='redis',
-                hostname=value_server_hostname,
-                port=value_server_port
-            )
-            logger.debug('Initialized value server using Redis server at '
-                         f'{value_server_hostname}:{value_server_port}')
+        # Create {topic: proxystore_name} mapping
+        if isinstance(proxystore_name, str):
+            self.proxystore_name = defaultdict(lambda: proxystore_name)
+        elif isinstance(proxystore_name, dict):
+            self.proxystore_name = defaultdict(lambda: None)
+            self.proxystore_name.update(proxystore_name)
+        elif proxystore_name is None:
+            self.proxystore_name = defaultdict(lambda: None)
+        else:
+            raise ValueError(f'Unexpected type {type(proxystore_name)} for proxystore_name')
 
-        self.value_server_hostname = value_server_hostname
-        self.value_server_port = value_server_port
+        # Create {topic: proxystore_threshold} mapping
+        if isinstance(proxystore_threshold, int):
+            self.proxystore_threshold = defaultdict(lambda: proxystore_threshold)
+        elif isinstance(proxystore_threshold, dict):
+            self.proxystore_threshold = defaultdict(lambda: None)
+            self.proxystore_threshold.update(proxystore_threshold)
+        elif proxystore_threshold is None:
+            self.proxystore_threshold = defaultdict(lambda: None)
+        else:
+            raise ValueError(f'Unexpected type {type(proxystore_threshold)} for proxystore_threshold')
+
+        # Verify that ProxyStore backends exist
+        for ps_name in set(self.proxystore_name.values()):
+            if ps_name is None:
+                continue
+            store = ps.store.get_store(ps_name)
+            if store is None:
+                raise ValueError(
+                    f'ProxyStore backend with name "{ps_name}" was not '
+                    'found. This is likely because the store needs to be '
+                    'initialized prior to initializing the Colmena queues.'
+                )
+
+        if topics is None:
+            _topics = set()
+        else:
+            _topics = set(topics)
+        _topics.add("default")
+
+        # Log the ProxyStore configuration
+        for topic in _topics:
+            ps_name = self.proxystore_name[topic]
+            ps_threshold = self.proxystore_threshold[topic]
+
+            if ps_name is None or ps_threshold is None:
+                logger.debug(f'Topic {topic} will not use ProxyStore')
+            else:
+                logger.debug(
+                    f'Topic {topic} will use ProxyStore backend "{ps_name}" '
+                    f'with a threshold of {ps_threshold} bytes'
+                )
 
         # Make the queues
         self.topics = topics
@@ -302,6 +336,24 @@ class ClientQueues:
         if keep_inputs is not None:
             _keep_inputs = keep_inputs
 
+        # Gather ProxyStore info if we are using it with this topic
+        proxystore_kwargs = {}
+        if (
+            self.proxystore_name[topic] is not None and
+            self.proxystore_threshold[topic] is not None
+        ):
+            store = ps.store.get_store(self.proxystore_name[topic])
+            # proxystore_kwargs contains all the information we would need to
+            # reconnect to the ProxyStore backend on any worker
+            proxystore_kwargs.update({
+                'proxystore_name': self.proxystore_name[topic],
+                'proxystore_threshold': self.proxystore_threshold[topic],
+                # Pydantic prefers to not have types as attributes so we
+                # get the string corresponding to the type of the store we use
+                'proxystore_type': ps.store.STORES.get_str_by_type(type(store)),
+                'proxystore_kwargs': store.kwargs
+            })
+
         # Create a new Result object
         result = Result(
             (input_args, input_kwargs),
@@ -309,9 +361,7 @@ class ClientQueues:
             keep_inputs=_keep_inputs,
             serialization_method=self.serialization_method,
             task_info=task_info,
-            value_server_hostname=self.value_server_hostname,
-            value_server_port=self.value_server_port,
-            value_server_threshold=self.value_server_threshold
+            **proxystore_kwargs
         )
 
         # Push the serialized value to the task server
