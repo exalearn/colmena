@@ -3,7 +3,7 @@ from typing import Callable
 from time import sleep
 from uuid import uuid4
 
-from funcx_endpoint.endpoint.interchange import ManagerLost
+from funcx_endpoint.executors.high_throughput.interchange import ManagerLost
 from pytest_mock import MockFixture
 from pytest import fixture, mark
 
