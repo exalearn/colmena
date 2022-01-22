@@ -11,7 +11,6 @@ from concurrent.futures import Future
 from funcx import FuncXClient
 from funcx.sdk.executor import FuncXExecutor
 from funcx_endpoint.executors.high_throughput.interchange import ManagerLost
-from funcx_endpoint.endpoint.interchange import ManagerLost as OldManagerLost
 
 from colmena.redis.queue import TaskServerQueues
 from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
@@ -81,7 +80,7 @@ class FuncXTaskServer(FutureBasedTaskServer):
         # Check if the failure was due to a ManagerLost
         #  TODO (wardlt): Remove when we have retry support in FuncX
         exc = future.exception()
-        if isinstance(exc, (ManagerLost, OldManagerLost)):
+        if isinstance(exc, ManagerLost):
             logger.info('Caught an task that failed due to a lost manager. Resubmitting')
             self.process_queue(topic, result)
         else:
