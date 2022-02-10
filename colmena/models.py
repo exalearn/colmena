@@ -249,7 +249,7 @@ class Result(BaseModel):
                         name=self.proxystore_name,
                         **self.proxystore_kwargs
                     )
-                value_proxy = store.proxy(value, key=str(id(value)), evict=evict)
+                value_proxy = store.proxy(value, evict=evict)
                 logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
                 # Serialize the proxy with Colmena's utilities. This is
                 # efficient since the proxy is just a reference and metadata
