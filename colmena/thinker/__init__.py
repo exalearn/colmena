@@ -255,7 +255,7 @@ class BaseThinker(Thread):
     Each method should take no inputs and produce no output, and could be thought of as
     an "operation" or "agent" that will run as a thread.
 
-    Each agent communicates with others via `queues <https://docs.python.org/3/library/queue.html>`_
+    Each agent communicates with others via `queue <https://docs.python.org/3/library/queue.html>`_
     or other `threading objects <https://docs.python.org/3/library/threading.html#>`_ and
     the Colmena task server via the :class:`ClientQueues`.
     The only communication method available by default is a class attribute named ``done``

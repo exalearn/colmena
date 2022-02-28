@@ -1,4 +1,4 @@
-"""Wrappers for Redis queues."""
+"""Wrappers for Redis queue."""
 
 import logging
 from collections import defaultdict
@@ -10,6 +10,7 @@ import proxystore as ps
 
 from colmena.exceptions import TimeoutException, KillSignalException
 from colmena.models import Result, SerializationMethod
+from colmena.queue.base import BaseQueue
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
                      proxystore_name: Optional[Union[str, Dict[str, str]]] = None,
                      proxystore_threshold: Optional[Union[int, Dict[str, int]]] = None)\
         -> Tuple['ClientQueues', 'TaskServerQueues']:
-    """Make a pair of queues for a server and client
+    """Make a pair of queue for a server and client
 
     Args:
         hostname (str): Hostname of the Redis server
@@ -38,7 +39,7 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
         name (str): Name of the MethodServer
         serialization_method (SerializationMethod): serialization type for inputs/outputs
         keep_inputs (bool): Whether to keep the inputs after the method has finished executing
-        clean_slate (bool): Whether to flush the queues before launching
+        clean_slate (bool): Whether to flush the queue before launching
         topics ([str]): List of topics used when having the client filter different types of tasks
         proxystore_name (str, dict): Name of ProxyStore backend to use for all
             topics or a mapping of topic to ProxyStore backend for specifying
@@ -58,7 +59,7 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
             TaskServerQueues(hostname, port, name, topics=topics, clean_slate=clean_slate))
 
 
-class RedisQueue:
+class RedisQueue(BaseQueue):
     """A basic redis queue for communications used by the task server
 
     A queue is defined by its prefix and a "topic" designation.
@@ -67,7 +68,7 @@ class RedisQueue:
     of messages without needing to manage several "queue" objects.
     By default, the :meth:`get` methods for the queue
     listen on all topics and the :meth:`put` method pushes to the default topic.
-    You can put messages into certain "topical" queues and wait for responses
+    You can put messages into certain "topical" queue and wait for responses
     that are from a single topic.
 
     The queue only connects when the `connect` method is called to avoid
@@ -280,7 +281,7 @@ class ClientQueues:
                 raise ValueError(
                     f'ProxyStore backend with name "{ps_name}" was not '
                     'found. This is likely because the store needs to be '
-                    'initialized prior to initializing the Colmena queues.'
+                    'initialized prior to initializing the Colmena queue.'
                 )
 
         if topics is None:
@@ -302,7 +303,7 @@ class ClientQueues:
                     f'with a threshold of {ps_threshold} bytes'
                 )
 
-        # Make the queues
+        # Make the queue
         self.topics = topics
         self.outbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
         self.inbound = RedisQueue(hostname, port, 'results' if name is None else f'{name}_results', topics=topics)
@@ -420,11 +421,11 @@ class TaskServerQueues:
             hostname (str): Hostname of the Redis server
             port (int): Port on which to access Redis
             name (str): Name of the MethodServer
-            clean_slate (bool): Whether to flush the queues before launching
+            clean_slate (bool): Whether to flush the queue before launching
             topics ([str]): List of topics used when having the client filter different types of tasks
         """
 
-        # Make the queues
+        # Make the queue
         self.inbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
         self.outbound = RedisQueue(hostname, port, 'results' if name is None else f'{name}_results', topics=topics)
 

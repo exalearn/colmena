@@ -31,13 +31,13 @@ class ParslTaskServer(FutureBasedTaskServer):
 
     .. code-block:: python
 
-        ParslTaskServer([(f, {'executors': ['a']})], queues, config)
+        ParslTaskServer([(f, {'executors': ['a']})], queue, config)
 
     and also using a default executor
 
     .. code-block:: python
 
-        ParslTaskServer([f], queues, config, default_executors=['a'])
+        ParslTaskServer([f], queue, config, default_executors=['a'])
 
     Further configuration options for each method can be defined
     in the list of methods.
