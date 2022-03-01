@@ -1,4 +1,7 @@
 """Perform GPR Active Learning where simulations are sent in batches"""
+from pathlib import Path
+
+from colmena.models import ExecutableTask
 from colmena.thinker import BaseThinker, agent
 from colmena.task_server import ParslTaskServer
 from colmena.redis.queue import ClientQueues, make_queue_pairs
@@ -19,21 +22,18 @@ import os
 
 
 # Hard code the function to be optimized
-def call_simulation(x: float, n_ranks: int = 1) -> float:
-    """Run the simulation code"""
-    from tempfile import TemporaryDirectory
-    from subprocess import call
+class Simulation(ExecutableTask):
 
-    # Run each simulation in a different directory
-    with TemporaryDirectory() as td:
-        out_file = f'{td}/run.stdout'
+    def __init__(self, executable: Path, n_ranks: int):
+        executable = ['mpirun', '-n', str(n_ranks), str(executable.absolute())]
+        super().__init__(executable=executable)
 
-        # Run the executable with a subprocess call
-        with open(out_file, 'w') as fo:
-            call(['mpirun', '-n', str(n_ranks), './simulate', str(x)], stdout=fo)
+    def preprocess(self, run_dir, args, kwargs):
+        return [str(args[0])], None
 
-        with open(out_file) as fo:
-            return float(fo.read().strip())
+    def postprocess(self, run_dir: Path):
+        with open(run_dir / 'colmena.stdout') as fp:
+            return float(fp.read().strip())
 
 
 class Thinker(BaseThinker):
@@ -152,8 +152,7 @@ if __name__ == '__main__':
     config.run_dir = os.path.join(out_dir, 'run-info')
 
     # Create the task server and task generator
-    my_sim = partial(call_simulation, n_ranks=1)
-    update_wrapper(my_sim, call_simulation)
+    my_sim = Simulation(Path('./simulate'), n_ranks=1)
     doer = ParslTaskServer([my_sim], server_queues, config, default_executors=['local_threads'])
     thinker = Thinker(client_queues, out_dir, n_guesses=args.num_guesses, batch_size=args.num_parallel)
     logging.info('Created the task server and task generator')

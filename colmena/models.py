@@ -1,12 +1,18 @@
+"""Models used to describe requests, results, and complex task descriptions."""
+
 import json
 import logging
 import pickle as pkl
 import sys
 from datetime import datetime
 from enum import Enum
+from io import StringIO
+from pathlib import Path
+from subprocess import call
+from tempfile import TemporaryDirectory
 from time import perf_counter
 from traceback import TracebackException
-from typing import Any, Tuple, Dict, Optional, Union
+from typing import Any, Tuple, Dict, Optional, Union, Callable, List
 
 from pydantic import BaseModel, Field, Extra
 
@@ -313,3 +319,77 @@ class Result(BaseModel):
             self.inputs = _inputs
             self.value = _value
             raise e
+
+
+class ExecutableTask(BaseModel):
+    """Model for a Colmena task that involves running an executable using a system call.
+
+    Such tasks often include a "pre-processing" step in Python that prepares inputs for the executable
+    and then a "post-processing" step which stores the outputs (either produced from stdout or written to files)
+    as Python objects.
+    Separating the implementation of the task into these two functions and a system call simplifies platform independence
+    as launching executables can be very different across HPC environments.
+    """
+
+    executable: List[str] = Field(..., help='Executable to launch')
+
+    @property
+    def __name__(self):
+        """Use the lower case name of the class as a starting point"""
+        return self.__repr_name__().lower()
+
+    def preprocess(self, run_dir: Path, args: Tuple[Any], kwargs: Dict[str, Any]) -> Tuple[List[str], Optional[str]]:
+        """Perform preprocessing steps necessary to prepare for executable to be started.
+
+        These may include writing files to the local directory, creating CLI arguments,
+        or standard input
+
+        Args:
+            run_dir: Path to a directory in which to write files used by an executable
+            args: Arguments to the task, control how the run is set up
+            kwargs: Keyword arguments to
+        Returns:
+            - Options to be passed as command line arguments to the executable
+            - Values to pass to the standard in of the executable
+        """
+        raise NotImplementedError()
+
+    def execute(self, run_dir: Path, arguments: List[str], stdin: Optional[str]) -> float:
+        """Run an executable
+
+        Args:
+            run_dir: Directory in which to execute the code
+            arguments: Command line arguments
+            stdin: Content to pass in via standard in
+        Returns:
+            Runtime (unit: s)
+        """
+
+        start_time = perf_counter()
+        with open(run_dir / 'colmena.stdout', 'w') as fo, open(run_dir / 'colmena.stderr', 'w') as fe:
+            if stdin is not None:
+                stdin = StringIO(stdin)
+            call(self.executable + arguments, stdout=fo, stderr=fe, stdin=stdin, cwd=run_dir)
+        return perf_counter() - start_time
+
+    def postprocess(self, run_dir: Path) -> Any:
+        """Extract results after execution completes
+
+        Args:
+            run_dir: Run directory for the executable. Stdout will be in `run_dir/colmena.stdout` and stderr in `run_dir/colmena.stderr`
+        """
+        raise NotImplementedError()
+
+    def __call__(self, *args, **kwargs):
+        # Launch everything inside a temporary directory
+        with TemporaryDirectory() as run_dir:
+            run_dir = Path(run_dir)
+
+            # Prepare the run directory
+            cli_args, stdin = self.preprocess(run_dir, args, kwargs)
+
+            # Execute everything
+            self.execute(run_dir, cli_args, stdin)
+
+            # Return the post-processed results
+            return self.postprocess(run_dir)
