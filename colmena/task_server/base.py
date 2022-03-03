@@ -100,7 +100,7 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
     Note that implementations are still responsible for adding the :meth:`run_and_record_timing` decorator.
     """
 
-    def _perform_callback(self, future: Future, result: Result, topic: str):
+    def perform_callback(self, future: Future, result: Result, topic: str):
         """Send a completed result back to queue. Used as a callback for complete tasks
 
         Args:
@@ -112,7 +112,7 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
         task_exc = future.exception()
 
         # If it was, send back a modified copy of the input structure
-        if future.exception() is not None:
+        if task_exc is not None:
             # Mark it as unsuccessful and capture the exception information
             result.success = False
             result.failure_info = FailureInformation.from_exception(task_exc)
@@ -124,22 +124,24 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
         self.queues.send_result(result, topic)
 
     @abstractmethod
-    def _submit(self, task: Result) -> Future:
+    def _submit(self, task: Result, topic: str) -> Optional[Future]:
         """Submit the task to the workflow engine
 
         Args:
             task: Task description
+            topic: Topic for the task
         Returns:
-            Future for the result object
+            Future for the result object, if any that needs a "return to user" callback is created
         """
         pass
 
     def process_queue(self, topic: str, task: Result):
         # Launch the task
-        future = self._submit(task)
+        future = self._submit(task, topic)
 
         # Create the callback
-        future.add_done_callback(lambda x: self._perform_callback(x, task, topic))
+        if future is not None:
+            future.add_done_callback(lambda x: self.perform_callback(x, task, topic))
 
 
 def run_and_record_timing(func: Callable, result: Result) -> Result:

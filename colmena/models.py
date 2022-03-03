@@ -1,5 +1,3 @@
-"""Models used to describe requests, results, and complex task descriptions."""
-
 import json
 import logging
 import pickle as pkl
@@ -12,7 +10,7 @@ from subprocess import call
 from tempfile import TemporaryDirectory
 from time import perf_counter
 from traceback import TracebackException
-from typing import Any, Tuple, Dict, Optional, Union, Callable, List
+from typing import Any, Tuple, Dict, Optional, Union, List
 
 from pydantic import BaseModel, Field, Extra
 
@@ -122,6 +120,8 @@ class Result(BaseModel):
     time_serialize_results: float = Field(None, description="Time required to serialize results on worker")
     time_deserialize_results: float = Field(None, description="Time required to deserialize results on client")
     time_async_resolve_proxies: float = Field(None, description="Time required to scan function inputs and start async resolves of proxies")
+
+    additional_timing: dict = Field(default_factory=dict, description="Timings recorded by a TaskServer that are not defined by above")
 
     # Serialization options
     serialization_method: SerializationMethod = Field(SerializationMethod.JSON,
@@ -322,13 +322,18 @@ class Result(BaseModel):
 
 
 class ExecutableTask(BaseModel):
-    """Model for a Colmena task that involves running an executable using a system call.
+    """Base class for a Colmena task that involves running an executable using a system call.
 
     Such tasks often include a "pre-processing" step in Python that prepares inputs for the executable
     and then a "post-processing" step which stores the outputs (either produced from stdout or written to files)
     as Python objects.
     Separating the implementation of the task into these two functions and a system call simplifies platform independence
     as launching executables can be very different across HPC environments.
+
+    Implement a new ExecutableTask by defining the executable, a preprocessing method (:meth:`preprocess`),
+     and a postprocessing
+
+    Use the ExecutableTask by instantiating one of your implementations
     """
 
     executable: List[str] = Field(..., help='Executable to launch')
@@ -342,7 +347,7 @@ class ExecutableTask(BaseModel):
         """Perform preprocessing steps necessary to prepare for executable to be started.
 
         These may include writing files to the local directory, creating CLI arguments,
-        or standard input
+        or standard input to be passed to the executable
 
         Args:
             run_dir: Path to a directory in which to write files used by an executable

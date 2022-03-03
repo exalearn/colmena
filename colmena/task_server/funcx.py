@@ -66,7 +66,7 @@ class FuncXTaskServer(FutureBasedTaskServer):
         # Create the executor and queue of tasks to be submitted back to the user
         self.fx_exec = FuncXExecutor(self.fx_client)
 
-    def _submit(self, task: Result) -> Future:
+    def _submit(self, task: Result, _: str) -> Future:
         # Lookup the appropriate function ID and endpoint
         func, endp_id = self.registered_funcs[task.method]
 
