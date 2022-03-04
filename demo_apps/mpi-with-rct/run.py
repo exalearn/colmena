@@ -8,9 +8,7 @@ from colmena.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
-from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
-from parsl.providers import LocalProvider
-from functools import partial, update_wrapper
+from parsl.executors import ThreadPoolExecutor
 from parsl.config import Config
 from datetime import datetime
 import numpy as np

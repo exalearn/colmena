@@ -1,5 +1,6 @@
 """Parsl task server and related utilities"""
 import os
+import shlex
 import logging
 import platform
 from concurrent.futures import Future
@@ -7,10 +8,12 @@ from functools import partial, update_wrapper
 from pathlib import Path
 from tempfile import mkdtemp
 from time import perf_counter
+from datetime import datetime
 from typing import Optional, List, Callable, Tuple, Dict, Union
 
 import parsl
 from parsl.app.app import AppBase
+from parsl.app.bash import BashApp
 from parsl.config import Config
 from parsl.app.python import PythonApp
 
@@ -98,7 +101,7 @@ def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result,
 
     # Store the results
     if result.success:
-        result.set_result(output, perf_counter() - result.time_compute_started)
+        result.set_result(output, datetime.now().timestamp() - result.time_compute_started)
 
     # Add the worker information into the tasks, if available
     worker_info = {'hostname': platform.node()}
@@ -108,6 +111,46 @@ def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result,
     result.time_serialize_results = result.serialize()
 
     return result
+
+
+def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str], stdin: Optional[str], *,
+                     stdout: str, stderr: str, pre_exec: str = None, nthrd: int = 0, ngpus: int = 0) -> str:
+    """Execute the executable step of an executable task
+
+    This function is executed after :meth:`__execute_preprocess` has completed, which means
+    any necessary input files are in `task_path` and any necessary CLI arguments have been determined.
+
+    It will be executed as a :class:`BashApp`, so it returns a run command given the arguments provided.
+
+    The kwargs for the argument include resource requirements and other information used to communicate
+    the task requirements to the Parsl Executor.
+
+    Args:
+        task: General task information. Includes the path to the executable
+        task_path: Path to the run directory
+        arguments: List of arguments to add to the function execution
+        stdin: Data to be passed to the stdin (not currently supported)
+        pre_exec: List of environment variables to set
+        stdout: Path to the stdout for the function (should be ``task_task_path // 'colmena.stdout`).
+            Provided as a kwargs so that the Parsl executor knows where to write the file
+        stderr: Path to the stderr for the function (should be ``task_task_path // 'colmena.stdout`).
+            Provided as a kwargs so that the Parsl executor knows where to write the file
+        nthrd: Number of threads to use per node
+        ngpus: Number of GPUs to use per node
+    Returns:
+        The function to invoke as a string
+    """
+
+    assert stdin is None or len(stdin) == 0, "Standard in is not supported yet"
+
+    # Create the shell command
+    #  TODO (wardlt): This is shlex.join, which is only available in Py3.8+
+    shell_cmd = " ".join(shlex.quote(str(s)) for s in task.executable + arguments)
+
+    # Move to the run directory
+    os.chdir(task_path)
+
+    return shell_cmd
 
 
 def _preprocess_callback(
@@ -138,7 +181,7 @@ def _preprocess_callback(
         return task_server.perform_callback(preprocess_future, result, topic)
 
     # If successful, unpack the outputs
-    result, temp_dir, exec_inputs = preprocess_future.result()
+    result, temp_dir, (exec_args, exec_stdin) = preprocess_future.result()
 
     # If unsuccessful, send the results back to the client
     if result.success is not None and not result.success:
@@ -148,7 +191,9 @@ def _preprocess_callback(
 
     # If successful, submit the execute step and pass its result to Parsl
     logger.info(f'Preprocessing was successful for {result.method} task. Submitting to execute')
-    exec_future: Future = execute_fun(temp_dir, *exec_inputs)
+    exec_future: Future = execute_fun(temp_dir, exec_args, exec_stdin,
+                                      stdout=str(temp_dir / 'colmena.stdout'),
+                                      stderr=str(temp_dir / 'colmena.stderr'))
 
     # Submit post-process to follow up
     post_future: Future = postprocess_fun(exec_future, result, temp_dir)
@@ -255,9 +300,9 @@ class ParslTaskServer(FutureBasedTaskServer):
                 preprocess_app = PythonApp(preprocess_fun, **options)
 
                 # Make executable app, which is just to perform the execute
-                execute_fun = partial(function.execute)
+                execute_fun = partial(_execute_execute, function)
                 execute_fun.__name__ = f'{name}_execute'
-                execute_app = PythonApp(execute_fun, **options)
+                execute_app = BashApp(execute_fun, **options)
 
                 # Make the post-process app, which gathers the results and puts them in the "result object"
                 postprocess_fun = partial(_execute_postprocess, function)
@@ -290,13 +335,13 @@ class ParslTaskServer(FutureBasedTaskServer):
 
         # Depending on the task type, return a different future
         if func_type == 'basic':
-            # For most functions, just return teh future
+            # For most functions, just return the future so the task server will handle the output
             return future
         elif func_type == 'exec':
             # For executable functions, we have a different route for returning results
             exec_app, post_app = self.exec_apps_[method]
             future.add_done_callback(lambda x: _preprocess_callback(x, task, self, topic, exec_app, post_app))
-            return None
+            return None  # `None` prevents the Task Server from adding its own callback
         else:
             raise ValueError(f'Unrecognized function type: {func_type}')
 
