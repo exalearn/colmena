@@ -8,7 +8,7 @@ from colmena.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
-from parsl.executors import ThreadPoolExecutor
+from parsl.executors import HighThroughputExecutor
 from parsl.config import Config
 from datetime import datetime
 import numpy as np
@@ -18,20 +18,7 @@ import json
 import sys
 import os
 
-
-# Hard code the function to be optimized
-class Simulation(ExecutableTask):
-
-    def __init__(self, executable: Path, n_ranks: int):
-        executable = ['mpirun', '-n', str(n_ranks), str(executable.absolute())]
-        super().__init__(executable=executable)
-
-    def preprocess(self, run_dir, args, kwargs):
-        return [str(args[0])], None
-
-    def postprocess(self, run_dir: Path):
-        with open(run_dir / 'colmena.stdout') as fp:
-            return float(fp.read().strip())
+from sim import Simulation
 
 
 class Thinker(BaseThinker):
@@ -70,7 +57,7 @@ class Thinker(BaseThinker):
         ])
 
         # Make guesses based on expected improvement
-        while True:
+        while not self.done.is_set():
             # Wait for the results to complete
             with open(self.output_path, 'a') as fp:
                 for _ in range(self.batch_size):
@@ -78,7 +65,9 @@ class Thinker(BaseThinker):
                     print(result.json(), file=fp)
 
                     if not result.success:
-                        raise ValueError(f'Task failed: {result.failure_info.exception}. See {self.output_path} for full details')
+                        raise ValueError(
+                            f'Task failed: {result.failure_info.exception}. See {self.output_path} for full details'
+                        )
 
                     # Store the result
                     train_X.append(result.args)
@@ -143,7 +132,7 @@ if __name__ == '__main__':
     # Write the configuration
     config = Config(
         executors=[
-            ThreadPoolExecutor(label="local_threads", max_threads=args.num_parallel)
+            HighThroughputExecutor(label="htex", max_workers=args.num_parallel)
         ],
         strategy=None,
     )
@@ -151,7 +140,7 @@ if __name__ == '__main__':
 
     # Create the task server and task generator
     my_sim = Simulation(Path('./simulate'), n_ranks=1)
-    doer = ParslTaskServer([my_sim], server_queues, config, default_executors=['local_threads'])
+    doer = ParslTaskServer([my_sim], server_queues, config, default_executors=['htex'])
     thinker = Thinker(client_queues, out_dir, n_guesses=args.num_guesses, batch_size=args.num_parallel)
     logging.info('Created the task server and task generator')
 

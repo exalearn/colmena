@@ -321,7 +321,7 @@ class Result(BaseModel):
             raise e
 
 
-class ExecutableTask(BaseModel):
+class ExecutableTask:
     """Base class for a Colmena task that involves running an executable using a system call.
 
     Such tasks often include a "pre-processing" step in Python that prepares inputs for the executable
@@ -336,12 +336,19 @@ class ExecutableTask(BaseModel):
     Use the ExecutableTask by instantiating one of your implementations
     """
 
-    executable: List[str] = Field(..., help='Executable to launch')
+    executable: List[str]
+
+    def __init__(self, executable: List[str]):
+        """
+        Args:
+            executable: Shell command to execute the task without any arguments
+        """
+        self.executable = executable.copy()
+
 
     @property
     def __name__(self):
-        """Use the lower case name of the class as a starting point"""
-        return self.__repr_name__().lower()
+        return self.__class__.__name__.lower()
 
     def preprocess(self, run_dir: Path, args: Tuple[Any], kwargs: Dict[str, Any]) -> Tuple[List[str], Optional[str]]:
         """Perform preprocessing steps necessary to prepare for executable to be started.
