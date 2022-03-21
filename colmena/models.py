@@ -102,10 +102,13 @@ class Result(BaseModel):
     success: Optional[bool] = Field(None, description="Whether the task completed successfully")
 
     # Store task information
-    task_info: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Task tracking information to be transmitted "
-                                                                                  "along with inputs and results. User provided")
-    failure_info: Optional[FailureInformation] = Field(None, description="Messages about task failure. Provided by Task Server")
-    worker_info: Optional[WorkerInformation] = Field(None, description="Information about the worker which executed a task. Provided by Task Server")
+    task_info: Optional[Dict[str, Any]] = Field(default_factory=dict,
+                                                description="Task tracking information to be transmitted "
+                                                            "along with inputs and results. User provided")
+    failure_info: Optional[FailureInformation] = Field(None,
+                                                       description="Messages about task failure. Provided by Task Server")
+    worker_info: Optional[WorkerInformation] = Field(None,
+                                                     description="Information about the worker which executed a task. Provided by Task Server")
 
     # Performance tracking
     time_created: float = Field(None, description="Time this value object was created")
@@ -119,19 +122,23 @@ class Result(BaseModel):
     time_deserialize_inputs: float = Field(None, description="Time required to deserialize inputs on worker")
     time_serialize_results: float = Field(None, description="Time required to serialize results on worker")
     time_deserialize_results: float = Field(None, description="Time required to deserialize results on client")
-    time_async_resolve_proxies: float = Field(None, description="Time required to scan function inputs and start async resolves of proxies")
+    time_async_resolve_proxies: float = Field(None,
+                                              description="Time required to scan function inputs and start async resolves of proxies")
 
-    additional_timing: dict = Field(default_factory=dict, description="Timings recorded by a TaskServer that are not defined by above")
+    additional_timing: dict = Field(default_factory=dict,
+                                    description="Timings recorded by a TaskServer that are not defined by above")
 
     # Serialization options
     serialization_method: SerializationMethod = Field(SerializationMethod.JSON,
                                                       description="Method used to serialize input data")
     keep_inputs: bool = Field(True, description="Whether to keep the inputs with the result object or delete "
                                                 "them after the method has completed")
-    proxystore_name: Optional[str] = Field(None, description="Name of ProxyStore backend yo use for transferring large objects")
+    proxystore_name: Optional[str] = Field(None,
+                                           description="Name of ProxyStore backend yo use for transferring large objects")
     proxystore_type: Optional[str] = Field(None, description="Type of ProxyStore backend being used")
     proxystore_kwargs: Optional[Dict] = Field(None, description="Kwargs to reinitialize ProxyStore backend")
-    proxystore_threshold: Optional[int] = Field(None, description="Proxy all input/output objects larger than this threshold in bytes")
+    proxystore_threshold: Optional[int] = Field(None,
+                                                description="Proxy all input/output objects larger than this threshold in bytes")
 
     def __init__(self, inputs: Tuple[Tuple[Any], Dict[str, Any]], **kwargs):
         """
@@ -162,7 +169,8 @@ class Result(BaseModel):
             if isinstance(kwargs['exclude'], set):
                 kwargs['exclude'].update({'inputs', 'value'})
             else:
-                raise ValueError(f'Unsupported type {type(kwargs["exclude"])} for argument "exclude". Expected set or dict')
+                raise ValueError(
+                    f'Unsupported type {type(kwargs["exclude"])} for argument "exclude". Expected set or dict')
         else:
             user_exclude = set()
             kwargs['exclude'] = {'inputs', 'value'}
@@ -325,15 +333,18 @@ class ExecutableTask:
     """Base class for a Colmena task that involves running an executable using a system call.
 
     Such tasks often include a "pre-processing" step in Python that prepares inputs for the executable
-    and then a "post-processing" step which stores the outputs (either produced from stdout or written to files)
+    and a "post-processing" step which stores the outputs (either produced from stdout or written to files)
     as Python objects.
-    Separating the implementation of the task into these two functions and a system call simplifies platform independence
-    as launching executables can be very different across HPC environments.
 
-    Implement a new ExecutableTask by defining the executable, a preprocessing method (:meth:`preprocess`),
-     and a postprocessing
+   Separating the task into these two functions and a system call for launching the program
+    simplifies development (shorter functions that ar easier to test), and allows some workflow
+    engines to improve performance by running processing and execution tasks separately.
 
-    Use the ExecutableTask by instantiating one of your implementations
+   Implement a new ExecutableTask by defining the executable, a preprocessing method (:meth:`preprocess`),
+    and a postprocessing method (:meth:`postprocess`).
+
+    Use the ExecutableTask by instantiating a copy of your new class and then passing it to the task server
+     as you would with any other function.
     """
 
     executable: List[str]
@@ -344,7 +355,6 @@ class ExecutableTask:
             executable: Shell command to execute the task without any arguments
         """
         self.executable = executable.copy()
-
 
     @property
     def __name__(self):

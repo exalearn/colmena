@@ -34,68 +34,56 @@ there are several limitations in practice:
 3. *Functions must be pure.* Colmena is designed with the assumption that the order
    in which you execute tasks does not change the outcomes.
 
-Common Example: Launching MPI Applications
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Methods that used Compiled Applications
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We imagine many Colmena applications will define methods that
-require launching an external executable that runs on more than one node.
-Our recommended pattern for using MPI applications is to write a single Python function
-that handles writing inputs, launching the function and parsing outputs:
+Many Colmena applications launch tasks that use software written in languages besides Python.
+Colmena provides the :class:`colmena.models.ExecutableTask` class to guide efficient implemntation of these methods.
+
+The definition of an `ExectuableTask` is split into three parts:
+
+1. ``__init__``: create the shell command needed to launch your code and pass it to the initializer of the base class.
+2. ``preprocess``: use method arguments to create the input files, command line arguments, or stdin needed to execute
+   the simulation code with the desired settings
+3. ``postprocess``: extract the desired outputs for the function from any files or the standard out produced
+   when executing the code.
+
+The example code below runs the ``simulator`` software, which reads inputs from CLI args from the ``options.json`` file
+then stores the result in stdout.
 
 .. code-block:: python
 
-    from subprocess import run
-    from tempfile import TemporaryDirectory
-    import os
+    class Simulation(ExecutableTask):
 
-    def mpi_method(inputs, num_nodes=2, ranks_per_node=4):
-        """Run an MPI application
+        def __init__(self):
+            super().__init__(executable=['/path/to/my/simulator'])
 
-        Args:
-            inputs (Any): Inputs to MPI application
-            num_nodes (int): Number of nodes to use for application
-            ranks_per_node (int): Number of ranks per node
-        Returns:
-            (Any) Output from the function
-        """
+        def preprocess(self, run_dir, args, kwargs):
+            with open(run_dir / 'option.json', 'w') as fp:
+                json.dump(kwargs, fp)  # Write any kwargs to disk
+            return [str(args[0])], None  # Uses the args as CLI arguments
 
-        # Create a temporary directory for the files
-        #  (assumed to be visible on the global filesystem)
-        with TemporaryDirectory() as td:
-            # Make the input file
-            in_file = os.path.join(td, 'input.file')
-            with open(in_file, 'w') as fp:
-                print(inputs, file=fp)
+        def postprocess(self, run_dir: Path):
+            # The stdout of the code is routed to `colmena.stdout`
+            with open(run_dir / 'colmena.stdout') as fp:
+                return float(fp.read().strip())
 
-            # Make the path to the output file
-            out_file = os.path.join(td, 'out.file')
+Some Task Server implements execute the pre- and post-processing step on separate resources
+from the executable task to make more efficient use of the compute resources.
 
-            # Launch the application
-            with open(out_file, 'w') as fp:
-                run([
-                    'aprun', '-n', str(num_nodes * ranks_per_node), '-N', str(ranks_per_node),
-                    '/path/to/mpi_application', in_file
-                ], stdout=fp)
+See the `MPI with RADICAL Cybertools (RCT) <#>`_ example for a demonstration.
 
-            # Parse the outputs and return the answer
-            with open(out_file) as fp:
-                return int(re.match('Answer: (\d+)', fp.read()).group(1))
+MPI Applications
+................
 
-This basic pattern has many points for further optimization that could be critical for some applications:
+Message-Passing Interface (MPI) codes are the standard type of application used to
+utilize multiple nodes of a supercomputer for the same task.
+In addition to defining the path to the executable and processing operations, MPI codes
+also require a definition of how to launch the executable across many compute nodes.
 
-1. *System-specific mpiexec command*. We hard code here for simplicity, but consider a configuration file system
-   like `QCEngine <http://docs.qcarchive.molssi.org/projects/QCEngine/en/latest/environment.html#configuration-files>`_
-   or passing a function for making the call as an argument.
-2. *Leaving Compute Nodes Idle*: The compute nodes are idle while generating the input file(s) based on the
-   input arguments and parsing the output. If writing inputs and parsing output are expensive,
-   consider using separate methods to pre- and postprocessing. We are planning to streamline this process in
-   the future (see `Issue #4 <https://github.com/exalearn/colmena/issues/4>`_).
+.. todo::
 
-.. note::
-
-    We are considering an improved model where the pre- and post-processing methods can
-    be separate tasks to avoid holding on to large number of nodes
-    during pre- or post-processing (see `Issue #4 <https://github.com/exalearn/colmena/issues/4>`_).
+    Support for MPI tasks will be completed in this PR.
 
 
 Specifying Computational Resources
