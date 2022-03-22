@@ -60,12 +60,12 @@ class BaseTaskServer(Process, metaclass=ABCMeta):
     def listen_and_launch(self):
         logger.info('Begin pulling from task queue')
         while True:
-            # Get a result from the queue
-            topic, task = self.queues.get_task(self.timeout)
-            logger.info(f'Received request for {task.method} with topic {topic}')
-
-            # Provide it to the workflow system to be executed
             try:
+                # Get a result from the queue
+                topic, task = self.queues.get_task(self.timeout)
+                logger.info(f'Received request for {task.method} with topic {topic}')
+
+                # Provide it to the workflow system to be executed
                 self.process_queue(topic, task)
             except KillSignalException:
                 logger.info('Kill signal received')

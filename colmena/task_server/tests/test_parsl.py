@@ -45,14 +45,12 @@ def test_kill(server_and_queue):
     server, queue = server_and_queue
     queue.send_kill_signal()
 
-    # Make sure it throws the correct exception
-    with raises(KillSignalException):
-        server.listen_and_launch()
-
     # Make sure it kills the server
     queue.send_kill_signal()
     server.start()
     server.join()
+
+    assert server.exitcode == 0
 
 
 @mark.timeout(30)
@@ -81,11 +79,7 @@ def test_timeout(server_and_queue):
     server, _ = server_and_queue
     server.timeout = 1
 
-    # Make sure it throws the correct exception
-    with raises(TimeoutException):
-        server.listen_and_launch()
-
-    # Make sure it kills the server
+    # Make sure the server dies
     server.start()
     server.join()
 
