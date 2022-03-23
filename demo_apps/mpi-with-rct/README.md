@@ -18,9 +18,15 @@ We adjust the motivation once the features become clearer.
 We use a fake executable, [`simulation.c`](./simulate.c), as a simulation engine. 
 You will need to compile it first: `mpicc simulate.c -o simulate`
 
+Once you install, modify the `mpi_command_string` in `sim.py` as appropriate for your cluster. 
+
+If you are using RCT, set `mpi_command_string` to `None`. RCT will provide the launch command.
+
 ## Running
 
-Run the example by calling: `python run.py`
+Run the example by calling: `PYTHONPATH="$PYTHONPATH:." python run.py`. 
+
+The run must import an executable description. 
 
 You can change the number of simulations run and the batch size using command line arguments. 
 Run `python run.py --help` for further details.

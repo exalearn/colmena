@@ -1,7 +1,6 @@
 """Perform GPR Active Learning where simulations are sent in batches"""
 from pathlib import Path
 
-from colmena.models import ExecutableTask
 from colmena.thinker import BaseThinker, agent
 from colmena.task_server import ParslTaskServer
 from colmena.redis.queue import ClientQueues, make_queue_pairs

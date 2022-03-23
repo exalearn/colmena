@@ -113,9 +113,9 @@ def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result,
     return result
 
 
-def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str], stdin: Optional[str], *,
-                     resources: Optional[dict],
-                     stdout: str, stderr: str, pre_exec: str = None, nthrd: int = 0, ngpus: int = 0) -> str:
+def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str],
+                     stdin: Optional[str], ptype: str, *,
+                     stdout: str, stderr: str, pre_exec: str = None, **kwargs) -> str:
     """Execute the executable step of an executable task
 
     This function is executed after :meth:`__execute_preprocess` has completed, which means
@@ -132,13 +132,13 @@ def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str]
         task_path: Path to the run directory
         arguments: List of arguments to add to the function execution
         stdin: Data to be passed to the stdin (not currently supported)
+        ptype: Process type "MPI" or "SINGLE." Used by RCT to determine how to execute the program
         pre_exec: List of environment variables to set
         stdout: Path to the stdout for the function (should be ``task_task_path // 'colmena.stdout`).
             Provided as a kwargs so that the Parsl executor knows where to write the file
         stderr: Path to the stderr for the function (should be ``task_task_path // 'colmena.stdout`).
             Provided as a kwargs so that the Parsl executor knows where to write the file
-        nthrd: Number of threads to use per node
-        ngpus: Number of GPUs to use per node
+        kwargs: Extra keyword arguments define the resource requirements. See :class:`ResourceRequirements`.
     Returns:
         The function to invoke as a string
     """
@@ -146,7 +146,7 @@ def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str]
     assert stdin is None or len(stdin) == 0, "Standard in is not supported yet"
 
     # Make the launch command
-    resources = ResourceRequirements.parse_obj(resources)
+    resources = ResourceRequirements.parse_obj(kwargs)
     shell_cmd = task.assemble_shell_cmd(arguments, resources)
 
     # Create the shell command
@@ -198,9 +198,9 @@ def _preprocess_callback(
     # If successful, submit the execute step and pass its result to Parsl
     logger.info(f'Preprocessing was successful for {result.method} task. Submitting to execute')
     exec_future: Future = execute_fun(temp_dir, exec_args, exec_stdin,
-                                      resources=result.resources.dict(),
                                       stdout=str(temp_dir / 'colmena.stdout'),
-                                      stderr=str(temp_dir / 'colmena.stderr'))
+                                      stderr=str(temp_dir / 'colmena.stderr'),
+                                      **result.resources.dict())
 
     # Submit post-process to follow up
     post_future: Future = postprocess_fun(exec_future, result, temp_dir)
@@ -306,8 +306,8 @@ class ParslTaskServer(FutureBasedTaskServer):
                 preprocess_fun.__name__ = f'{name}_preprocess'
                 preprocess_app = PythonApp(preprocess_fun, **options)
 
-                # Make executable app, which is just to perform the execute
-                execute_fun = partial(_execute_execute, function)
+                # Make executable app, which is just to invoke the executable
+                execute_fun = partial(_execute_execute, function, ptype='MPI' if function.mpi else 'SINGLE')
                 execute_fun.__name__ = f'{name}_execute'
                 execute_app = BashApp(execute_fun, **options)
 
