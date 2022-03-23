@@ -17,7 +17,7 @@ from parsl.app.bash import BashApp
 from parsl.config import Config
 from parsl.app.python import PythonApp
 
-from colmena.models import Result, ExecutableTask, FailureInformation
+from colmena.models import Result, ExecutableTask, FailureInformation, ResourceRequirements
 from colmena.proxy import resolve_proxies_async
 from colmena.redis.queue import TaskServerQueues
 from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
@@ -114,6 +114,7 @@ def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result,
 
 
 def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str], stdin: Optional[str], *,
+                     resources: Optional[dict],
                      stdout: str, stderr: str, pre_exec: str = None, nthrd: int = 0, ngpus: int = 0) -> str:
     """Execute the executable step of an executable task
 
@@ -124,6 +125,7 @@ def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str]
 
     The kwargs for the argument include resource requirements and other information used to communicate
     the task requirements to the Parsl Executor.
+    The primary user of the such kwargs is the RCT backend for Parsl.
 
     Args:
         task: General task information. Includes the path to the executable
@@ -143,9 +145,13 @@ def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str]
 
     assert stdin is None or len(stdin) == 0, "Standard in is not supported yet"
 
+    # Make the launch command
+    resources = ResourceRequirements.parse_obj(resources)
+    shell_cmd = task.assemble_shell_cmd(arguments, resources)
+
     # Create the shell command
     #  TODO (wardlt): This is shlex.join, which is only available in Py3.8+
-    shell_cmd = " ".join(shlex.quote(str(s)) for s in task.executable + arguments)
+    shell_cmd = " ".join(shlex.quote(str(s)) for s in shell_cmd)
 
     # Move to the run directory
     os.chdir(task_path)
@@ -192,6 +198,7 @@ def _preprocess_callback(
     # If successful, submit the execute step and pass its result to Parsl
     logger.info(f'Preprocessing was successful for {result.method} task. Submitting to execute')
     exec_future: Future = execute_fun(temp_dir, exec_args, exec_stdin,
+                                      resources=result.resources.dict(),
                                       stdout=str(temp_dir / 'colmena.stdout'),
                                       stderr=str(temp_dir / 'colmena.stderr'))
 

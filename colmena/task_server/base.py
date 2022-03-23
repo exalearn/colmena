@@ -11,7 +11,7 @@ import logging
 
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.redis.queue import TaskServerQueues
-from colmena.models import Result, FailureInformation
+from colmena.models import Result, FailureInformation, ExecutableTask
 from colmena.proxy import resolve_proxies_async
 
 logger = logging.getLogger(__name__)
@@ -169,7 +169,12 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     start_time = perf_counter()
     success = True
     try:
-        output = func(*result.args, **result.kwargs)
+        if isinstance(func, ExecutableTask):
+            if '_resources' in result.kwargs:
+                logger.warning('`_resources` provided as a kwargs. Unexpected things are about to happen')
+            output = func(*result.args, **result.kwargs, _resources=result.resources)
+        else:
+            output = func(*result.args, **result.kwargs)
     except BaseException as e:
         output = None
         success = False

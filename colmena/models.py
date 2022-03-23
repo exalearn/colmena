@@ -1,12 +1,14 @@
 import json
 import logging
 import pickle as pkl
+import shlex
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from io import StringIO
 from pathlib import Path
-from subprocess import call
+from subprocess import run
 from tempfile import TemporaryDirectory
 from time import perf_counter
 from traceback import TracebackException
@@ -83,6 +85,24 @@ class WorkerInformation(BaseModel, extra=Extra.allow):
     hostname: Optional[str] = Field(None, description='Hostname of the worker who executed this task')
 
 
+class ResourceRequirements(BaseModel):
+    """Resource requirements for tasks. Used by some Colmena backends to allocate resources to the task
+
+    Follows the naming conventions of
+    `RADICAL-Pilot <https://radicalpilot.readthedocs.io/en/stable/apidoc.html#taskdescription>`_.
+    """
+
+    # Defining how we use CPU resources
+    node_count: int = Field(1, description='Total number of nodes to use for the task')
+    cpu_processes: int = Field(1, description='Total number of CPU nodes')
+    cpu_threads: int = Field(1, description='Number of threads per process')
+
+    @property
+    def total_ranks(self) -> int:
+        """Total number of MPI ranks"""
+        return self.node_count * self.cpu_processes
+
+
 class Result(BaseModel):
     """A class which describes the inputs and results of the calculations evaluated by the MethodServer
 
@@ -105,10 +125,9 @@ class Result(BaseModel):
     task_info: Optional[Dict[str, Any]] = Field(default_factory=dict,
                                                 description="Task tracking information to be transmitted "
                                                             "along with inputs and results. User provided")
-    failure_info: Optional[FailureInformation] = Field(None,
-                                                       description="Messages about task failure. Provided by Task Server")
-    worker_info: Optional[WorkerInformation] = Field(None,
-                                                     description="Information about the worker which executed a task. Provided by Task Server")
+    resources: ResourceRequirements = Field(default_factory=ResourceRequirements, help='List of the resources required for a task, if desired')
+    failure_info: Optional[FailureInformation] = Field(None, description="Messages about task failure. Provided by Task Server")
+    worker_info: Optional[WorkerInformation] = Field(None, description="Information about the worker which executed a task. Provided by Task Server")
 
     # Performance tracking
     time_created: float = Field(None, description="Time this value object was created")
@@ -329,6 +348,7 @@ class Result(BaseModel):
             raise e
 
 
+@dataclass
 class ExecutableTask:
     """Base class for a Colmena task that involves running an executable using a system call.
 
@@ -345,20 +365,47 @@ class ExecutableTask:
 
     Use the ExecutableTask by instantiating a copy of your new class and then passing it to the task server
      as you would with any other function.
+
+    MPI Executables
+    ---------------
+
+    Launching an MPI executable requires two parts: a path to an executable and a preamble definig how to launch it.
+    Defining an MPI application using the instructions defined above and then set the :attr:`mpi` attribute to ``True``.
+    This will tell the Colmena task server to look for a "preamble" for how to launch the application.
+
+    You may need to supply an MPI command invocation recipe for your particular cluster, depending on your choice of task server.
+    Supply a template as the ``mpi_command_string`` field, which will be converted
+    by `Python's string format function <https://docs.python.org/3/library/string.html#format-string-syntax>`_
+    to produce a version of the command with the specific resource requirements of your task
+    by the :meth:`render_mpi_launch` method.
+    The attributes of this class (e.g., ``node_count``, ``total_ranks``) will be used as arguments to `format`.
+    For example, a template of ``aprun -N {total_ranks} -n {cpu_process}`` will produce ``aprun -N 6 -n 3`` if you
+    specify ``node_count=2`` and ``cpu_processes=3``.
     """
 
     executable: List[str]
+    """Command used to launch the executable"""
 
-    def __init__(self, executable: List[str]):
-        """
-        Args:
-            executable: Shell command to execute the task without any arguments
-        """
-        self.executable = executable.copy()
+    mpi: bool = False
+    """Whether this is an MPI executable"""
+
+    mpi_command_string: Optional[str] = None
+    """Template string defining how to launch this application using MPI. 
+    Should include placeholders named after the fields in ResourceRequirements marked using {}'s.
+    Example: `mpirun -np {total_ranks}"""
 
     @property
     def __name__(self):
         return self.__class__.__name__.lower()
+
+    def render_mpi_launch(self, resources: ResourceRequirements) -> str:
+        """Create an MPI launch command given the configuration
+
+        Returns:
+            MPI launch configuration
+        """
+        return self.mpi_command_string.format(total_ranks=resources.total_ranks,
+                                              **resources.dict(exclude={'mpi_command_string'}))
 
     def preprocess(self, run_dir: Path, args: Tuple[Any], kwargs: Dict[str, Any]) -> Tuple[List[str], Optional[str]]:
         """Perform preprocessing steps necessary to prepare for executable to be started.
@@ -376,33 +423,69 @@ class ExecutableTask:
         """
         raise NotImplementedError()
 
-    def execute(self, run_dir: Path, arguments: List[str], stdin: Optional[str]) -> float:
+    def execute(self, run_dir: Path, arguments: List[str], stdin: Optional[str],
+                resources: Optional[ResourceRequirements] = None) -> float:
         """Run an executable
 
         Args:
             run_dir: Directory in which to execute the code
             arguments: Command line arguments
             stdin: Content to pass in via standard in
+            resources: Amount of resources to use for the application
         Returns:
             Runtime (unit: s)
         """
 
+        # Make the shell command to be launched
+        shell_cmd = self.assemble_shell_cmd(arguments, resources)
+        logger.debug(f'Launching shell command: {" ".join(shell_cmd)}')
+
+        # Launch it, routing the stdout and stderr as appropriate
         start_time = perf_counter()
         with open(run_dir / 'colmena.stdout', 'w') as fo, open(run_dir / 'colmena.stderr', 'w') as fe:
             if stdin is not None:
                 stdin = StringIO(stdin)
-            call(self.executable + arguments, stdout=fo, stderr=fe, stdin=stdin, cwd=run_dir)
+            run(shell_cmd, stdout=fo, stderr=fe, stdin=stdin, cwd=run_dir)
         return perf_counter() - start_time
+
+    def assemble_shell_cmd(self, arguments: List[str], resources: ResourceRequirements) -> List[str]:
+        """Assemble the shell command to be launched
+
+        Args:
+            arguments: Command line arguments
+            resources: Resource requirements
+        Returns:
+            Components of the shell command
+        """
+
+        # If resources are provided and the task is an MPI, generate the MPI executor
+        if self.mpi:
+            assert resources is not None, "Resources must be specified for MPI tasks"
+            preamble = shlex.split(self.render_mpi_launch(resources))
+        else:
+            preamble = []
+
+        # Get the full shell command
+        shell_cmd = preamble + self.executable + arguments
+        return shell_cmd
 
     def postprocess(self, run_dir: Path) -> Any:
         """Extract results after execution completes
 
         Args:
-            run_dir: Run directory for the executable. Stdout will be in `run_dir/colmena.stdout` and stderr in `run_dir/colmena.stderr`
+            run_dir: Run directory for the executable. Stdout will be written to `run_dir/colmena.stdout`
+            and stderr to `run_dir/colmena.stderr`
         """
         raise NotImplementedError()
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, _resources: Optional[ResourceRequirements] = None, **kwargs):
+        """Execute the function
+
+        Args:
+            args: Positional arguments
+            kwargs: Keyword arguments
+            _resources: Resources available. Optional. Only used for MPI tasks.
+        """
         # Launch everything inside a temporary directory
         with TemporaryDirectory() as run_dir:
             run_dir = Path(run_dir)
@@ -411,7 +494,7 @@ class ExecutableTask:
             cli_args, stdin = self.preprocess(run_dir, args, kwargs)
 
             # Execute everything
-            self.execute(run_dir, cli_args, stdin)
+            self.execute(run_dir, cli_args, stdin, resources=_resources)
 
             # Return the post-processed results
             return self.postprocess(run_dir)

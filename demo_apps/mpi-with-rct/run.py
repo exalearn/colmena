@@ -139,7 +139,7 @@ if __name__ == '__main__':
     config.run_dir = os.path.join(out_dir, 'run-info')
 
     # Create the task server and task generator
-    my_sim = Simulation(Path('./simulate'), n_ranks=1)
+    my_sim = Simulation(Path('./simulate'))
     doer = ParslTaskServer([my_sim], server_queues, config, default_executors=['htex'])
     thinker = Thinker(client_queues, out_dir, n_guesses=args.num_guesses, batch_size=args.num_parallel)
     logging.info('Created the task server and task generator')

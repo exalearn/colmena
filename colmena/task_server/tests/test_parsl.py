@@ -3,9 +3,9 @@ from typing import Tuple
 
 from parsl import ThreadPoolExecutor
 from parsl.config import Config
-from pytest import fixture, raises, mark
+from pytest import fixture, mark
 
-from colmena.exceptions import KillSignalException, TimeoutException
+from test_base import EchoTask
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 from colmena.task_server.parsl import ParslTaskServer
 
@@ -33,7 +33,7 @@ def config():
 @fixture(autouse=True)
 def server_and_queue(config) -> Tuple[ParslTaskServer, ClientQueues]:
     client_q, server_q = make_queue_pairs('localhost', clean_slate=True)
-    server = ParslTaskServer([f, bad_task], server_q, config)
+    server = ParslTaskServer([f, bad_task, EchoTask()], server_q, config)
     yield server, client_q
     if server.is_alive():
         server.terminate()
@@ -104,3 +104,16 @@ def test_error_handling(server_and_queue):
     queue.send_inputs(None, method='bad_task')
     result = queue.get_result()
     assert 'MemoryError' in result.failure_info.exception
+
+
+@mark.timeout(30)
+def test_bash(server_and_queue):
+    server, queue = server_and_queue
+
+    # Get ready to receive tasks
+    server.start()
+
+    # Start the server
+    queue.send_inputs(1, method='echotask')
+    result = queue.get_result()
+    assert result.value == '1\n'
