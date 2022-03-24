@@ -22,7 +22,7 @@ def _error_if_unconnected(f):
     return wrapper
 
 
-def make_queue_pairs(hostname: str, port: int = 6379, name='method',
+def make_queue_pairs(hostname: str, port: int = 6379, password: str = None, name='method',
                      serialization_method: Union[str, SerializationMethod] = SerializationMethod.JSON,
                      keep_inputs: bool = True,
                      clean_slate: bool = True,
@@ -35,6 +35,7 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
     Args:
         hostname (str): Hostname of the Redis server
         port (int): Port on which to access Redis
+        password (str): password of the Redis server (optional)
         name (str): Name of the MethodServer
         serialization_method (SerializationMethod): serialization type for inputs/outputs
         keep_inputs (bool): Whether to keep the inputs after the method has finished executing
@@ -53,9 +54,9 @@ def make_queue_pairs(hostname: str, port: int = 6379, name='method',
         (ClientQueues, TaskServerQueues): Pair of communicators set to use the correct channels
     """
 
-    return (ClientQueues(hostname, port, name, serialization_method, keep_inputs,
+    return (ClientQueues(hostname, port, password, name, serialization_method, keep_inputs,
                          topics, proxystore_name, proxystore_threshold),
-            TaskServerQueues(hostname, port, name, topics=topics, clean_slate=clean_slate))
+            TaskServerQueues(hostname, port, password, name, topics=topics, clean_slate=clean_slate))
 
 
 class RedisQueue:
@@ -73,17 +74,19 @@ class RedisQueue:
     The queue only connects when the `connect` method is called to avoid
     issues with passing an object across processes."""
 
-    def __init__(self, hostname: str, port: int = 6379, prefix='pipeline',
-                 topics: Optional[Iterable[str]] = None):
+    def __init__(self, hostname: str, port: int = 6379, password: str = None,
+                 prefix='pipeline', topics: Optional[Iterable[str]] = None):
         """
         Args:
             hostname (str): Hostname of the Redis server
             port (int): Port on which to access Redis
+            password (str): Password of the Redis server
             prefix (str): Name of the Redis queue
             topics ([str]): List of special topics
         """
         self.hostname = hostname
         self.port = port
+        self.password = password
         self.redis_client = None
         self.prefix = prefix
 
@@ -119,7 +122,7 @@ class RedisQueue:
         try:
             if not self.redis_client:
                 self.redis_client = redis.StrictRedis(
-                    host=self.hostname, port=self.port, decode_responses=True)
+                    host=self.hostname, port=self.port, password=self.password, decode_responses=True)
                 self.redis_client.ping()  # Ping is needed to detect if connection failed
         except redis.exceptions.ConnectionError:
             logger.warning(f"ConnectionError while trying to connect to Redis@{self.hostname}:{self.port}")
@@ -220,7 +223,7 @@ class ClientQueues:
     and runtime for serialization.
     """
 
-    def __init__(self, hostname: str, port: int = 6379, name: Optional[str] = None,
+    def __init__(self, hostname: str, port: int = 6379, password: str = None, name: Optional[str] = None,
                  serialization_method: Union[str, SerializationMethod] = SerializationMethod.JSON,
                  keep_inputs: bool = True,
                  topics: Optional[Iterable] = None,
@@ -230,6 +233,7 @@ class ClientQueues:
         Args:
             hostname (str): Hostname of the Redis server
             port (int): Port on which to access Redis
+            password (str): Password of the Redis server
             name (int): Name of the MethodServer
             serialization_method (SerializationMethod): Method used to store the input
             keep_inputs (bool): Whether to keep inputs after method results are stored
@@ -304,8 +308,8 @@ class ClientQueues:
 
         # Make the queues
         self.topics = topics
-        self.outbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
-        self.inbound = RedisQueue(hostname, port, 'results' if name is None else f'{name}_results', topics=topics)
+        self.outbound = RedisQueue(hostname, port, password, 'inputs' if name is None else f'{name}_inputs', topics=topics)
+        self.inbound = RedisQueue(hostname, port, password, 'results' if name is None else f'{name}_results', topics=topics)
 
         # Attempt to connect
         self.outbound.connect()
@@ -413,20 +417,22 @@ class TaskServerQueues:
     Handles receiving tasks
     """
 
-    def __init__(self, hostname: str, port: int = 6379, name: Optional[str] = None,
-                 clean_slate: bool = True, topics: Optional[Iterable[str]] = None):
+    def __init__(self, hostname: str, port: int = 6379, password: str = None,
+                 name: Optional[str] = None, clean_slate: bool = True,
+                 topics: Optional[Iterable[str]] = None):
         """
         Args:
             hostname (str): Hostname of the Redis server
             port (int): Port on which to access Redis
+            password (str): Password of the Redis server
             name (str): Name of the MethodServer
             clean_slate (bool): Whether to flush the queues before launching
             topics ([str]): List of topics used when having the client filter different types of tasks
         """
 
         # Make the queues
-        self.inbound = RedisQueue(hostname, port, 'inputs' if name is None else f'{name}_inputs', topics=topics)
-        self.outbound = RedisQueue(hostname, port, 'results' if name is None else f'{name}_results', topics=topics)
+        self.inbound = RedisQueue(hostname, port, password, 'inputs' if name is None else f'{name}_inputs', topics=topics)
+        self.outbound = RedisQueue(hostname, port, password, 'results' if name is None else f'{name}_results', topics=topics)
 
         # Attempt to connect
         self.outbound.connect()
