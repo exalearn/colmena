@@ -114,8 +114,8 @@ def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result,
 
 
 def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str],
-                     stdin: Optional[str], ptype: str, *,
-                     stdout: str, stderr: str, pre_exec: str = None, **kwargs) -> str:
+                     stdin: Optional[str], cpu_process_type: str, *,
+                     stdout: str, stderr: str, pre_exec: str = [], **kwargs) -> str:
     """Execute the executable step of an executable task
 
     This function is executed after :meth:`__execute_preprocess` has completed, which means
@@ -132,7 +132,7 @@ def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str]
         task_path: Path to the run directory
         arguments: List of arguments to add to the function execution
         stdin: Data to be passed to the stdin (not currently supported)
-        ptype: Process type "MPI" or "SINGLE." Used by RCT to determine how to execute the program
+        cpu_process_type: Process type "MPI" or "SINGLE." Used by RCT to determine how to execute the program
         pre_exec: List of environment variables to set
         stdout: Path to the stdout for the function (should be ``task_task_path // 'colmena.stdout`).
             Provided as a kwargs so that the Parsl executor knows where to write the file
@@ -307,7 +307,7 @@ class ParslTaskServer(FutureBasedTaskServer):
                 preprocess_app = PythonApp(preprocess_fun, **options)
 
                 # Make executable app, which is just to invoke the executable
-                execute_fun = partial(_execute_execute, function, ptype='MPI' if function.mpi else 'SINGLE')
+                execute_fun = partial(_execute_execute, function, cpu_process_type='MPI' if function.mpi else 'SINGLE')
                 execute_fun.__name__ = f'{name}_execute'
                 execute_app = BashApp(execute_fun, **options)
 
@@ -357,6 +357,7 @@ class ParslTaskServer(FutureBasedTaskServer):
         # Wait until all tasks have finished
         dfk = parsl.dfk()
         dfk.wait_for_current_tasks()
+        dfk.cleanup()
         logger.info(f"All tasks have completed for {self.__class__.__name__} on {self.ident}")
 
     def run(self) -> None:
