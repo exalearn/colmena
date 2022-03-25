@@ -1,8 +1,11 @@
 """Utilities for interacting with ProxyStore"""
+import logging
 import warnings
 import proxystore as ps
 
 from typing import Any, Union
+
+logger = logging.getLogger(__name__)
 
 
 class ProxyJSONSerializationWarning(Warning):
@@ -39,7 +42,8 @@ def proxy_json_encoder(proxy: ps.proxy.Proxy) -> Any:
     """
     if not isinstance(proxy, ps.proxy.Proxy):
         # The JSON encoder will catch this TypeError and handle appropriately
-        raise TypeError
+        logger.error(f'Passed a series of objects that are not serializable: {type(proxy)}. {proxy}')
+        raise TypeError(f'Unserializable type: {type(proxy)}')
 
     if ps.proxy.is_resolved(proxy):
         # Proxy is already resolved so encode the underlying object
