@@ -39,12 +39,19 @@ def _execute_preprocess(task: ExecutableTask, result: Result) -> Tuple[Result, P
     Args:
         task: Description of task to be executed
         result: Object holding the inputs
+    Returns:
+        - Updated result object
+        - Path to the temporary directory
+        - A tuple of the inputs to the executable
+            - List of CLI arguments
+            - Contents of stdin, if desired
     """
 
     # Mark that compute has started
     result.mark_compute_started()
 
     # Unpack the inputs
+    serialized_inputs = result.inputs  # Hold a copy of the serialized inputs
     result.time_deserialize_inputs = result.deserialize()
 
     # Start resolving any proxies in the input asynchronously
@@ -62,13 +69,18 @@ def _execute_preprocess(task: ExecutableTask, result: Result) -> Tuple[Result, P
     try:
         output = task.preprocess(temp_dir, result.args, result.kwargs)
     except BaseException as e:
-        output = None
+        output = ([], None)  # Set a null value that still matches the output type
         result.success = False
         result.failure_info = FailureInformation.from_exception(e)
     finally:
         end_time = perf_counter()
 
+    # Record the time required to perform the pre-processing
     result.additional_timing['exec_preprocess'] = end_time - start_time
+
+    # Put the serialized value back so we need not re-serialize the Result object
+    #  TODO (wardlt): The inputs are no longer needed at this point, is there a way to drop them if desired
+    result.inputs = serialized_inputs
 
     return result, temp_dir, output
 
