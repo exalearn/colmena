@@ -66,7 +66,17 @@ class FuncXTaskServer(FutureBasedTaskServer):
         # Create the executor and queue of tasks to be submitted back to the user
         self.fx_exec = FuncXExecutor(self.fx_client)
 
-    def _submit(self, task: Result, _: str) -> Future:
+    def _perform_callback(self, future: Future, result: Result, topic: str):
+        # Check if the failure was due to a ManagerLost
+        #  TODO (wardlt): Remove when we have retry support in FuncX
+        exc = future.exception()
+        if 'Task failure due to loss of manager' in str(exc):
+            logger.info('Caught an task that failed due to a lost manager. Resubmitting')
+            self.process_queue(topic, result)
+        else:
+            super(FuncXTaskServer, self)._perform_callback(future, result, topic)
+
+    def _submit(self, task: Result) -> Future:
         # Lookup the appropriate function ID and endpoint
         func, endp_id = self.registered_funcs[task.method]
 

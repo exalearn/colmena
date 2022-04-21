@@ -143,9 +143,10 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
                 reallocator_thread.join()
 
             # Wait until all agents that responded to this event finish
-            my_id = barrier.wait()
-            if my_id == 0:
-                event.clear()
+            barrier.wait()
+
+            # Then reset the event
+            event.clear()
 
 
 def event_responder(func: Optional[Callable] = None, event_name: str = None,
