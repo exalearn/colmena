@@ -6,6 +6,7 @@ services:
 before_install:
 - python$PY -m pip install Cython
 - python$PY -m pip install numpy
+- python$PY -m pip install -U pip
 - python$PY --version
 - python$PY -m cython --version
 - python$PY -c "import numpy;print(numpy.__version__)"
