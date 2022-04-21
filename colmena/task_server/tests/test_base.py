@@ -1,4 +1,4 @@
-from typing import Tuple, Any, Dict, Tuple, List, Optional
+from typing import Any, Dict, Tuple, List, Optional
 from pathlib import Path
 
 from colmena.models import Result, ExecutableTask

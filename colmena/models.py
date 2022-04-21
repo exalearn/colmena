@@ -3,7 +3,7 @@ import logging
 import pickle as pkl
 import shlex
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from io import StringIO
@@ -390,7 +390,7 @@ class ExecutableTask:
     """Whether this is an MPI executable"""
 
     mpi_command_string: Optional[str] = None
-    """Template string defining how to launch this application using MPI. 
+    """Template string defining how to launch this application using MPI.
     Should include placeholders named after the fields in ResourceRequirements marked using {}'s.
     Example: `mpirun -np {total_ranks}"""
 
