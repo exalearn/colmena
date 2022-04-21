@@ -20,3 +20,4 @@ dependencies:
       - parsl>=1.*
       - pydantic
       - proxystore>=0.3.1
+      - funcx
