@@ -84,20 +84,17 @@ def _execute_preprocess(task: ExecutableTask, result: Result) -> Tuple[Result, P
     return result, temp_dir, output
 
 
-def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result, temp_dir: Path, serialized_inputs: str):
+def _execute_postprocess(task: ExecutableTask, exit_code: int, result: Result, temp_dir: Path, serialized_inputs: str):
     """Execute the post-processing function after an executable completes
 
     Args:
         task: Task description, which contains details on how to post-process the results
-        exec_time: Output from the exec function
+        exit_code: Exit code the application (should be 0)
         result: Storage for the result data
         temp_dir: Path to the run directory on the remote system
         serialized_inputs: Copy of the serialized inputs
             The ``Result`` object is currently without a copy of the inputs
     """
-
-    # Store the run time in the result object
-    result.additional_timing['exec_execution'] = exec_time
 
     # Execute the function
     start_time = perf_counter()
@@ -116,6 +113,11 @@ def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result,
     # Store the results
     if result.success:
         result.set_result(output, datetime.now().timestamp() - result.time_compute_started)
+
+    # Store the run time in the result object
+    result.additional_timing['exec_execution'] = result.time_running - \
+                                                 result.additional_timing['exec_postprocess'] - \
+                                                 result.additional_timing['exec_preprocess']
 
     # Add the worker information into the tasks, if available
     worker_info = {'hostname': platform.node()}
@@ -293,11 +295,9 @@ class ParslTaskServer(FutureBasedTaskServer):
     2. A :class:`BashApp` to run the executable that is given the path to the run directory
        and the list of resources required for executing the task.
 
-       It produces only the execution time as the output.
-
        There is no callback for app.
 
-    3. A :class:`PythonApp` to store the results of the execution that is given the execution time,
+    3. A :class:`PythonApp` to store the results of the execution that is given the exit code of the executable (should be 0),
        a copy of the :class:`Result` object produced by the preprocessing,
        the path to the run directory,
        and a serialized version of the inputs to the app.

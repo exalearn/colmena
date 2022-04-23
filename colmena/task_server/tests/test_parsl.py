@@ -121,9 +121,10 @@ def test_bash(server_and_queue):
     # Start the server
     queue.send_inputs(1, method='echotask')
     result = queue.get_result()
-    assert result.success
+    assert result.success, result.failure_info
     assert result.value == '1\n'
     assert result.keep_inputs
+    assert result.additional_timing['exec_execution'] > 0
     assert result.inputs == ((1,), {})
 
 
