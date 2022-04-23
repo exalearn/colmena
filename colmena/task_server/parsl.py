@@ -115,9 +115,9 @@ def _execute_postprocess(task: ExecutableTask, exit_code: int, result: Result, t
         result.set_result(output, datetime.now().timestamp() - result.time_compute_started)
 
     # Store the run time in the result object
-    result.additional_timing['exec_execution'] = result.time_running - \
-                                                 result.additional_timing['exec_postprocess'] - \
-                                                 result.additional_timing['exec_preprocess']
+    result.additional_timing['exec_execution'] = (result.time_running -
+                                                  result.additional_timing['exec_postprocess'] -
+                                                  result.additional_timing['exec_preprocess'])
 
     # Add the worker information into the tasks, if available
     worker_info = {'hostname': platform.node()}
