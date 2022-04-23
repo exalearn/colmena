@@ -94,7 +94,7 @@ class ResourceRequirements(BaseModel):
 
     # Defining how we use CPU resources
     node_count: int = Field(1, description='Total number of nodes to use for the task')
-    cpu_processes: int = Field(1, description='Total number of CPU nodes')
+    cpu_processes: int = Field(1, description='Total number of MPI ranks per node')
     cpu_threads: int = Field(1, description='Number of threads per process')
 
     @property
@@ -392,7 +392,7 @@ class ExecutableTask:
     mpi_command_string: Optional[str] = None
     """Template string defining how to launch this application using MPI.
     Should include placeholders named after the fields in ResourceRequirements marked using {}'s.
-    Example: `mpirun -np {total_ranks}"""
+    Example: `mpirun -np {total_ranks}`"""
 
     @property
     def __name__(self):

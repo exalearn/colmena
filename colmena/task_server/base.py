@@ -1,18 +1,18 @@
 """Base classes for the Task Server and associated functions"""
+import logging
 import os
 import platform
-
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import Future
+from inspect import signature
 from multiprocessing import Process
 from time import perf_counter
 from typing import Optional, Callable
-import logging
 
 from colmena.exceptions import KillSignalException, TimeoutException
-from colmena.redis.queue import TaskServerQueues
-from colmena.models import Result, FailureInformation, ExecutableTask
+from colmena.models import Result, FailureInformation
 from colmena.proxy import resolve_proxies_async
+from colmena.redis.queue import TaskServerQueues
 
 logger = logging.getLogger(__name__)
 
@@ -169,9 +169,9 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     start_time = perf_counter()
     success = True
     try:
-        if isinstance(func, ExecutableTask):
-            if '_resources' in result.kwargs:
-                logger.warning('`_resources` provided as a kwargs. Unexpected things are about to happen')
+        if '_resources' in result.kwargs:
+            logger.warning('`_resources` provided as a kwargs. Unexpected things are about to happen')
+        if '_resources' in signature(func).parameters:
             output = func(*result.args, **result.kwargs, _resources=result.resources)
         else:
             output = func(*result.args, **result.kwargs)
