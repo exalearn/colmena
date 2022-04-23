@@ -38,7 +38,7 @@ Methods that used Compiled Applications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Many Colmena applications launch tasks that use software written in languages besides Python.
-Colmena provides the :class:`colmena.models.ExecutableTask` class to guide efficient implemntation of these methods.
+Colmena provides the :class:`colmena.models.ExecutableTask` class to help integrate these tasks into a Colmena application.
 
 The definition of an `ExectuableTask` is split into three parts:
 
@@ -48,7 +48,7 @@ The definition of an `ExectuableTask` is split into three parts:
 3. ``postprocess``: extract the desired outputs for the function from any files or the standard out produced
    when executing the code.
 
-The example code below runs the ``simulator`` software, which reads inputs from CLI args from the ``options.json`` file
+The example code below runs the ``simulator`` software, which reads inputs from CLI arguments and from a ``options.json`` file
 then stores the result in stdout.
 
 .. code-block:: python
@@ -76,15 +76,32 @@ See the `MPI with RADICAL Cybertools (RCT) <#>`_ example for a demonstration.
 MPI Applications
 ................
 
-Message-Passing Interface (MPI) codes are the standard type of application used to
+Message-Passing Interface (MPI) codes are the standard type of application that
 utilize multiple nodes of a supercomputer for the same task.
 In addition to defining the path to the executable and processing operations, MPI codes
 also require a definition of how to launch the executable across many compute nodes.
 
-.. todo::
+For most cases, provide these option in the ``__init__`` method of your executable and set the ``mpi`` option to ``True``.
 
-    Support for MPI tasks will be completed in this PR.
+.. code-block:: python
 
+    class Simulation(ExecutableTask):
+
+        def __init__(self):
+            super().__init__(
+                executable=['/path/to/my/simulator'],
+                mpi=True,  # Designate this as an MPI application
+                mpi_command_string='mpirun -np {total_ranks}',  # Optionally provide the MPI invocation template
+            )
+
+Some workflow tools, like RCT, can supply the ``mpi_command_string`` information automatically.
+
+A key note about using MPI application is that you should supply resource requirements when sending task requests.
+These are accomplished by sending the resource requirements along with the task request:
+
+.. code-block:: python
+
+    client_queue.send_inputs(1, resources={'node_count': 2})
 
 Specifying Computational Resources
 ++++++++++++++++++++++++++++++++++
@@ -223,6 +240,11 @@ and is available as the ``self.queues`` class attribute.
 Submit requests to the task server with the ``send_inputs`` function.
 Besides the input arguments and method name, the function also accepts a
 "topic" for the method queue used when filtering the output results.
+
+.. note::
+
+    If your task invokes an MPI executable, remember to pass resources requirements
+    along with input arguments.
 
 The ``get_result`` function retrieves the next result from the task server
 as a :class:`colmena.models.Result` object.
