@@ -1,11 +1,12 @@
 """Tests for the Parsl implementation of the task server"""
 from typing import Tuple
 
-from parsl import ThreadPoolExecutor
+from parsl import HighThroughputExecutor
 from parsl.config import Config
 from pytest import fixture, mark
 
-from test_base import EchoTask
+from colmena.models import ResourceRequirements
+from .test_base import EchoTask
 from colmena.redis.queue import ClientQueues, make_queue_pairs
 from colmena.task_server.parsl import ParslTaskServer
 
@@ -18,12 +19,16 @@ def bad_task(x):
     raise MemoryError()
 
 
+def count_nodes(x, _resources: ResourceRequirements):
+    return _resources.node_count
+
+
 # Make the Parsl configuration. Use LocalThreads for Mac and Windows compatibility
 @fixture()
 def config():
     return Config(
         executors=[
-            ThreadPoolExecutor(label="local_threads", max_threads=4)
+            HighThroughputExecutor(label="local_threads")
         ],
         strategy=None,
     )
@@ -33,7 +38,7 @@ def config():
 @fixture(autouse=True)
 def server_and_queue(config) -> Tuple[ParslTaskServer, ClientQueues]:
     client_q, server_q = make_queue_pairs('localhost', clean_slate=True)
-    server = ParslTaskServer([f, bad_task, EchoTask()], server_q, config)
+    server = ParslTaskServer([f, bad_task, EchoTask(), count_nodes], server_q, config)
     yield server, client_q
     if server.is_alive():
         server.terminate()
@@ -116,4 +121,20 @@ def test_bash(server_and_queue):
     # Start the server
     queue.send_inputs(1, method='echotask')
     result = queue.get_result()
+    assert result.success
     assert result.value == '1\n'
+    assert result.keep_inputs
+    assert result.inputs == ((1,), {})
+
+
+@mark.timeout(30)
+def test_resources(server_and_queue):
+    server, queue = server_and_queue
+
+    # Get ready to receive tasks
+    server.start()
+
+    # Launch a test
+    queue.send_inputs(1, method='count_nodes')
+    result = queue.get_result()
+    assert not result.success

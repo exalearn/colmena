@@ -9,7 +9,7 @@ import redis
 import proxystore as ps
 
 from colmena.exceptions import TimeoutException, KillSignalException
-from colmena.models import Result, SerializationMethod
+from colmena.models import Result, SerializationMethod, ResourceRequirements
 
 logger = logging.getLogger(__name__)
 
@@ -315,20 +315,23 @@ class ClientQueues:
         self.outbound.connect()
         self.inbound.connect()
 
-    def send_inputs(self, *input_args: Any, method: str = None,
+    def send_inputs(self, *input_args: Any,
+                    method: str = None,
                     input_kwargs: Optional[Dict[str, Any]] = None,
                     keep_inputs: Optional[bool] = None,
                     topic: str = 'default',
+                    resources: Optional[Union[ResourceRequirements, dict]] = None,
                     task_info: Optional[Dict[str, Any]] = None):
         """Send inputs to be computed
 
         Args:
-            *input_args (Any): Positional arguments to a function
-            method (str): Name of the method to run. Optional
-            input_kwargs (dict): Any keyword arguments for the function being run
-            keep_inputs (bool): Whether to override the
-            topic (str): Topic for the queue, which sets the topic for the result.
-            task_info (dict): Any information used for task tracking
+            *input_args: Positional arguments to a function
+            method: Name of the method to run. Optional
+            input_kwargs: Any keyword arguments for the function being run
+            keep_inputs: Whether to override the
+            topic: Topic for the queue, which sets the topic for the result.
+            resources: Suggestions for how many resources to use for the task
+            task_info: Any information used for task tracking
         """
 
         # Make fake kwargs, if needed
@@ -365,6 +368,7 @@ class ClientQueues:
             keep_inputs=_keep_inputs,
             serialization_method=self.serialization_method,
             task_info=task_info,
+            resources=resources or ResourceRequirements(),  # Takes either the user specieded or a default
             **proxystore_kwargs
         )
 

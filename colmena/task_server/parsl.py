@@ -3,6 +3,7 @@ import os
 import shlex
 import logging
 import platform
+import shutil
 from concurrent.futures import Future
 from functools import partial, update_wrapper
 from pathlib import Path
@@ -51,7 +52,6 @@ def _execute_preprocess(task: ExecutableTask, result: Result) -> Tuple[Result, P
     result.mark_compute_started()
 
     # Unpack the inputs
-    serialized_inputs = result.inputs  # Hold a copy of the serialized inputs
     result.time_deserialize_inputs = result.deserialize()
 
     # Start resolving any proxies in the input asynchronously
@@ -78,14 +78,13 @@ def _execute_preprocess(task: ExecutableTask, result: Result) -> Tuple[Result, P
     # Record the time required to perform the pre-processing
     result.additional_timing['exec_preprocess'] = end_time - start_time
 
-    # Put the serialized value back so we need not re-serialize the Result object
-    #  TODO (wardlt): The inputs are no longer needed at this point, is there a way to drop them if desired
-    result.inputs = serialized_inputs
+    # Remove the inputs. We don't need to send them back to the manager (the manager already knows what it sent out)
+    result.inputs = ((), {})
 
     return result, temp_dir, output
 
 
-def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result, temp_dir: Path):
+def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result, temp_dir: Path, serialized_inputs: str):
     """Execute the post-processing function after an executable completes
 
     Args:
@@ -93,6 +92,8 @@ def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result,
         exec_time: Output from the exec function
         result: Storage for the result data
         temp_dir: Path to the run directory on the remote system
+        serialized_inputs: Copy of the serialized inputs
+            The ``Result`` object is currently without a copy of the inputs
     """
 
     # Store the run time in the result object
@@ -103,6 +104,7 @@ def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result,
     try:
         output = task.postprocess(temp_dir)
         result.success = True
+        shutil.rmtree(temp_dir)
     except BaseException as e:
         output = None
         result.success = False
@@ -122,12 +124,16 @@ def _execute_postprocess(task: ExecutableTask, exec_time: float, result: Result,
     # Re-pack the results (will use proxystore, if able)
     result.time_serialize_results = result.serialize()
 
+    # Put the serialized inputs back, if desired
+    if result.keep_inputs:
+        result.inputs = serialized_inputs
+
     return result
 
 
 def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str],
                      stdin: Optional[str], cpu_process_type: str, *,
-                     stdout: str, stderr: str, pre_exec: str = [], **kwargs) -> str:
+                     stdout: str, stderr: str, pre_exec: str = None, **kwargs) -> str:
     """Execute the executable step of an executable task
 
     This function is executed after :meth:`__execute_preprocess` has completed, which means
@@ -173,6 +179,7 @@ def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str]
 
 def _preprocess_callback(
         preprocess_future: Future,
+        serialized_inputs: str,
         result: Result,
         task_server: 'ParslTaskServer',
         topic: str,
@@ -187,6 +194,8 @@ def _preprocess_callback(
 
     Args:
         preprocess_future: Future provided when submitting pre-process task to Parsl
+        serialized_inputs: Original inputs, still in serialized form.
+            We deserialize the inputs in `_execute_preprocess` and do not pass the input data back to this callback function to minimize data sent.
         result: Result object to be gradually updated
         task_server: Connection to the Parsl task server. Used to send results back to client
         topic: Topic of the task
@@ -203,20 +212,37 @@ def _preprocess_callback(
 
     # If unsuccessful, send the results back to the client
     if result.success is not None and not result.success:
+
         logger.info('Result failed during preprocessing. Sending back to client.')
+
+        # Send the serialized inputs back to the client if they are expected
+        if result.keep_inputs:
+            result.inputs = serialized_inputs
+
+        # Store the time it took to run the preprocessing
         result.time_running = result.additional_timing.get('exec_preprocess', 0)
         return task_server.queues.send_result(result, topic)
 
     # If successful, submit the execute step and pass its result to Parsl
     logger.info(f'Preprocessing was successful for {result.method} task. Submitting to execute')
+
     exec_future: Future = execute_fun(temp_dir, exec_args, exec_stdin,
                                       stdout=str(temp_dir / 'colmena.stdout'),
                                       stderr=str(temp_dir / 'colmena.stderr'),
                                       **result.resources.dict())
 
-    # Submit post-process to follow up
-    post_future: Future = postprocess_fun(exec_future, result, temp_dir)
-    post_future.add_done_callback(lambda x: task_server.perform_callback(x, result, topic))
+    # Submit post-process to collect the results of the exec_function
+    post_future: Future = postprocess_fun(exec_future, result, temp_dir, serialized_inputs if result.keep_inputs else None)
+
+    # Once that function completes, you are ready to submit the task back to the client
+    def _send_back(future: Future):
+        # Send the results back to the client, if desired
+        #  This is only used if the task fails. (Otherwise, the copy of "result" held in the future is used)
+        if result.keep_inputs:
+            result.inputs = serialized_inputs
+        return task_server.perform_callback(future, result, topic)
+
+    post_future.add_done_callback(_send_back)
 
 
 class ParslTaskServer(FutureBasedTaskServer):
@@ -246,15 +272,44 @@ class ParslTaskServer(FutureBasedTaskServer):
 
     **Technical Details**
 
-    The task server stores each of the supplied methods as Parsl "PythonApp" classes.
-    Tasks are launched using these PythonApps after being received on the queue.
-    The Future provided when requesting the method invocation is then passed
-    to second PythonApp that pushes the result of the function to the output
-    queue after it completes.
-    That second, "output_result," function runs on threads of the same
-    process as this task server.
-    There is also a separate thread that monitors for Futures that yield an error
-    before the "output_result" function and sends back the error messages.
+    The task server stores each of the supplied methods as Parsl "Apps".
+    Tasks are launched on remote workers by calling these Apps,
+    and results are placed in the result queue by callbacks attached the resultant Parsl Futures.
+
+    The behavior of an :class:`ExecutableTask` involves several Apps and callbacks.
+
+    1. A :class:`PythonApp` to invoke the "preprocessing" function that is given the :class:`Result`.
+
+       The app produces a path to a temporary run directory containing the input files,
+       content for the standard input of the executable,
+       and an updated copy of the :class:`Result` object containing timing information.
+
+       Note that the :class:`Result` object returned by this app lacks the inputs to reduce communication costs.
+
+       Once complete (successfully or not), it invokes a callback which launches the next two tasks
+       and creates the next callback.
+       In the even of an unsuccessful execution, the callback function returns the failure information to the client and exits.
+
+    2. A :class:`BashApp` to run the executable that is given the path to the run directory
+       and the list of resources required for executing the task.
+
+       It produces only the execution time as the output.
+
+       There is no callback for app.
+
+    3. A :class:`PythonApp` to store the results of the execution that is given the execution time,
+       a copy of the :class:`Result` object produced by the preprocessing,
+       the path to the run directory,
+       and a serialized version of the inputs to the app.
+
+       The application parses the outputs from the execution, stores them in the :class:`Result` object,
+       and then serializes results for transmission back to the client.
+       The application also re-inserts the inputs if they are required to be sent back to the client.
+
+       The callback for this function submits the outputs, if successful, or any failure information, if not, to the result queue.
+
+    Every one of the Apps is run on the remote system as they may involve manipulating files
+    on the remote system.
     """
 
     def __init__(self, methods: List[Union[Callable, Tuple[Callable, Dict]]],
@@ -348,6 +403,7 @@ class ParslTaskServer(FutureBasedTaskServer):
 
         # Submit the application
         function, func_type = self.methods_[method]
+        serialized_inputs = task.inputs  # Hold a copy of the original inputs. Used for "exec" apps to minimize
         future: Future = function(task)
         logger.debug('Pushed task to Parsl')
         # TODO (wardlt): Implement "resubmit if task returns a new future." or the ability to launch Parsl workflows with >1 step
@@ -359,7 +415,7 @@ class ParslTaskServer(FutureBasedTaskServer):
         elif func_type == 'exec':
             # For executable functions, we have a different route for returning results
             exec_app, post_app = self.exec_apps_[method]
-            future.add_done_callback(lambda x: _preprocess_callback(x, task, self, topic, exec_app, post_app))
+            future.add_done_callback(lambda x: _preprocess_callback(x, serialized_inputs, task, self, topic, exec_app, post_app))
             return None  # `None` prevents the Task Server from adding its own callback
         else:
             raise ValueError(f'Unrecognized function type: {func_type}')

@@ -369,8 +369,8 @@ class ExecutableTask:
     MPI Executables
     ---------------
 
-    Launching an MPI executable requires two parts: a path to an executable and a preamble definig how to launch it.
-    Defining an MPI application using the instructions defined above and then set the :attr:`mpi` attribute to ``True``.
+    Launching an MPI executable requires two parts: a path to an executable and a preamble defining how to launch it.
+    Defining an MPI application using the instructions described above and then set the :attr:`mpi` attribute to ``True``.
     This will tell the Colmena task server to look for a "preamble" for how to launch the application.
 
     You may need to supply an MPI command invocation recipe for your particular cluster, depending on your choice of task server.
