@@ -368,7 +368,7 @@ class ClientQueues:
             keep_inputs=_keep_inputs,
             serialization_method=self.serialization_method,
             task_info=task_info,
-            resources=resources or ResourceRequirements(),  # Takes either the user specieded or a default
+            resources=resources or ResourceRequirements(),  # Takes either the user specified or a default
             **proxystore_kwargs
         )
 

@@ -223,3 +223,17 @@ def test_kill_signal():
     client.send_kill_signal()
     with pytest.raises(KillSignalException):
         server.get_task()
+
+
+def test_resources():
+    client, server = make_queue_pairs('localhost', keep_inputs=False)
+
+    # Test with defaults
+    client.send_inputs(1)
+    topic, result = server.get_task()
+    assert result.resources.node_count == 1
+
+    # Test with non-defaults
+    client.send_inputs(1, resources={'node_count': 2})
+    topic, result = server.get_task()
+    assert result.resources.node_count == 2
