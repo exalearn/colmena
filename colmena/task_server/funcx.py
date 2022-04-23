@@ -74,9 +74,9 @@ class FuncXTaskServer(FutureBasedTaskServer):
             logger.info('Caught an task that failed due to a lost manager. Resubmitting')
             self.process_queue(topic, result)
         else:
-            super(FuncXTaskServer, self)._perform_callback(future, result, topic)
+            super()._perform_callback(future, result, topic)
 
-    def _submit(self, task: Result) -> Future:
+    def _submit(self, task: Result, topic: str) -> Future:
         # Lookup the appropriate function ID and endpoint
         func, endp_id = self.registered_funcs[task.method]
 
