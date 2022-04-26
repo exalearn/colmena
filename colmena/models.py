@@ -13,6 +13,7 @@ from tempfile import TemporaryDirectory
 from time import perf_counter
 from traceback import TracebackException
 from typing import Any, Tuple, Dict, Optional, Union, List
+from uuid import uuid4
 
 from pydantic import BaseModel, Field, Extra
 
@@ -114,6 +115,7 @@ class Result(BaseModel):
     """
 
     # Core result information
+    task_id: str = Field(default_factory=lambda: str(uuid4()), description='Unique identifier for each task')
     inputs: Union[Tuple[Tuple[Any, ...], Dict[str, Any]], str] = \
         Field(None, description="Input to a function. Positional and keyword arguments. The `str` data type "
                                 "is for internal use and is used when communicating serialized objects.")
