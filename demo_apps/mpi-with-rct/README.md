@@ -1,5 +1,7 @@
 # Colmena with Ensembles Involving MPI Tasks
 
+> This example is a work in progress. You can run it with the standard Parsl backend but RCT support is underway
+
 Most HPC using are built using the Message Passing Interface (MPI),
 which creates certain challenges in using them in Colmena.
 MPI applications are must be invoked using a separate "launcher" application (e.g., `mpiexec`) that 
