@@ -1,6 +1,6 @@
 # Colmena
 
-[![Build Status](https://app.travis-ci.com/exalearn/colmena.svg?branch=master)](https://app.travis-ci.com/exalearn/colmena)
+[![CI](https://github.com/exalearn/colmena/actions/workflows/CI.yml/badge.svg)](https://github.com/exalearn/colmena/actions/workflows/CI.yml)
 [![Documentation Status](https://readthedocs.org/projects/colmena/badge/?version=latest)](https://colmena.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://badge.fury.io/py/colmena.svg)](https://badge.fury.io/py/colmena)
 
