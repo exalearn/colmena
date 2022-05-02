@@ -68,6 +68,18 @@ def test_allocations(rec):
     assert rec.allocated_slots("sim") == 0
     assert rec.allocated_slots("ml") == 8
 
+    # Test out non-blocking re-allocator
+    trigger = Event()
+    rec.reallocate("ml", "sim", 8, block=False, callback=trigger.set)  # Will not immediately complete as there are reserved ML slotes
+    sleep(0.1)
+    assert not trigger.is_set()
+    assert rec.allocated_slots("ml") == 8
+
+    rec.release("ml", 4)  # Release so that the reallocation can complete
+    sleep(0.1)
+    assert trigger.is_set()
+    assert rec.allocated_slots("ml") == 8
+
 
 def test_reallocator(rec):
     # Start with everything allocated to "simulation"
