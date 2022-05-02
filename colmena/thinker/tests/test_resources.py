@@ -78,7 +78,7 @@ def test_allocations(rec):
     rec.release("ml", 4)  # Release so that the reallocation can complete
     sleep(0.1)
     assert trigger.is_set()
-    assert rec.allocated_slots("ml") == 8
+    assert rec.allocated_slots("sim") == 8
 
 
 def test_reallocator(rec):
