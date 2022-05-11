@@ -6,7 +6,6 @@ from parsl.config import Config
 from pytest import fixture, mark
 import proxystore as ps
 
-
 from colmena.models import ResourceRequirements
 from .test_base import EchoTask, FakeMPITask
 from colmena.redis.queue import ClientQueues, make_queue_pairs
@@ -192,3 +191,4 @@ def test_proxy(server_and_queue):
     result = queue.get_result()
     assert result.success, result.failure_info.exception
     assert len(result.proxy_timing) == 1  # There is one proxy to resolve
+    assert len(result.json()) > 0
