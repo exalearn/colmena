@@ -3,7 +3,7 @@ import logging
 import warnings
 import proxystore as ps
 
-from typing import Any, Union
+from typing import Any, Union, NoReturn, List
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def proxy_json_encoder(proxy: ps.proxy.Proxy) -> Any:
     return f"<Unresolved Proxy at {hex(id(proxy))}>"
 
 
-def resolve_proxies_async(args: Union[object, list, tuple, dict]) -> None:
+def resolve_proxies_async(args: Union[object, list, tuple, dict]) -> List[ps.proxy.Proxy]:
     """Begin asynchronously resolving all proxies in input
 
     Scan inputs for instances of `Proxy` and begin asynchronously resolving.
@@ -70,9 +70,18 @@ def resolve_proxies_async(args: Union[object, list, tuple, dict]) -> None:
     Args:
         args (object, list, tuple, dict): possible object or
             iterable of objects that may be ObjectProxy instances
+
+    Returns:
+        List of the proxies that are being resolved
     """
-    def resolve_async_if_proxy(obj: Any) -> None:
+
+    # Create a list to store the keys
+    output = []
+
+    # Make a function that will resolve proxies
+    def resolve_async_if_proxy(obj: Any) -> NoReturn:
         if isinstance(obj, ps.proxy.Proxy):
+            output.append(obj)
             ps.proxy.resolve_async(obj)
 
     if isinstance(args, ps.proxy.Proxy):
@@ -83,3 +92,4 @@ def resolve_proxies_async(args: Union[object, list, tuple, dict]) -> None:
     elif isinstance(args, dict):
         for x in args:
             resolve_async_if_proxy(args[x])
+    return output

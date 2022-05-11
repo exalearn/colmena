@@ -16,12 +16,15 @@ from typing import Any, Tuple, Dict, Optional, Union, List
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, Extra
-
+from pydantic.dataclasses import dataclass as pyddataclass
 import proxystore as ps
 
 from colmena.proxy import proxy_json_encoder
 
 logger = logging.getLogger(__name__)
+
+
+ProxyTimeStats = pyddataclass(ps.store.base.TimeStats)
 
 
 # TODO (wardlt): Merge with FuncX's approach?
@@ -148,14 +151,15 @@ class Result(BaseModel):
 
     additional_timing: dict = Field(default_factory=dict,
                                     description="Timings recorded by a TaskServer that are not defined by above")
+    proxy_timing: Dict[str, Dict[str, ProxyTimeStats]] = Field(default_factory=dict,
+                                                               description='Timings related to resolving ProxyStore proxies on the compute worker')
 
     # Serialization options
     serialization_method: SerializationMethod = Field(SerializationMethod.JSON,
                                                       description="Method used to serialize input data")
     keep_inputs: bool = Field(True, description="Whether to keep the inputs with the result object or delete "
                                                 "them after the method has completed")
-    proxystore_name: Optional[str] = Field(None,
-                                           description="Name of ProxyStore backend yo use for transferring large objects")
+    proxystore_name: Optional[str] = Field(None, description="Name of ProxyStore backend you use for transferring large objects")
     proxystore_type: Optional[str] = Field(None, description="Type of ProxyStore backend being used")
     proxystore_kwargs: Optional[Dict] = Field(None, description="Kwargs to reinitialize ProxyStore backend")
     proxystore_threshold: Optional[int] = Field(None,

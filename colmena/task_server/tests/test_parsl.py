@@ -4,6 +4,8 @@ from typing import Tuple
 from parsl import HighThroughputExecutor
 from parsl.config import Config
 from pytest import fixture, mark
+import proxystore as ps
+
 
 from colmena.models import ResourceRequirements
 from .test_base import EchoTask, FakeMPITask
@@ -13,6 +15,10 @@ from colmena.task_server.parsl import ParslTaskServer
 
 def f(x):
     return x + 1
+
+
+def capitalize(x: str):
+    return x.upper()
 
 
 def bad_task(x):
@@ -28,7 +34,7 @@ def count_nodes(x, _resources: ResourceRequirements):
 def config():
     return Config(
         executors=[
-            HighThroughputExecutor(label="local_threads")
+            HighThroughputExecutor()
         ],
         strategy=None,
     )
@@ -36,12 +42,18 @@ def config():
 
 # Make a simple task server
 @fixture(autouse=True)
-def server_and_queue(config) -> Tuple[ParslTaskServer, ClientQueues]:
-    client_q, server_q = make_queue_pairs('localhost', clean_slate=True)
-    server = ParslTaskServer([f, bad_task, EchoTask(), FakeMPITask(), count_nodes], server_q, config)
+def server_and_queue(config, tmpdir) -> Tuple[ParslTaskServer, ClientQueues]:
+    # Make a proxy store for larger objects
+    ps.store.init_store(ps.store.STORES.REDIS, name='store', hostname='localhost', port=6379, stats=True)
+
+    client_q, server_q = make_queue_pairs('localhost', clean_slate=True,
+                                          proxystore_name='store', proxystore_threshold=5000,
+                                          serialization_method='pickle')
+    server = ParslTaskServer([f, capitalize, bad_task, EchoTask(), FakeMPITask(), count_nodes], server_q, config)
     yield server, client_q
     if server.is_alive():
-        server.terminate()
+        client_q.send_kill_signal()
+        server.join(timeout=30)
 
 
 @mark.timeout(30)
@@ -164,3 +176,19 @@ def test_resources(server_and_queue):
     result = queue.get_result()
     assert result.success
     assert result.value == 2
+
+
+@mark.timeout(30)
+def test_proxy(server_and_queue):
+    """Test a task that uses proxies"""
+
+    # Start the server
+    server, queue = server_and_queue
+    server.start()
+
+    # Send a big task
+    big_string = "a" * 10000
+    queue.send_inputs(big_string, method='capitalize')
+    result = queue.get_result()
+    assert result.success, result.failure_info.exception
+    assert len(result.proxy_timing) == 1  # There is one proxy to resolve
