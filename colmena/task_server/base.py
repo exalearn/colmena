@@ -215,5 +215,7 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
             # Store the data along with the stats
             result.proxy_timing[key] = stats
+        else:
+            result.proxy_timing[key] = {}
 
     return result
