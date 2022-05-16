@@ -1,5 +1,5 @@
 """Tests for the Parsl implementation of the task server"""
-from typing import Tuple
+from typing import Tuple, List
 
 from parsl import HighThroughputExecutor
 from parsl.config import Config
@@ -16,8 +16,8 @@ def f(x):
     return x + 1
 
 
-def capitalize(x: str):
-    return x.upper()
+def capitalize(y: List[str], x: str):
+    return x.upper(), [i.lower() for i in y]
 
 
 def bad_task(x):
@@ -38,13 +38,14 @@ def config():
         strategy=None,
     )
 
+# Make a proxy store for larger objects
+@fixture()
+def store():
+    return ps.store.init_store(ps.store.STORES.REDIS, name='store', hostname='localhost', port=6379, stats=True)
 
-# Make a simple task server
 @fixture(autouse=True)
-def server_and_queue(config, tmpdir) -> Tuple[ParslTaskServer, ClientQueues]:
-    # Make a proxy store for larger objects
-    ps.store.init_store(ps.store.STORES.REDIS, name='store', hostname='localhost', port=6379, stats=True)
-
+def server_and_queue(config, store) -> Tuple[ParslTaskServer, ClientQueues]:
+    """Make a simple task server"""
     client_q, server_q = make_queue_pairs('localhost', clean_slate=True,
                                           proxystore_name='store', proxystore_threshold=5000,
                                           serialization_method='pickle')
@@ -178,7 +179,7 @@ def test_resources(server_and_queue):
 
 
 @mark.timeout(30)
-def test_proxy(server_and_queue):
+def test_proxy(server_and_queue, store):
     """Test a task that uses proxies"""
 
     # Start the server
@@ -187,8 +188,18 @@ def test_proxy(server_and_queue):
 
     # Send a big task
     big_string = "a" * 10000
-    queue.send_inputs(big_string, method='capitalize')
+    little_string = "A" * 10000
+    queue.send_inputs([little_string], big_string, method='capitalize')
     result = queue.get_result()
     assert result.success, result.failure_info.exception
-    assert len(result.proxy_timing) == 1  # There is one proxy to resolve
+    assert len(result.proxy_timing) == 2  # There are two proxies to resolve
+
+    # Proxy the results ahead of time
+    little_proxy = store.proxy(little_string)
+
+    queue.send_inputs([little_proxy], big_string, method='capitalize')
+    result = queue.get_result()
+    assert result.success, result.failure_info.exception
+    assert len(result.proxy_timing) == 2  # There is one proxy to resolve
     assert len(result.json()) > 0
+
