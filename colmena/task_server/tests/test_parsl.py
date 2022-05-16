@@ -38,10 +38,12 @@ def config():
         strategy=None,
     )
 
+
 # Make a proxy store for larger objects
 @fixture()
 def store():
     return ps.store.init_store(ps.store.STORES.REDIS, name='store', hostname='localhost', port=6379, stats=True)
+
 
 @fixture(autouse=True)
 def server_and_queue(config, store) -> Tuple[ParslTaskServer, ClientQueues]:
@@ -202,4 +204,3 @@ def test_proxy(server_and_queue, store):
     assert result.success, result.failure_info.exception
     assert len(result.proxy_timing) == 2  # There is one proxy to resolve
     assert len(result.json()) > 0
-
