@@ -88,8 +88,8 @@ def resolve_proxies_async(args: Union[object, list, tuple, dict]) -> List[ps.pro
         resolve_async_if_proxy(args)
     elif isinstance(args, list) or isinstance(args, tuple):
         for x in args:
-            output.extend(resolve_proxies_async(x))
+            resolve_async_if_proxy(x)
     elif isinstance(args, dict):
         for x in args:
-            output.extend(resolve_proxies_async(args[x]))
+            resolve_async_if_proxy(args[x])
     return output

@@ -164,8 +164,11 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Start resolving any proxies in the input asynchronously
     start_time = perf_counter()
-    proxies = resolve_proxies_async(result.args)
-    proxies.extend(resolve_proxies_async(result.kwargs))
+    proxies = []
+    for arg in result.args:
+        proxies.extend(resolve_proxies_async(arg))
+    for value in result.kwargs.values():
+        proxies.extend(resolve_proxies_async(value))
     result.time_async_resolve_proxies = perf_counter() - start_time
 
     # Execute the function

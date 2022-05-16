@@ -16,7 +16,7 @@ def f(x):
     return x + 1
 
 
-def capitalize(y: List[str], x: str):
+def capitalize(y: List[str], x: str, **kwargs):
     return x.upper(), [i.lower() for i in y]
 
 
@@ -202,5 +202,11 @@ def test_proxy(server_and_queue, store):
     queue.send_inputs([little_proxy], big_string, method='capitalize')
     result = queue.get_result()
     assert result.success, result.failure_info.exception
-    assert len(result.proxy_timing) == 2  # There is one proxy to resolve
-    assert len(result.json()) > 0
+    assert len(result.proxy_timing) == 2
+
+    # Try it with a kwarg
+    queue.send_inputs(['a'], big_string, input_kwargs={'little': little_proxy}, method='capitalize',
+                      keep_inputs=False)  # TODO (wardlt): test does not work with keep-inputs=True
+    result = queue.get_result()
+    assert result.success, result.failure_info.exception
+    assert len(result.proxy_timing) == 2
