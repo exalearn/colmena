@@ -2,12 +2,15 @@
 import logging
 import os
 import platform
+from dataclasses import asdict
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import Future
 from inspect import signature
 from multiprocessing import Process
 from time import perf_counter
 from typing import Optional, Callable
+
+import proxystore as ps
 
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.models import Result, FailureInformation
@@ -161,8 +164,11 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Start resolving any proxies in the input asynchronously
     start_time = perf_counter()
-    resolve_proxies_async(result.args)
-    resolve_proxies_async(result.kwargs)
+    proxies = []
+    for arg in result.args:
+        proxies.extend(resolve_proxies_async(arg))
+    for value in result.kwargs.values():
+        proxies.extend(resolve_proxies_async(value))
     result.time_async_resolve_proxies = perf_counter() - start_time
 
     # Execute the function
@@ -198,5 +204,21 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Re-pack the results
     result.time_serialize_results = result.serialize()
+
+    # Get the statistics for the proxy resolution
+    for proxy in proxies:
+        store = ps.store.get_store(proxy)
+        if store.has_stats:
+            # Get the stats and convert them to a JSON-serializable form
+            stats = store.stats(proxy)
+            stats = dict((k, asdict(v)) for k, v in stats.items())
+
+            # Get the key associated with this proxy
+            key = ps.proxy.get_key(proxy)
+
+            # Store the data along with the stats
+            result.proxy_timing[key] = stats
+        else:
+            result.proxy_timing[key] = {}
 
     return result

@@ -1,9 +1,10 @@
 """Tests for the Parsl implementation of the task server"""
-from typing import Tuple
+from typing import Tuple, List
 
 from parsl import HighThroughputExecutor
 from parsl.config import Config
 from pytest import fixture, mark
+import proxystore as ps
 
 from colmena.models import ResourceRequirements
 from .test_base import EchoTask, FakeMPITask
@@ -13,6 +14,10 @@ from colmena.task_server.parsl import ParslTaskServer
 
 def f(x):
     return x + 1
+
+
+def capitalize(y: List[str], x: str, **kwargs):
+    return x.upper(), [i.lower() for i in y]
 
 
 def bad_task(x):
@@ -28,20 +33,29 @@ def count_nodes(x, _resources: ResourceRequirements):
 def config():
     return Config(
         executors=[
-            HighThroughputExecutor(label="local_threads")
+            HighThroughputExecutor()
         ],
         strategy=None,
     )
 
 
-# Make a simple task server
+# Make a proxy store for larger objects
+@fixture()
+def store():
+    return ps.store.init_store(ps.store.STORES.REDIS, name='store', hostname='localhost', port=6379, stats=True)
+
+
 @fixture(autouse=True)
-def server_and_queue(config) -> Tuple[ParslTaskServer, ClientQueues]:
-    client_q, server_q = make_queue_pairs('localhost', clean_slate=True)
-    server = ParslTaskServer([f, bad_task, EchoTask(), FakeMPITask(), count_nodes], server_q, config)
+def server_and_queue(config, store) -> Tuple[ParslTaskServer, ClientQueues]:
+    """Make a simple task server"""
+    client_q, server_q = make_queue_pairs('localhost', clean_slate=True,
+                                          proxystore_name='store', proxystore_threshold=5000,
+                                          serialization_method='pickle')
+    server = ParslTaskServer([f, capitalize, bad_task, EchoTask(), FakeMPITask(), count_nodes], server_q, config)
     yield server, client_q
     if server.is_alive():
-        server.terminate()
+        client_q.send_kill_signal()
+        server.join(timeout=30)
 
 
 @mark.timeout(30)
@@ -164,3 +178,35 @@ def test_resources(server_and_queue):
     result = queue.get_result()
     assert result.success
     assert result.value == 2
+
+
+@mark.timeout(30)
+def test_proxy(server_and_queue, store):
+    """Test a task that uses proxies"""
+
+    # Start the server
+    server, queue = server_and_queue
+    server.start()
+
+    # Send a big task
+    big_string = "a" * 10000
+    little_string = "A" * 10000
+    queue.send_inputs([little_string], big_string, method='capitalize')
+    result = queue.get_result()
+    assert result.success, result.failure_info.exception
+    assert len(result.proxy_timing) == 2  # There are two proxies to resolve
+
+    # Proxy the results ahead of time
+    little_proxy = store.proxy(little_string)
+
+    queue.send_inputs([little_proxy], big_string, method='capitalize')
+    result = queue.get_result()
+    assert result.success, result.failure_info.exception
+    assert len(result.proxy_timing) == 2
+
+    # Try it with a kwarg
+    queue.send_inputs(['a'], big_string, input_kwargs={'little': little_proxy}, method='capitalize',
+                      keep_inputs=False)  # TODO (wardlt): test does not work with keep-inputs=True
+    result = queue.get_result()
+    assert result.success, result.failure_info.exception
+    assert len(result.proxy_timing) == 2
