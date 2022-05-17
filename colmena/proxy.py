@@ -3,7 +3,7 @@ import logging
 import warnings
 import proxystore as ps
 
-from typing import Any, Union, NoReturn, List
+from typing import Any, Union, List
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ def resolve_proxies_async(args: Union[object, list, tuple, dict]) -> List[ps.pro
     output = []
 
     # Make a function that will resolve proxies
-    def resolve_async_if_proxy(obj: Any) -> NoReturn:
+    def resolve_async_if_proxy(obj: Any) -> None:
         if isinstance(obj, ps.proxy.Proxy):
             output.append(obj)
             ps.proxy.resolve_async(obj)
