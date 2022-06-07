@@ -123,6 +123,8 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
             # If not, the result object is the one we need
             result = future.result()
 
+        result.mark_task_received()
+
         # Put them back in the pipe with the proper topic
         self.queues.send_result(result, topic)
 
@@ -201,6 +203,8 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
             worker_info[tag] = os.environ[tag]
     worker_info['hostname'] = platform.node()
     result.worker_info = worker_info
+
+    result.mark_compute_ended()
 
     # Re-pack the results
     result.time_serialize_results = result.serialize()
