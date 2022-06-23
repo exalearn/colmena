@@ -28,7 +28,7 @@ class ExampleThinker(BaseThinker):
 
     @agent
     def function(self):
-        self.flag.wait(timeout=3)
+        self.flag.wait()
 
     @result_processor
     def process_results(self, result: Result):
@@ -36,8 +36,9 @@ class ExampleThinker(BaseThinker):
 
     @task_submitter(n_slots='n_slots')  # Look it up from the class attribute at runtime
     def submit_task(self):
-        assert self.rec.available_slots(None) == 0
+        assert self.rec.available_slots(None) >= 0
         self.submitted = True
+        sleep(0.1)  # Used to prevent a race condition with responder. By the time this event finishes
 
     @event_responder(event_name='event', reallocate_resources=True, max_slots='n_slots',
                      gather_from=None, gather_to="event", disperse_to="event")
@@ -108,6 +109,7 @@ def test_run(queues):
     assert not th.event.is_set()
     assert not th.event_responded
     th.event.set()
+    sleep(0.1)  # Give enough time for this thread to start up before releasing resources
     for _ in range(3):
         th.rec.release(None, 1)  # Repeat as submit_task/responder are competing for resources
     sleep(0.1)
@@ -116,7 +118,16 @@ def test_run(queues):
     assert th.rec.available_slots("event") >= 1
     assert not th.event.is_set()
 
-    # Set the "finish" flag
+    # Set the "finish" flag after sending a result out
+    client.send_inputs(1)
     flag.set()
-    sleep(2)
+    sleep(1)
+    assert th.is_alive()
+
+    # The system should not exit until all results are back
+    _, task = server.get_task()
+    task.set_result(4)
+    server.send_result(task)
+    assert th.queues.wait_until_done(timeout=2)
+    sleep(0.1)
     assert not th.is_alive()
