@@ -2,7 +2,8 @@
 
 import logging
 from collections import defaultdict
-from typing import Optional, Any, Tuple, Dict, Iterable, Union
+from threading import Event, Lock
+from typing import Optional, Any, Tuple, Dict, Iterable, Union, Set
 
 import redis
 
@@ -215,12 +216,10 @@ class ClientQueues:
 
     This queue wraps communication with the underlying Redis queue and also handles communicating
     requests using the :class:`Result` messaging format.
-    Method requests are encoded in the Result format along with any options (e.g., serialization method)
-    for the communication and automatically serialized.
-    Results are automatically de-serialized upon receipt.
+    The inputs are serialized before sending and deserialized on the worker.
+    Results are serialized by the worker and automatically de-serialized upon receipt.
 
-    The queue also generates stores task performance results, such as the timestamp for when messages were created
-    and runtime for serialization.
+    The total number of outstanding requests is available as the ``active_count`` property.
     """
 
     def __init__(self, hostname: str, port: int = 6379, password: str = None, name: Optional[str] = None,
@@ -315,13 +314,32 @@ class ClientQueues:
         self.outbound.connect()
         self.inbound.connect()
 
+        # Create a collection that holds the task which have been sent out, and an event that is triggered
+        #  when the last task being sent out hits zero
+        self._active_lock = Lock()
+        self._active_tasks: Set[str] = set()
+        self._all_complete = Event()
+
+    @property
+    def active_count(self) -> int:
+        """Number of active tasks"""
+        return len(self._active_tasks)
+
+    def wait_until_done(self, timeout: Optional[float] = None):
+        """Wait until all out-going tasks have completed
+
+        Returns:
+            Whether the event was set within the timeout
+        """
+        return self._all_complete.wait(timeout=timeout)
+
     def send_inputs(self, *input_args: Any,
                     method: str = None,
                     input_kwargs: Optional[Dict[str, Any]] = None,
                     keep_inputs: Optional[bool] = None,
                     topic: str = 'default',
                     resources: Optional[Union[ResourceRequirements, dict]] = None,
-                    task_info: Optional[Dict[str, Any]] = None):
+                    task_info: Optional[Dict[str, Any]] = None) -> str:
         """Send inputs to be computed
 
         Args:
@@ -332,6 +350,8 @@ class ClientQueues:
             topic: Topic for the queue, which sets the topic for the result.
             resources: Suggestions for how many resources to use for the task
             task_info: Any information used for task tracking
+        Returns:
+            Task ID
         """
 
         # Make fake kwargs, if needed
@@ -374,8 +394,14 @@ class ClientQueues:
 
         # Push the serialized value to the task server
         result.time_serialize_inputs = result.serialize()
-        self.outbound.put(result.json(exclude_unset=True), topic=topic)
+        self.outbound.put(result.json(), topic=topic)
         logger.info(f'Client sent a {method} task with topic {topic}')
+
+        # Store the task ID in the active list
+        with self._active_lock:
+            self._active_tasks.add(result.task_id)
+            self._all_complete.clear()
+        return result.task_id
 
     def get_result(self, timeout: Optional[int] = None, topic: Optional[str] = None) -> Optional[Result]:
         """Get a value from the MethodServer
@@ -403,6 +429,12 @@ class ClientQueues:
 
         # Some logging
         logger.info(f'Client received a {result_obj.method} result with topic {topic}')
+
+        # Update the list of active tasks
+        with self._active_lock:
+            self._active_tasks.remove(result_obj.task_id)
+            if len(self._active_tasks) == 0:
+                self._all_complete.set()
 
         return result_obj
 

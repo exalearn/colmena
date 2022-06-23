@@ -87,8 +87,11 @@ def test_run(queues):
     assert not th.done.is_set()
 
     # Test task processor: Push a result to the queue and make sure it was received
-    server.send_result(Result(inputs=((1,), {}), value=4))
-    sleep(.1)
+    client.send_inputs(1)
+    _, task = server.get_task()
+    task.set_result(4)
+    server.send_result(task)
+    sleep(0.1)
     assert th.last_value == 4
 
     # Test task submitter: Release the nodes and see if it submits
