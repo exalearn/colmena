@@ -223,22 +223,21 @@ def _launch_agent(func: Callable, thinker: 'BaseThinker') -> Tuple[bool, Optiona
     thinker.logger.info(f'{name} started')
 
     # Launch it
-    was_exc = False
-    exc = None
+    exc_data = None
     try:
         func(thinker)
     except BaseException as exc:
         thinker.logger.error(f'Raised an exception. {exc}')
-        was_exc = True
+        exc_data = exc
 
     # If a "critical" function, set the "done" flag
-    if was_exc or not getattr(func, '_colmena_startup', False):
+    if exc_data is not None or not getattr(func, '_colmena_startup', False):
         thinker.done.set()
 
     # Mark that the thread has crashed
     thinker.logger.info(f'{name} completed')
 
-    return not was_exc, exc, func
+    return exc_data is None, exc_data, func
 
 
 class _AgentData(local):

@@ -131,3 +131,31 @@ def test_run(queues):
     assert th.queues.wait_until_done(timeout=2)
     sleep(0.1)
     assert not th.is_alive()
+
+
+@mark.timeout(5)
+def test_exception(queues):
+    """Verify that thinkers stop properly with an exception"""
+
+    client, server = queues
+
+    # Make a thinker that will fail on startup
+    class BadThinker(BaseThinker):
+
+        def __init__(self, queues):
+            super().__init__(queues)
+            self.flag = Event()
+            self.was_set = False
+
+        @event_responder(event_name='flag')
+        def do_nothing(self):
+            self.was_set = False
+            pass
+
+        @agent(startup=True)
+        def fail(self):
+            raise ValueError()
+
+    # Will only exit within a timeout if the exception is properly set
+    thinker = BadThinker(client)
+    thinker.run()
