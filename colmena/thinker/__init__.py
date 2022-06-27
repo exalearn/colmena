@@ -123,8 +123,10 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
 
     # Loop until the thinker is completed
     reallocator_thread: Optional[ReallocatorThread] = None
+    thinker.logger.info(f'Configured and waiting for {event_name} to be set')
     while not thinker.done.is_set():
         if event.wait(_DONE_REACTION_TIME):
+            thinker.logger.info(f'Event {event_name} has been triggered')
             # If desired, launch the resource-allocation thread
             if reallocate_resources:
                 reallocator_thread = ReallocatorThread(
@@ -419,5 +421,12 @@ class BaseThinker(Thread):
                     if active_submitters == 0:
                         self.logger.info('All task submission agents have completed')
                         self.submitters_done.set()
+
+                        # Create a log message for when all tasks finish
+                        if self.queues.active_count > 0:
+                            def _log_all_done():
+                                self.queues.wait_until_done()
+                                self.logger.info('All tasks have finished running. Task receivers will start exiting')
+                            Thread(target=_log_all_done, daemon=True).start()
 
         self.logger.info(f"{self.__class__.__name__} completed")
