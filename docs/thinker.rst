@@ -150,8 +150,6 @@ then deallocated after the function completes.
         @event_responder(event_name='retrain_now', reallocate_resources=True,
                          gather_from="sim", gather_to="ml", disperse_to="sim", max_slots=1)
         def reorder(self):
-            self.retrain_now.clear()  # Clear the event flag
-
             # Submit a task to re-order task queue given
             self.rec.allocate('ml', 1)  # Blocks until resources are free
             self.queues.send_inputs(self.database, self.queue, method='reorder', topic='plan')
@@ -167,3 +165,4 @@ then deallocated after the function completes.
 The above example performs a task to reorder the task queue when the ``retrain_now`` event is set.
 Colmena will automatically re-allocate resources from simulation to machine learning when the event
 is set and then re-allocate them back to simulation after the function completes.
+The Thinker class will also reset the flag once all functions triggered by the event complete.

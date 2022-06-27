@@ -168,7 +168,7 @@ def event_responder(func: Optional[Callable] = None, event_name: str = None,
     You must configure from where these resources are acquired, in which resource pool
     they are placed, and where they are re-allocated after the thread completes.
     The thread will allocate up to the maximum number of slots defined and
-    then reallocate _all slots available to that pool_ to the designated resource.
+    then reallocate *all slots available to that pool* to the designated resource.
 
     Args:
         func: Do not directly pass this variable. It is used as an argument to the decorator
