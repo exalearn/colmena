@@ -30,12 +30,13 @@ def count_nodes(x, _resources: ResourceRequirements):
 
 # Make the Parsl configuration. Use LocalThreads for Mac and Windows compatibility
 @fixture()
-def config():
+def config(tmpdir):
     return Config(
         executors=[
             HighThroughputExecutor()
         ],
         strategy=None,
+        run_dir=str(tmpdir),
     )
 
 
