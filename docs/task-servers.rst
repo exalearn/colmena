@@ -8,7 +8,7 @@ and provide the basics of configuring them.
 Parsl
 -----
 
-:class:`colmena.task_server.parsl.ParslTaskServer` is the reference implementation for a Colmena task server and is suitable for most use cases.
+:class:`~colmena.task_server.parsl.ParslTaskServer` is the reference implementation for a Colmena task server and is suitable for most use cases.
 `Parsl <http://parsl-project.org/>`_ is a distributed workflow engine written in Python that we chose because tasks are described in Python,
 workflows can include thousands of concurrent tasks,
 and Parsl can be used on many different supercomputing systems.
@@ -27,7 +27,7 @@ The `Parsl documentation <https://parsl.readthedocs.io/en/stable/userguide/confi
 FuncX
 -----
 
-The :class:`colmena.task_server.funcx.FuncXTaskServer` uses `FuncX <http://funcx.org>`_ to run functions on remote computational resources
+The :class:`~colmena.task_server.funcx.FuncXTaskServer` uses `FuncX <http://funcx.org>`_ to run functions on remote computational resources
 in a way that requires less network configuration than with Parsl.
 FuncX operates by using a cloud-hosted service to facilitate sending function requests to and receiving results from remote 
 "endpoints" that performs the computation.

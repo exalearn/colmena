@@ -17,7 +17,7 @@ Queues
 The ``self.queue`` attribute of a Thinker class manages communication to the task server.
 Each agent can use it to submit tasks or wait for results from the task server.
 
-The :class:`colmena.redis.queue.ClientQueues` object must be provided to the constructor.
+The :class:`~colmena.redis.queue.ClientQueues` object must be provided to the constructor.
 
 Logger
 ++++++
@@ -43,7 +43,7 @@ releasing them for use by other agents (``.release``),
 and reallocating between different resource pools (``.reallocate``).
 All operations are thread-safe.
 
-A ``ResourceCounter`` that is configured with the proper number of slots and task pools must be provided
+A :class:`~colmena.thinker.resources.ResourceCounter` that is configured with the proper number of slots and task pools must be provided
 to the constructor for this feature to be available.
 
 .. code-block:: python
@@ -81,7 +81,7 @@ to the constructor for this feature to be available.
 
 
 
-See the documentation for :class:`colmena.thinker.resources.ResourceCounter`.
+See the documentation for :class:`~colmena.thinker.resources.ResourceCounter`.
 
 Configuring General Agents
 --------------------------

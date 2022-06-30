@@ -72,7 +72,7 @@ Redis queues.
 Tasks and results are communicated as JSON objects and contain the inputs to a task,
 the outputs of the task, and a variety of profiling data (e.g., task runtime,
 time inputs received by task server).
-We provide a Python API for the message format, :class:`colmena.models.Result`,
+We provide a Python API for the message format, :class:`~colmena.models.Result`,
 which provides utility operations for tasks that include accessing the positional
 or keyword arguments for a task and serializing the inputs and results.
 
@@ -83,10 +83,10 @@ We implement a task server based on `Parsl <https://parsl-project.org>`_.
 Parsl provides a model of distributed computing in Python that meshes well with
 Python's native :mod:`concurrent.futures` module and allows for users to express complex
 workflows in Python.
-We create :class:`parsl.app.PythonApp` for each of the methods available in the task server,
+We create :class:`~parsl.app.PythonApp` for each of the methods available in the task server,
 which allows us to use them as part of Parsl workflows and execute them on distributed resources.
 
-The :class:`colmena.task_server.ParslMethodServer` itself is a multi-process, multi-threaded Python application:
+The :class:`~colmena.task_server.ParslMethodServer` itself is a multi-process, multi-threaded Python application:
 
 1. *Intake Thread*: The intake thread reads task requests from the input Redis queue(s), deserializes
    them and submits the appropriate tasks to Parsl. Submitting a task to Parsl involves calling
@@ -113,7 +113,7 @@ Client processes can filter to only read from these topical queues, which simpli
 breaking a "Thinker" application in multiple sub-agents.
 
 The :mod:`colmena.redis.queue` module contains utility classes for interacting with these redis queues.
-For example, the :class:`colmena.redis.queue.ClientQueues` provides a wrapper for use by a client process.
+For example, the :class:`~colmena.redis.queue.ClientQueues` provides a wrapper for use by a client process.
 One utility operation, ``send_inputs``, wraps task descriptions in the ``Result`` class,
 serializes the inputs, and pushes them to the result queue.
 There is a corresponding, ``get_result``, operation which pulls a result from the result queue
@@ -121,7 +121,7 @@ and deserializes the result.
 Each of these operations can be supplied with a topic to either send inputs with a
 designated topic or to receive only a result with a certain topic.
 
-There is a corresponding queue wrapper for the task server, :class:`colmena.redis.queue.MethodServerQueues`,
+There is a corresponding queue wrapper for the task server, :class:`~colmena.redis.queue.MethodServerQueues`,
 that provides the matching operations to the ``ClientQueues``.
 Both need to be created to point to the same Redis server and have the same list of topic names,
 and Colmena provides a :meth:`colmena.redis.queue.make_queue_pairs` to generate a matched
@@ -133,7 +133,7 @@ Life-Cycle of a Task
 .. TODO (wardlt): Make a figure to illustrate the task routing
 
 We describe the life-cycle of a task to illustrate how all of the components of Colmena work together
-by illustrating a typical :class:`colmena.models.Result` object.
+by illustrating a typical :class:`~colmena.models.Result` object.
 
 .. code-block:: json
     :linenos:
