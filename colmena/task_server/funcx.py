@@ -80,6 +80,8 @@ class FuncXTaskServer(FutureBasedTaskServer):
         # Lookup the appropriate function ID and endpoint
         func, endp_id = self.registered_funcs[task.method]
 
+        task.mark_start_task_submission()
+
         # Submit it to FuncX to be executed
         future: Future = self.fx_exec.submit(func, task, endpoint_id=endp_id)
         logger.info(f'Submitted {task.method} to run on {endp_id}')
