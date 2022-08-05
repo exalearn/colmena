@@ -383,8 +383,7 @@ class ExecutableTask:
     Use the ExecutableTask by instantiating a copy of your new class and then passing it to the task server
      as you would with any other function.
 
-    MPI Executables
-    ---------------
+    **MPI Executables**
 
     Launching an MPI executable requires two parts: a path to an executable and a preamble defining how to launch it.
     Defining an MPI application using the instructions described above and then set the :attr:`mpi` attribute to ``True``.

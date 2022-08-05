@@ -15,7 +15,7 @@ The task server for Colmena is configured with the list of methods, a
 list available computational resources and a mapping of which methods
 can use each resource.
 
-We describe the :class:`colmena.task_server.ParslTaskServer` in this document,
+We describe the :class:`~colmena.task_server.ParslTaskServer` in this document,
 although `more are available <task-servers.html>`_.
 
 Defining Methods
@@ -38,7 +38,7 @@ Methods that used Compiled Applications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Many Colmena applications launch tasks that use software written in languages besides Python.
-Colmena provides the :class:`colmena.models.ExecutableTask` class to help integrate these tasks into a Colmena application.
+Colmena provides the :class:`~colmena.models.ExecutableTask` class to help integrate these tasks into a Colmena application.
 
 The definition of an `ExectuableTask` is split into three parts:
 
@@ -164,15 +164,15 @@ The overall configuration is broken into two types of "executors:"
 
 
 Note that we use ``LocalProvider`` classes to define how Parsl accesses resources.
-The :class:`parsl.providers.LocalProvider` class assumes that resources are already
+The :class:`~parsl.providers.LocalProvider` class assumes that resources are already
 accessible to the application in contrast to providers like
-:class:`parsl.providers.CobaltProvider` that request resources
+:class:`~parsl.providers.CobaltProvider` that request resources
 on behalf of the application (e.g., from an HPC job scheduler).
 
 Mapping Methods to Resources
 ++++++++++++++++++++++++++++
 
-The constructor of :class:`colmena.task_server.ParslTaskServer` takes a list of
+The constructor of :class:`~colmena.task_server.ParslTaskServer` takes a list of
 Python function objects as an input.
 Internally, the task server converts these to Parsl "apps" by calling
 :py:func:`python_app` function from Parsl.
@@ -196,7 +196,7 @@ Colmena is designed to support many different algorithms for creating tasks and
 responding to results.
 Such "thinking" applications take the form of threads that send and receive results
 to/from the task server(s) using the Redis queues.
-Colmena provides as :class:`colmena.thinker.BaseThinker` class to simplify creating
+Colmena provides as :class:`~colmena.thinker.BaseThinker` class to simplify creating
 multi-threaded applications.
 
 Working with ``BaseThinker``
@@ -234,7 +234,7 @@ The example shows us a few key concepts:
 Submitting Tasks
 ~~~~~~~~~~~~~~~~
 
-:class:`colmena.redis.queue.ClientQueues` provides communication to the task server
+:class:`~colmena.redis.queue.ClientQueues` provides communication to the task server
 and is available as the ``self.queues`` class attribute.
 
 Submit requests to the task server with the ``send_inputs`` function.
@@ -247,7 +247,7 @@ Besides the input arguments and method name, the function also accepts a
     along with input arguments.
 
 The ``get_result`` function retrieves the next result from the task server
-as a :class:`colmena.models.Result` object.
+as a :class:`~colmena.models.Result` object.
 The ``Result`` object contains the output task and the performance information
 (e.g., how long communication to the client required).
 ``get_result`` accepts a "topic" to only pull tasks sent with a certain topic to the queue.

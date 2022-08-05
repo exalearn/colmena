@@ -211,14 +211,15 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Get the statistics for the proxy resolution
     for proxy in proxies:
+        # Get the key associated with this proxy
+        key = ps.proxy.get_key(proxy)
+
+        # Get the store associated with this proxy
         store = ps.store.get_store(proxy)
         if store.has_stats:
             # Get the stats and convert them to a JSON-serializable form
             stats = store.stats(proxy)
             stats = dict((k, asdict(v)) for k, v in stats.items())
-
-            # Get the key associated with this proxy
-            key = ps.proxy.get_key(proxy)
 
             # Store the data along with the stats
             result.proxy_timing[key] = stats

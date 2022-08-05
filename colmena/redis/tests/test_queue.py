@@ -17,6 +17,11 @@ def queue() -> RedisQueue:
     return q
 
 
+@pytest.fixture
+def queue_pair():
+    return make_queue_pairs('localhost', clean_slate=True, topics=['priority'], keep_inputs=False)
+
+
 def test_connect_error():
     """Test the connection detection features"""
     queue = RedisQueue('localhost')
@@ -68,8 +73,9 @@ def test_client_method_pair():
     assert client.inbound.prefix == server.outbound.prefix
 
     # Push inputs to task server and make sure it is received
-    client.send_inputs(1)
+    task_id = client.send_inputs(1)
     topic, task = server.get_task()
+    assert task.task_id == task_id
     task.deserialize()  # task server does not deserialize automatically
     assert topic == 'default'
     assert task.args == (1,)
@@ -113,9 +119,9 @@ def test_kwargs():
     assert task.kwargs == {'hello': 'world'}
 
 
-def test_pickling_error():
+def test_pickling_error(queue_pair):
     """Test communicating results that need to be pickled fails without correct setting"""
-    client, server = make_queue_pairs('localhost')
+    client, server = queue_pair
 
     # Attempt to push a non-JSON-able object to the queue
     with pytest.raises(TypeError):
@@ -167,14 +173,17 @@ def test_filtering():
     assert output is not None
 
     # Make sure it works if we do not specify anything
+    client.send_inputs("hello", topic="priority")
+    topic, task = server.get_task()
+    task.set_result(1)
     server.send_result(task, topic)
     output = client.get_result()
     assert output is not None
 
 
-def test_clear_inputs():
+def test_clear_inputs(queue_pair):
     """Test clearing the inputs after storing the result"""
-    client, server = make_queue_pairs('localhost', keep_inputs=False)
+    client, server = queue_pair
 
     # Sent a method request
     client.send_inputs(1)
@@ -194,9 +203,9 @@ def test_clear_inputs():
     assert result.args == (1,)
 
 
-def test_task_info():
+def test_task_info(queue_pair):
     """Make sure task info gets passed along"""
-    client, server = make_queue_pairs('localhost', keep_inputs=False)
+    client, server = queue_pair
 
     # Sent a method request
     client.send_inputs(1, task_info={'id': 'test'})
@@ -211,9 +220,9 @@ def test_task_info():
     assert result.task_info == {'id': 'test'}
 
 
-def test_kill_signal():
+def test_kill_signal(queue_pair):
     # Test without extra topics
-    client, server = make_queue_pairs('localhost', keep_inputs=False)
+    client, server = queue_pair
     client.send_kill_signal()
     with pytest.raises(KillSignalException):
         server.get_task()
@@ -225,8 +234,8 @@ def test_kill_signal():
         server.get_task()
 
 
-def test_resources():
-    client, server = make_queue_pairs('localhost', keep_inputs=False)
+def test_resources(queue_pair):
+    client, server = queue_pair
 
     # Test with defaults
     client.send_inputs(1)
@@ -237,3 +246,24 @@ def test_resources():
     client.send_inputs(1, resources={'node_count': 2})
     topic, result = server.get_task()
     assert result.resources.node_count == 2
+
+
+def test_event_count(queue_pair):
+    client, server = queue_pair
+
+    # Sent a method request
+    client.send_inputs(1)
+    assert client.active_count == 1
+    assert not client.wait_until_done(timeout=1)
+    topic, task = server.get_task()
+
+    # Sent the task back
+    task.set_result(1)
+    server.send_result(task, topic)
+    client.get_result()
+    assert client.active_count == 0
+    assert client.wait_until_done(timeout=1)
+
+    # Send another and make sure the event is reset
+    client.send_inputs(1)
+    assert not client.wait_until_done(timeout=1)

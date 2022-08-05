@@ -17,7 +17,7 @@ Queues
 The ``self.queue`` attribute of a Thinker class manages communication to the task server.
 Each agent can use it to submit tasks or wait for results from the task server.
 
-The :class:`colmena.redis.queue.ClientQueues` object must be provided to the constructor.
+The :class:`~colmena.redis.queue.ClientQueues` object must be provided to the constructor.
 
 Logger
 ++++++
@@ -38,10 +38,50 @@ The ``self.rec`` attribute is used to communicate the availability of compute re
 Threads may release resources to make them available for use by other agents, request resources, or
 transfer resources between different available pools.
 
-A ``ResourceCounter`` that is configured with the proper number of slots and task pools must be provided
+The core actions for the resource counter include reserving nodes for a particular task typ (``.acquire``),
+releasing them for use by other agents (``.release``),
+and reallocating between different resource pools (``.reallocate``).
+All operations are thread-safe.
+
+A :class:`~colmena.thinker.resources.ResourceCounter` that is configured with the proper number of slots and task pools must be provided
 to the constructor for this feature to be available.
 
-See the documentation for :class:`colmena.thinker.resources.ResourceCounter`.
+.. code-block:: python
+
+    from colmena.redis.queue import ClientQueues
+    from colmena.thinker import BaseThinker, ResourceCounter, agent
+
+
+    class ResourceLimited(BaseThinker):
+        def __init__(self, queues: ClientQueues, nodes: int = 1):
+            """
+            Args:
+                queues: Queues to use to communicate with the task server
+                nodes: Number of nodes to available
+            """
+
+            super().__init__(queues, resource_counter=ResourceCounter(nodes, task_types=["a", "b"]))
+
+            # Start with all nodes allocated to "a"
+            self.rec.reallocate(None, "a", nodes)
+
+        @agent()
+        def give_away(self):
+            for i in range(self.rec.allocated_slots("a")):
+                self.rec.reallocate("a", "b", 1)
+
+                self.logger.info("Gave 1 node from a to b")
+            self.logger.info("Done giving nodes away")
+
+        @agent()
+        def receive(self):
+            while not self.done.is_set():
+                self.rec.acquire("a", 1, cancel_if=self.done)
+                self.logger.info("Reserved a node for task type b")
+
+
+
+See the documentation for :class:`~colmena.thinker.resources.ResourceCounter`.
 
 Configuring General Agents
 --------------------------
@@ -110,8 +150,6 @@ then deallocated after the function completes.
         @event_responder(event_name='retrain_now', reallocate_resources=True,
                          gather_from="sim", gather_to="ml", disperse_to="sim", max_slots=1)
         def reorder(self):
-            self.retrain_now.clear()  # Clear the event flag
-
             # Submit a task to re-order task queue given
             self.rec.allocate('ml', 1)  # Blocks until resources are free
             self.queues.send_inputs(self.database, self.queue, method='reorder', topic='plan')
@@ -127,3 +165,4 @@ then deallocated after the function completes.
 The above example performs a task to reorder the task queue when the ``retrain_now`` event is set.
 Colmena will automatically re-allocate resources from simulation to machine learning when the event
 is set and then re-allocate them back to simulation after the function completes.
+The Thinker class will also reset the flag once all functions triggered by the event complete.

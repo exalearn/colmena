@@ -28,7 +28,7 @@ class ExampleThinker(BaseThinker):
 
     @agent
     def function(self):
-        self.flag.wait(timeout=3)
+        self.flag.wait()
 
     @result_processor
     def process_results(self, result: Result):
@@ -36,8 +36,9 @@ class ExampleThinker(BaseThinker):
 
     @task_submitter(n_slots='n_slots')  # Look it up from the class attribute at runtime
     def submit_task(self):
-        assert self.rec.available_slots(None) == 0
+        assert self.rec.available_slots(None) >= 0
         self.submitted = True
+        sleep(0.1)  # Used to prevent a race condition with responder. By the time this event finishes
 
     @event_responder(event_name='event', reallocate_resources=True, max_slots='n_slots',
                      gather_from=None, gather_to="event", disperse_to="event")
@@ -87,8 +88,11 @@ def test_run(queues):
     assert not th.done.is_set()
 
     # Test task processor: Push a result to the queue and make sure it was received
-    server.send_result(Result(inputs=((1,), {}), value=4))
-    sleep(.1)
+    client.send_inputs(1)
+    _, task = server.get_task()
+    task.set_result(4)
+    server.send_result(task)
+    sleep(0.1)
     assert th.last_value == 4
 
     # Test task submitter: Release the nodes and see if it submits
@@ -105,6 +109,7 @@ def test_run(queues):
     assert not th.event.is_set()
     assert not th.event_responded
     th.event.set()
+    sleep(0.1)  # Give enough time for this thread to start up before releasing resources
     for _ in range(3):
         th.rec.release(None, 1)  # Repeat as submit_task/responder are competing for resources
     sleep(0.1)
@@ -113,7 +118,44 @@ def test_run(queues):
     assert th.rec.available_slots("event") >= 1
     assert not th.event.is_set()
 
-    # Set the "finish" flag
+    # Set the "finish" flag after sending a result out
+    client.send_inputs(1)
     flag.set()
-    sleep(2)
+    sleep(1)
+    assert th.is_alive()
+
+    # The system should not exit until all results are back
+    _, task = server.get_task()
+    task.set_result(4)
+    server.send_result(task)
+    assert th.queues.wait_until_done(timeout=2)
+    sleep(0.1)
     assert not th.is_alive()
+
+
+@mark.timeout(5)
+def test_exception(queues):
+    """Verify that thinkers stop properly with an exception"""
+
+    client, server = queues
+
+    # Make a thinker that will fail on startup
+    class BadThinker(BaseThinker):
+
+        def __init__(self, queues):
+            super().__init__(queues)
+            self.flag = Event()
+            self.was_set = False
+
+        @event_responder(event_name='flag')
+        def do_nothing(self):
+            self.was_set = False
+            pass
+
+        @agent(startup=True)
+        def fail(self):
+            raise ValueError()
+
+    # Will only exit within a timeout if the exception is properly set
+    thinker = BadThinker(client)
+    thinker.run()
