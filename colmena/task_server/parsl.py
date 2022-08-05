@@ -402,7 +402,7 @@ class ParslTaskServer(FutureBasedTaskServer):
             method = task.method
 
         # Submit the application
-        task.mark_task_submitted()
+        task.mark_start_task_submission()
         function, func_type = self.methods_[method]
         serialized_inputs = task.inputs  # Hold a copy of the original inputs. Used for "exec" apps to minimize
         future: Future = function(task)

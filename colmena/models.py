@@ -134,10 +134,10 @@ class Result(BaseModel):
     time_created: float = Field(None, description="Time this value object was created")
     time_input_received: float = Field(None, description="Time the inputs was received by the task server")
     time_compute_started: float = Field(None, description="Time workflow process began executing a task")
-    time_compute_ended: float = Field(None, description="Time worflow process finished executing a task")
+    time_compute_ended: float = Field(None, description="Time workflow process finished executing a task")
     time_result_sent: float = Field(None, description="Time message was sent from the server")
     time_result_received: float = Field(None, description="Time value was received by client")
-    time_task_submitted: float = Field(None, description="Time task was submitted to workflow engine")
+    time_start_task_submission: float = Field(None, description="Time marking the start of the task submission to workflow engine")
     time_task_received: float = Field(None, description="Time task result received from workflow engine")
 
     time_running: float = Field(None, description="Runtime of the method, if available")
@@ -233,9 +233,9 @@ class Result(BaseModel):
         """Mark when a result is sent from the task server"""
         self.time_result_sent = datetime.now().timestamp()
 
-    def mark_task_submitted(self):
+    def mark_start_task_submission(self):
         """Mark when the Task Server submits a task to the engine"""
-        self.time_task_submitted = datetime.now().timestamp()
+        self.time_start_task_submission = datetime.now().timestamp()
 
     def mark_task_received(self):
         """Mark when the Task Server receives the task from the engine"""
