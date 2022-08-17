@@ -39,13 +39,19 @@ class FuncXTaskServer(FutureBasedTaskServer):
     def __init__(self, methods: Dict[Callable, str],
                  funcx_client: FuncXClient,
                  queues: TaskServerQueues,
-                 timeout: Optional[int] = None):
+                 timeout: Optional[int] = None,
+                 batch_enabled: bool = True,
+                 batch_interval: float = 1.0,
+                 batch_size: int = 100):
         """
         Args:
             methods: Map of functions to the endpoint on which it will run
             funcx_client: Authenticated FuncX client
             queues: Queues used to communicate with thinker
             timeout: Timeout for requests from the task queue
+            batch_enabled: Whether to use FuncX's batch submission feature
+            batch_interval: Maximum time to wait between batch  submissions
+            batch_size: Maximum number of task request to receive before submitting
         """
         super(FuncXTaskServer, self).__init__(queues, timeout)
 
@@ -63,8 +69,13 @@ class FuncXTaskServer(FutureBasedTaskServer):
             # Store the FuncX information for the function
             self.registered_funcs[func_name] = (new_func, endpoint)
 
-        # Create the executor and queue of tasks to be submitted back to the user
-        self.fx_exec = FuncXExecutor(self.fx_client)
+        # Placeholder for the executor and queue of tasks to be submitted back to the user
+        self.fx_exec: Optional[FuncXExecutor] = None
+        self._batch_options = dict(
+            batch_enabled=batch_enabled,
+            batch_size=batch_size,
+            batch_interval=batch_interval
+        )
 
     def perform_callback(self, future: Future, result: Result, topic: str):
         # Check if the failure was due to a ManagerLost
@@ -86,6 +97,14 @@ class FuncXTaskServer(FutureBasedTaskServer):
         future: Future = self.fx_exec.submit(func, task, endpoint_id=endp_id)
         logger.info(f'Submitted {task.method} to run on {endp_id}')
         return future
+
+    def run(self) -> None:
+        # Creates a FuncX executor only once the thread has been launched
+        self.fx_exec = FuncXExecutor(self.fx_client, **self._batch_options)
+        logger.info('Created a FuncX executor')
+
+        # Now start running tasks
+        super().run()
 
     def _cleanup(self):
         self.fx_exec.shutdown()
