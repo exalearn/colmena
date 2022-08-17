@@ -63,8 +63,8 @@ class FuncXTaskServer(FutureBasedTaskServer):
             # Store the FuncX information for the function
             self.registered_funcs[func_name] = (new_func, endpoint)
 
-        # Create the executor and queue of tasks to be submitted back to the user
-        self.fx_exec = FuncXExecutor(self.fx_client)
+        # Placeholder for the executor and queue of tasks to be submitted back to the user
+        self.fx_exec: Optional[FuncXExecutor] = None
 
     def perform_callback(self, future: Future, result: Result, topic: str):
         # Check if the failure was due to a ManagerLost
@@ -86,6 +86,14 @@ class FuncXTaskServer(FutureBasedTaskServer):
         future: Future = self.fx_exec.submit(func, task, endpoint_id=endp_id)
         logger.info(f'Submitted {task.method} to run on {endp_id}')
         return future
+
+    def run(self) -> None:
+        # Creates a FuncX executor only once the thread has been launched
+        self.fx_exec = FuncXExecutor(self.fx_client)
+        logger.info('Created a FuncX executor')
+
+        # Now start running tasks
+        super().run()
 
     def _cleanup(self):
         self.fx_exec.shutdown()
