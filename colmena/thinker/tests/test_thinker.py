@@ -21,10 +21,24 @@ class ExampleThinker(BaseThinker):
         self.event = Event()
         self.event_responded = False
         self.n_slots = 1
+        self.teardown_result = None
+
+    def prepare_agent(self):
+        if self.agent_name == "setup_teardown":
+            self.local_details.payload = 'hello'
+
+    def tear_down_agent(self):
+        if self.agent_name == "setup_teardown":
+            self.teardown_result = self.local_details.payload + "_goodbye"
 
     @agent(startup=True)
     def startup_function(self):
         self.func_ran = True
+
+    @agent(startup=True)
+    def setup_teardown(self):
+        """Agent that tests the setup and teardown logic"""
+        pass
 
     @agent
     def function(self):
@@ -64,12 +78,13 @@ def test_detection():
     assert hasattr(ExampleThinker.responder, '_colmena_agent')
 
     # Test detecting the agents
-    assert len(ExampleThinker.list_agents()) == 5
+    assert len(ExampleThinker.list_agents()) == 6
     assert 'function' in [a.__name__ for a in ExampleThinker.list_agents()]
 
 
 @mark.timeout(5)
 def test_run(queues):
+    """Test the behavior of all of the agents"""
     # Make the server and thinker
     client, server = queues
     flag = Event()
@@ -80,12 +95,15 @@ def test_run(queues):
     # Launch it and wait for it to run
     th.start()
 
-    # Make sure function ran, and the thinker did not stop
+    # Make sure startup function ran, and the thinker did not stop
     sleep(.1)
     assert th.func_ran
     assert not flag.is_set()
     assert th.is_alive()
     assert not th.done.is_set()
+
+    # Make sure the setup and teardown logic worked
+    assert th.teardown_result == "hello_goodbye"
 
     # Test task processor: Push a result to the queue and make sure it was received
     client.send_inputs(1)

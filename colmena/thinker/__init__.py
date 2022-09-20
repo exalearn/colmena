@@ -23,7 +23,8 @@ def agent(func: Optional[Callable] = None, startup: bool = False):
 
     Args:
         func: Do not directly pass this variable. It is used as an argument to the decorator
-        startup: Whether this agent exiting should trigger other agents to stop. All agents will still stop if it exits with an exception
+        startup: Whether this agent exiting normally should trigger other agents to stop.
+            All agents will still stop if it exits with an exception
     """
 
     def decorator(f: Callable):
@@ -221,6 +222,9 @@ def _launch_agent(func: Callable, thinker: 'BaseThinker') -> Tuple[bool, Optiona
     thinker.local_details.name = name
     thinker.local_details.logger = thinker.make_logger(name)
 
+    # Run any startup logic
+    thinker.prepare_agent()
+
     # Mark that this thread has launched
     thinker.logger.info(f'{name} started')
 
@@ -235,6 +239,9 @@ def _launch_agent(func: Callable, thinker: 'BaseThinker') -> Tuple[bool, Optiona
     # If a "critical" function, set the "done" flag
     if exc_data is not None or not getattr(func, '_colmena_startup', False):
         thinker.done.set()
+
+    # Run any tear-down logic
+    thinker.tear_down_agent()
 
     # Mark that the thread has crashed
     thinker.logger.info(f'{name} completed')
@@ -320,6 +327,24 @@ class BaseThinker(Thread):
     def logger(self) -> logging.Logger:
         """Get the logger for the active thread"""
         return self.local_details.logger
+
+    @property
+    def agent_name(self):
+        """Name of the agent"""
+        return self.local_details.name
+
+    def prepare_agent(self):
+        """Logic ran before launching an agent.
+
+        Override to define how to set up an agent.
+        Consider using :meth:`local_details` to store any agent-specific objects"""
+        pass
+
+    def tear_down_agent(self):
+        """Logic ran after an agent completes.
+
+        Override to define any tear down logic."""
+        pass
 
     def make_logging_handler(self) -> Optional[logging.Handler]:
         """Override to create a distinct logging handler for log messages emitted from this object"""
@@ -427,6 +452,7 @@ class BaseThinker(Thread):
                             def _log_all_done():
                                 self.queues.wait_until_done()
                                 self.logger.info('All tasks have finished running. Task receivers will start exiting')
+
                             Thread(target=_log_all_done, daemon=True).start()
 
         self.logger.info(f"{self.__class__.__name__} completed")

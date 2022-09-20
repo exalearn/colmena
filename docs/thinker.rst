@@ -31,6 +31,12 @@ Completion Flag
 Upon completion, an agent sets the ``self.done`` flag.
 All threads may view the status of this event.
 
+Thread-Local Details
+++++++++++++++++++++
+
+Each agent has a ``self.local_details`` object to store information which should not be altered by other threads.
+It is derived from Python's :class:`~threading.local` object.
+
 Resource Counter
 ++++++++++++++++
 
@@ -90,7 +96,21 @@ Agent threads in Colmena take a few different configuration options.
 For example, the ``startup`` keyword argument means that the ``self.done`` event will not
 be set when this agent completes.
 
-See :func:`colmena.thinker.agent` for more details.
+See :func:`~colmena.thinker.agent` for more details.
+
+
+Setup and Teardown Logic
+------------------------
+
+Some agents require expensive operations that only need run once per application or
+ensure that resources are cleaned up after completion.
+For example, some may connect to a database to store results persistently between runs
+of an application.
+
+Override the :meth:`~colmena.thinker.BaseThinker.prepare_agent` and
+:meth:`~colmena.thinker.BaseThinker.tear_down_agent` to define these methods,
+and remember to use `thread-local storage <#thread-local-details>`_ as this function
+is run by every agent.
 
 Special-Purpose Agents
 ----------------------
