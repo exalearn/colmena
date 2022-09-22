@@ -84,7 +84,7 @@ def test_detection():
 
 @mark.timeout(5)
 def test_run(queues):
-    """Test the behavior of all of the agents"""
+    """Test the behavior of all agents"""
     # Make the server and thinker
     client, server = queues
     flag = Event()
