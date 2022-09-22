@@ -122,6 +122,7 @@ def test_kwargs():
 def test_pickling_error(queue_pair):
     """Test communicating results that need to be pickled fails without correct setting"""
     client, server = queue_pair
+    client.serialization_method = SerializationMethod.JSON
 
     # Attempt to push a non-JSON-able object to the queue
     with pytest.raises(TypeError):

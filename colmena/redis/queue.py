@@ -24,7 +24,7 @@ def _error_if_unconnected(f):
 
 
 def make_queue_pairs(hostname: str, port: int = 6379, password: str = None, name='method',
-                     serialization_method: Union[str, SerializationMethod] = SerializationMethod.JSON,
+                     serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
                      keep_inputs: bool = True,
                      clean_slate: bool = True,
                      topics: Optional[Iterable[str]] = None,
