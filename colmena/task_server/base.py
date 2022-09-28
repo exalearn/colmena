@@ -81,11 +81,18 @@ class BaseTaskServer(Process, metaclass=ABCMeta):
         """Close out any resources needed by the task server"""
         pass
 
+    def _setup(self):
+        """Start any resources needed by the task server after it has started in a new process"""
+        pass
+
     def run(self) -> None:
         """Launch the thread and start running tasks
 
         Blocks until the inputs queue is closed and all tasks have completed"""
         logger.info(f"Started task server {self.__class__.__name__} on {self.ident}")
+
+        # Perform any setup operations
+        self._setup()
 
         # Loop until queue has closed
         self.listen_and_launch()
