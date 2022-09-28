@@ -98,13 +98,9 @@ class FuncXTaskServer(FutureBasedTaskServer):
         logger.info(f'Submitted {task.method} to run on {endp_id}')
         return future
 
-    def run(self) -> None:
-        # Creates a FuncX executor only once the thread has been launched
+    def _setup(self):
         self.fx_exec = FuncXExecutor(self.fx_client, **self._batch_options)
         logger.info('Created a FuncX executor')
-
-        # Now start running tasks
-        super().run()
 
     def _cleanup(self):
         self.fx_exec.shutdown()

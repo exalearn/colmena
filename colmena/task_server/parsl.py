@@ -429,10 +429,7 @@ class ParslTaskServer(FutureBasedTaskServer):
         dfk.cleanup()
         logger.info(f"All tasks have completed for {self.__class__.__name__} on {self.ident}")
 
-    def run(self) -> None:
+    def _setup(self):
         # Launch the Parsl workflow engine
         parsl.load(self.config)
         logger.info(f"Launched Parsl DFK. Process id: {os.getpid()}")
-
-        # Start the loop
-        super().run()
