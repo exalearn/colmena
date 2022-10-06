@@ -152,6 +152,7 @@ class Result(BaseModel):
                                     description="Timings recorded by a TaskServer that are not defined by above")
     proxy_timing: Dict[str, Dict[str, dict]] = Field(default_factory=dict,
                                                      description='Timings related to resolving ProxyStore proxies on the compute worker')
+    message_sizes: Dict[str, int] = Field(default_factory=dict, description='Sizes of the inputs and results in bytes')
 
     # Serialization options
     serialization_method: SerializationMethod = Field(SerializationMethod.JSON,
@@ -273,8 +274,16 @@ class Result(BaseModel):
         _value = self.value
         _inputs = self.inputs
 
-        def _serialize_and_proxy(value, evict=False):
-            """Helper function for serializing and proxying"""
+        def _serialize_and_proxy(value, evict=False) -> Tuple[str, int]:
+            """Helper function for serializing and proxying
+
+            Args:
+                value: Value to be serialized
+                evict: Whether to evict from proxy store on reading
+            Returns:
+                - Serialized representation, which is either the object or a proxy to it
+                - Size of the serialized object (not the size of the proxy)
+            """
             # Serialized object before proxying to compare size of serialized
             # object to value server threshold. Using sys.getsizeof would be
             # faster but sys.getsizeof does not account for the memory
@@ -282,12 +291,13 @@ class Result(BaseModel):
             value_str = SerializationMethod.serialize(
                 self.serialization_method, value
             )
+            value_size = sys.getsizeof(value_str)
 
             if (
                     self.proxystore_name is not None and
                     self.proxystore_threshold is not None and
                     not isinstance(value, ps.proxy.Proxy) and
-                    sys.getsizeof(value_str) >= self.proxystore_threshold
+                    value_size >= self.proxystore_threshold
             ):
                 # Proxy the value. We use the id of the object as the key
                 # so multiple copies of the object are not added to ProxyStore,
@@ -307,19 +317,33 @@ class Result(BaseModel):
                     self.serialization_method, value_proxy
                 )
 
-            return value_str
+            return value_str, value_size
 
         try:
             # Each value in *args and **kwargs is serialized independently
-            args = tuple(map(_serialize_and_proxy, _inputs[0]))
-            kwargs = {k: _serialize_and_proxy(v) for k, v in _inputs[1].items()}
+            if len(_inputs[0]) > 0:
+                args, args_sizes = zip(*map(_serialize_and_proxy, _inputs[0]))
+            else:
+                args = args_sizes = []
+            kwargs = {}
+            kwarg_sizes = []
+            for k, v in _inputs[1].items():
+                _kwarg_str, _kwarg_size = _serialize_and_proxy(v)
+                kwargs[k] = _kwarg_str
+                kwarg_sizes.append(_kwarg_size)
             self.inputs = (args, kwargs)
+
+            # Store the size of the input if not already there
+            if 'inputs' not in self.message_sizes:
+                self.message_sizes['inputs'] = sum(args_sizes) + sum(kwarg_sizes)
 
             # The entire result is serialized as one object. Pass evict=True
             # so the value is evicted from the value server once it is resolved
             # by the thinker.
             if _value is not None:
-                self.value = _serialize_and_proxy(_value, evict=True)
+                self.value, value_size = _serialize_and_proxy(_value, evict=True)
+                if 'value' not in self.message_sizes:
+                    self.message_sizes['value'] = value_size
 
             return perf_counter() - start_time
         except Exception as e:
