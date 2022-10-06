@@ -43,7 +43,6 @@ def test_message_sizes():
     assert result.message_sizes['inputs'] >= sys.getsizeof(1)
 
 
-
 def test_executable_task():
     # Run a basic tak
     task = EchoTask()
