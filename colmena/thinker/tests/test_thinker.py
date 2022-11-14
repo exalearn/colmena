@@ -5,7 +5,7 @@ from time import sleep
 from pytest import fixture, mark
 
 from colmena.models import Result
-from colmena.redis.queue import make_queue_pairs
+from colmena.queue.python import PipeQueue
 from colmena.thinker import BaseThinker, agent, result_processor, task_submitter, event_responder
 from colmena.thinker.resources import ResourceCounter
 
@@ -49,7 +49,7 @@ class ExampleThinker(BaseThinker):
 
 @fixture()
 def queues():
-    return make_queue_pairs('localhost')
+    return PipeQueue([])
 
 
 def test_detection():
@@ -70,11 +70,10 @@ def test_detection():
 @mark.timeout(5)
 def test_run(queues):
     # Make the server and thinker
-    client, server = queues
     flag = Event()
     rec = ResourceCounter(1, ["event"])
     rec.acquire(None, 1)
-    th = ExampleThinker(client, rec, flag, daemon=True)
+    th = ExampleThinker(queues, rec, flag, daemon=True)
 
     # Launch it and wait for it to run
     th.start()
@@ -87,7 +86,7 @@ def test_run(queues):
     assert not th.done.is_set()
 
     # Test task processor: Push a result to the queue and make sure it was received
-    server.send_result(Result(inputs=((1,), {}), value=4))
+    queues.send_result(Result(inputs=((1,), {}), value=4), topic='default')
     sleep(.1)
     assert th.last_value == 4
 

@@ -10,7 +10,7 @@ import os
 
 import logging
 
-from colmena.redis.queue import ClientQueues
+from colmena.queue.base import BaseQueue
 from colmena.thinker.resources import ResourceCounter, ReallocatorThread
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def agent(func: Optional[Callable] = None, startup: bool = False):
     return decorator(func)
 
 
-# TODO (wardlt): Write these functions as a subclass of Callable so we make less use of hidden attributes of function objects.
+# TODO (wardlt): Write these functions as a subclass of Callable, so we make less use of hidden attributes of function objects
 def _result_event_agent(thinker: 'BaseThinker', process_func: Callable, topic: Optional[str]):
     """Wrapper function for result processing agents"""
     # Wait until we get a result
@@ -47,7 +47,7 @@ def _result_event_agent(thinker: 'BaseThinker', process_func: Callable, topic: O
             process_func(thinker, result)
 
 
-def result_processor(func: Optional[Callable] = None, topic: Optional[str] = None):
+def result_processor(func: Optional[Callable] = None, topic: str = 'default'):
     """Decorator that builds agents which respond to results becoming available in a queue
 
     Decorated functions must take a single argument: a result object
@@ -255,7 +255,7 @@ class BaseThinker(Thread):
     Each method should take no inputs and produce no output, and could be thought of as
     an "operation" or "agent" that will run as a thread.
 
-    Each agent communicates with others via `queue <https://docs.python.org/3/library/queue.html>`_
+    Each agent communicates with others via `queues <https://docs.python.org/3/library/queue.html>`_
     or other `threading objects <https://docs.python.org/3/library/threading.html#>`_ and
     the Colmena task server via the :class:`ClientQueues`.
     The only communication method available by default is a class attribute named ``done``
@@ -279,7 +279,7 @@ class BaseThinker(Thread):
     Start the thinker by calling ``.start()``
     """
 
-    def __init__(self, queue: ClientQueues, resource_counter: Optional[ResourceCounter] = None,
+    def __init__(self, queue: BaseQueue, resource_counter: Optional[ResourceCounter] = None,
                  daemon: bool = True, **kwargs):
         """
             Args:
@@ -293,6 +293,7 @@ class BaseThinker(Thread):
         # Define thinker-wide collectives
         self.rec = resource_counter
         self.queues = queue
+        self.queues.set_role('client')
 
         # Create some basic events and locks
         self.done: Event = Event()
