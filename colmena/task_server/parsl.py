@@ -11,7 +11,7 @@ from parsl.config import Config
 from parsl.app.python import PythonApp
 
 from colmena.models import Result
-from colmena.redis.queue import TaskServerQueues
+from colmena.queue.base import BaseQueue
 from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ class ParslTaskServer(FutureBasedTaskServer):
     """
 
     def __init__(self, methods: List[Union[Callable, Tuple[Callable, Dict]]],
-                 queues: TaskServerQueues,
+                 queues: BaseQueue,
                  config: Config,
                  timeout: Optional[int] = None,
                  default_executors: Union[str, List[str]] = 'all',
@@ -69,7 +69,7 @@ class ParslTaskServer(FutureBasedTaskServer):
                 is a function and the second is a dictionary of the arguments being used to create
                 the Parsl ParslApp see `Parsl documentation
                 <https://parsl.readthedocs.io/en/stable/stubs/parsl.app.app.python_app.html#parsl.app.app.python_app>`_.
-            queues (TaskServerQueues): Queues for the task server
+            queues: Queues for the task server
             config: Parsl configuration
             timeout (int): Timeout, if desired
             default_executors: Executor or list of executors to use by default.

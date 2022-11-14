@@ -13,7 +13,7 @@ class PipeQueue(BaseQueue):
     of `multiprocessing Pipes <https://docs.python.org/3/library/multiprocessing.html#exchanging-objects-between-processes>`_"""
 
     def __init__(self,
-                 topics: Collection[str],
+                 topics: Collection[str] = (),
                  serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
                  keep_inputs: bool = False,
                  proxystore_name: Optional[Union[str, Dict[str, str]]] = None,

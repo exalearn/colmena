@@ -17,7 +17,7 @@ class QueueRole(str, Enum):
     """Role a queue is used for"""
 
     ANY = 'any'
-    SERVER = 'queue'
+    SERVER = 'server'
     CLIENT = 'client'
 
 

@@ -6,7 +6,9 @@ from parsl.config import Config
 from pytest import fixture, raises, mark
 
 from colmena.exceptions import KillSignalException, TimeoutException
-from colmena.redis.queue import ClientQueues, make_queue_pairs
+from colmena.queue.base import BaseQueue
+
+from colmena.queue.python import PipeQueue
 from colmena.task_server.parsl import ParslTaskServer
 
 
@@ -31,10 +33,10 @@ def config():
 
 # Make a simple task server
 @fixture(autouse=True)
-def server_and_queue(config) -> Tuple[ParslTaskServer, ClientQueues]:
-    client_q, server_q = make_queue_pairs('localhost', clean_slate=True)
-    server = ParslTaskServer([f, bad_task], server_q, config)
-    yield server, client_q
+def server_and_queue(config) -> Tuple[ParslTaskServer, BaseQueue]:
+    queues = PipeQueue()
+    server = ParslTaskServer([f, bad_task], queues, config)
+    yield server, queues
     if server.is_alive():
         server.terminate()
 
@@ -98,7 +100,7 @@ def test_error_handling(server_and_queue):
     server.start()
 
     # Send a result and then get the error message back
-    queue.send_inputs(None, method='f')
+    queue.send_inputs(None, method='f', keep_inputs=True)
     result = queue.get_result()
     assert result.args == (None,)
     assert result.value is None
