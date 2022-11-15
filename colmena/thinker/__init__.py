@@ -10,6 +10,7 @@ import os
 
 import logging
 
+from colmena.exceptions import TimeoutException
 from colmena.queue.base import BaseQueue
 from colmena.thinker.resources import ResourceCounter, ReallocatorThread
 
@@ -43,9 +44,11 @@ def _result_event_agent(thinker: 'BaseThinker', process_func: Callable, topic: O
     """Wrapper function for result processing agents"""
     # Wait until we get a result
     while not (thinker.done.is_set() and thinker.submitters_done.is_set()) or thinker.queues.active_count > 0:
-        result = thinker.queues.get_result(timeout=_DONE_REACTION_TIME, topic=topic)
-        if result is not None:
-            process_func(thinker, result)
+        try:
+            result = thinker.queues.get_result(timeout=_DONE_REACTION_TIME, topic=topic)
+        except TimeoutException:
+            continue
+        process_func(thinker, result)
 
 
 def result_processor(func: Optional[Callable] = None, topic: str = 'default'):

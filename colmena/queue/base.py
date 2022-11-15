@@ -2,13 +2,13 @@
 import warnings
 from abc import abstractmethod
 from enum import Enum
-from functools import update_wrapper
-from typing import Optional, Tuple, Callable, Any, Collection, Union, Dict
+from threading import Lock, Event
+from typing import Optional, Tuple, Any, Collection, Union, Dict, Set
 import logging
 
 import proxystore as ps
 
-from colmena.models import Result, SerializationMethod
+from colmena.models import Result, SerializationMethod, ResourceRequirements
 
 logger = logging.getLogger(__name__)
 
@@ -19,28 +19,6 @@ class QueueRole(str, Enum):
     ANY = 'any'
     SERVER = 'server'
     CLIENT = 'client'
-
-
-def _allowed_roles(allowed_role: Collection[QueueRole] = QueueRole.ANY) -> Callable:
-    """Decorator which warns users if a call is made on a queue set to the wrong role
-
-    Args:
-        allowed_role: Role that this function is allowed to take
-    Returns:
-        Function wrapper
-    """
-
-    def wrapper(func: Optional[Callable[['BaseQueue', Any], Any]] = None):
-        def inner_wrapper(queue: 'BaseQueue', *args, **kwargs):
-            my_role = queue.role
-            if allowed_role != 'ANY' and my_role != allowed_role:
-                warnings.warn(f'Called {func.__name__}, which is only allowed for {allowed_role} queues, on a {my_role} queue')
-            return func(queue, *args, **kwargs)
-
-        update_wrapper(inner_wrapper, func)
-        return inner_wrapper
-
-    return wrapper
 
 
 class BaseQueue:
@@ -82,7 +60,7 @@ class BaseQueue:
         # Create {topic: proxystore_name} mapping
         self.proxystore_name = {t: None for t in self.topics}
         if isinstance(proxystore_name, str):
-            self.proxystore_name = {t: proxystore_name for t in topics}
+            self.proxystore_name = {t: proxystore_name for t in self.topics}
         elif isinstance(proxystore_name, dict):
             self.proxystore_name.update(proxystore_name)
         elif proxystore_name is not None:
@@ -109,14 +87,8 @@ class BaseQueue:
                     'initialized prior to initializing the Colmena queue.'
                 )
 
-        if topics is None:
-            _topics = set()
-        else:
-            _topics = set(topics)
-        _topics.add("default")
-
         # Log the ProxyStore configuration
-        for topic in _topics:
+        for topic in self.topics:
             ps_name = self.proxystore_name[topic]
             ps_threshold = self.proxystore_threshold[topic]
 
@@ -128,6 +100,41 @@ class BaseQueue:
                     f'with a threshold of {ps_threshold} bytes'
                 )
 
+        # Create a collection that holds the task which have been sent out, and an event that is triggered
+        #  when the last task being sent out hits zero
+        self._active_lock = Lock()
+        self._active_tasks: Set[str] = set()
+        self._all_complete = Event()
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # We do not send the lock or event over pickle
+        state.pop('_active_lock')
+        state.pop('_all_complete')
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._active_lock = Lock()
+        self._all_complete = Event()
+
+    def _check_role(self, allowed_role: QueueRole, calling_function: str):
+        """Check whether the queue is in an appropriate role for a requested function
+
+        Emits a warning if the queue is in the wrong role
+
+        Args:
+            allowed_role: Role to check for
+            calling_function: Name of the calling function
+        """
+        if self.role != QueueRole.ANY and self.role != allowed_role:
+            warnings.warn(f'{calling_function} is intended for {allowed_role} not a {self.role}')
+
+    @property
+    def active_count(self) -> int:
+        """Number of active tasks"""
+        return len(self._active_tasks)
+
     def set_role(self, role: Union[QueueRole, str]):
         """Define the role of this queue.
 
@@ -136,9 +143,8 @@ class BaseQueue:
         role = QueueRole(role)
         self.role = role
 
-    @_allowed_roles(QueueRole.SERVER)
     def get_result(self, topic: str = 'default', timeout: Optional[float] = None) -> Optional[Result]:
-        """Get a value from the MethodServer
+        """Get a completed result
 
         Args:
             topic: Which topic of task to wait for
@@ -148,6 +154,7 @@ class BaseQueue:
         Raises:
             TimeoutException if the timeout is met
         """
+        self._check_role(QueueRole.CLIENT, 'get_result')
 
         # Get a value
         message = self._get_result(timeout=timeout, topic=topic)
@@ -161,16 +168,22 @@ class BaseQueue:
         # Some logging
         logger.info(f'Client received a {result_obj.method} result with topic {topic}')
 
+        # Update the list of active tasks
+        with self._active_lock:
+            self._active_tasks.discard(result_obj.task_id)
+            if len(self._active_tasks) == 0:
+                self._all_complete.set()
+
         return result_obj
 
-    @_allowed_roles(QueueRole.CLIENT)
     def send_inputs(self,
                     *input_args: Any,
                     method: str = None,
                     input_kwargs: Optional[Dict[str, Any]] = None,
                     keep_inputs: Optional[bool] = None,
+                    resources: Optional[Union[ResourceRequirements, dict]] = None,
                     topic: str = 'default',
-                    task_info: Optional[Dict[str, Any]] = None):
+                    task_info: Optional[Dict[str, Any]] = None) -> str:
         """Send a task request
 
         Args:
@@ -178,9 +191,13 @@ class BaseQueue:
             method (str): Name of the method to run. Optional
             input_kwargs (dict): Any keyword arguments for the function being run
             keep_inputs (bool): Whether to override the
-            topic (str): Topic for the queue, which sets the topic for the result.
+            topic (str): Topic for the queue, which sets the topic for the result
+            resources: Suggestions for how many resources to use for the task
             task_info (dict): Any information used for task tracking
+        Returns:
+            Task ID
         """
+        self._check_role(QueueRole.CLIENT, 'send_inputs')
 
         # Make fake kwargs, if needed
         if input_kwargs is None:
@@ -216,15 +233,30 @@ class BaseQueue:
             keep_inputs=_keep_inputs,
             serialization_method=self.serialization_method,
             task_info=task_info,
+            resources=resources or ResourceRequirements(),  # Takes either the user specified or a default
             **proxystore_kwargs
         )
 
         # Push the serialized value to the task server
         result.time_serialize_inputs = result.serialize()
-        self._send_request(result.json(exclude_unset=True), topic)
+        self._send_request(result.json(exclude_none=True), topic)
         logger.info(f'Client sent a {method} task with topic {topic}')
 
-    @_allowed_roles(QueueRole.SERVER)
+        # Store the task ID in the active list
+        with self._active_lock:
+            self._active_tasks.add(result.task_id)
+            self._all_complete.clear()
+        return result.task_id
+
+    def wait_until_done(self, timeout: Optional[float] = None):
+        """Wait until all out-going tasks have completed
+
+        Returns:
+            Whether the event was set within the timeout
+        """
+        self._check_role(QueueRole.CLIENT, 'wait_until_done')
+        return self._all_complete.wait(timeout=timeout)
+
     def get_task(self, timeout: float = None) -> Tuple[str, Result]:
         """Get a task object
 
@@ -237,6 +269,7 @@ class BaseQueue:
             TimeoutException: If the timeout on the queue is reached
             KillSignalException: If the queue receives a kill signal
         """
+        self._check_role(QueueRole.SERVER, 'get_task')
 
         # Pull a record off of the queue
         topic, message = self._get_request(timeout)
@@ -247,12 +280,11 @@ class BaseQueue:
         task.mark_input_received()
         return topic, task
 
-    @_allowed_roles(QueueRole.CLIENT)
     def send_kill_signal(self):
         """Send the kill signal to the task server"""
+        self._check_role(QueueRole.CLIENT, 'send_kill_signal')
         self._send_request("null", topic='default')
 
-    @_allowed_roles(QueueRole.SERVER)
     def send_result(self, result: Result, topic: str):
         """Send a value to a client
 
@@ -260,6 +292,7 @@ class BaseQueue:
             result (Result): Result object to communicate back
             topic (str): Topic of the calculation
         """
+        self._check_role(QueueRole.SERVER, 'send_result')
         result.mark_result_sent()
         self._send_result(result.json(), topic=topic)
 

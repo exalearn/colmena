@@ -83,7 +83,7 @@ class RedisQueue(BaseQueue):
             self.connect()
 
     def __getstate__(self):
-        state = self.__dict__.copy()
+        state = super().__getstate__()
 
         # If connected, remove the unpicklable RedisClient and
         #  put a placeholder instead

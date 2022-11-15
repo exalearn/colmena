@@ -1,8 +1,9 @@
 """Test the base class using the thread queue implemetnation"""
-from colmena.models import SerializationMethod
-from colmena.queue.python import PipeQueue
-
 from pytest import raises, fixture, warns
+
+from colmena.models import SerializationMethod
+from colmena.queue.base import BaseQueue
+from colmena.queue.python import PipeQueue
 
 
 class Test:
@@ -11,7 +12,7 @@ class Test:
 
 
 @fixture()
-def queue():
+def queue() -> BaseQueue:
     return PipeQueue(['a', 'b'])
 
 
@@ -140,3 +141,39 @@ def test_task_info(queue):
     queue.send_result(result, topic)
     result = queue.get_result()
     assert result.task_info == {'id': 'test'}
+
+
+def test_resources(queue):
+    # Test with defaults
+    queue.send_inputs(1, method='test')
+    topic, result = queue.get_task()
+    assert result.resources.node_count == 1
+
+    # Test with non-defaults
+    queue.send_inputs(1, resources={'node_count': 2})
+    topic, result = queue.get_task()
+    assert result.resources.node_count == 2
+
+
+def test_event_count(queue):
+    # Sent a method request
+    task_id = queue.send_inputs(1)
+    assert queue.active_count == 1
+    assert not queue.wait_until_done(timeout=1)
+
+    # Make sure the task ID does not change
+    topic, task = queue.get_task()
+    assert task_id == task.task_id
+
+    # Sent the task back
+    task.set_result(1)
+    print(queue._active_tasks)
+    print(task)
+    queue.send_result(task, topic)
+    queue.get_result()
+    assert queue.active_count == 0
+    assert queue.wait_until_done(timeout=1)
+
+    # Send another and make sure the event is reset
+    queue.send_inputs(1)
+    assert not queue.wait_until_done(timeout=1)
