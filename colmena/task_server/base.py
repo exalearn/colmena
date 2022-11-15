@@ -1,13 +1,16 @@
 """Base classes for the Task Server and associated functions"""
+import logging
 import os
 import platform
-
+from dataclasses import asdict
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import Future
+from inspect import signature
 from multiprocessing import Process
 from time import perf_counter
 from typing import Optional, Callable
-import logging
+
+import proxystore as ps
 
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.models import Result, FailureInformation
@@ -60,12 +63,12 @@ class BaseTaskServer(Process, metaclass=ABCMeta):
     def listen_and_launch(self):
         logger.info('Begin pulling from task queue')
         while True:
-            # Get a result from the queue
-            topic, task = self.queues.get_task(self.timeout)
-            logger.info(f'Received request for {task.method} with topic {topic}')
-
-            # Provide it to the workflow system to be executed
             try:
+                # Get a result from the queue
+                topic, task = self.queues.get_task(self.timeout)
+                logger.info(f'Received request for {task.method} with topic {topic}')
+
+                # Provide it to the workflow system to be executed
                 self.process_queue(topic, task)
             except KillSignalException:
                 logger.info('Kill signal received')
@@ -78,12 +81,19 @@ class BaseTaskServer(Process, metaclass=ABCMeta):
         """Close out any resources needed by the task server"""
         pass
 
+    def _setup(self):
+        """Start any resources needed by the task server after it has started in a new process"""
+        pass
+
     def run(self) -> None:
         """Launch the thread and start running tasks
 
         Blocks until the inputs queue is closed and all tasks have completed"""
         logger.info(f"Started task server {self.__class__.__name__} on {self.ident}")
         self.queues.set_role('server')
+
+        # Perform any setup operations
+        self._setup()
 
         # Loop until queue has closed
         self.listen_and_launch()
@@ -101,7 +111,7 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
     Note that implementations are still responsible for adding the :meth:`run_and_record_timing` decorator.
     """
 
-    def _perform_callback(self, future: Future, result: Result, topic: str):
+    def perform_callback(self, future: Future, result: Result, topic: str):
         """Send a completed result back to queue. Used as a callback for complete tasks
 
         Args:
@@ -113,7 +123,7 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
         task_exc = future.exception()
 
         # If it was, send back a modified copy of the input structure
-        if future.exception() is not None:
+        if task_exc is not None:
             # Mark it as unsuccessful and capture the exception information
             result.success = False
             result.failure_info = FailureInformation.from_exception(task_exc)
@@ -121,26 +131,30 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
             # If not, the result object is the one we need
             result = future.result()
 
+        result.mark_task_received()
+
         # Put them back in the pipe with the proper topic
         self.queues.send_result(result, topic)
 
     @abstractmethod
-    def _submit(self, task: Result) -> Future:
+    def _submit(self, task: Result, topic: str) -> Optional[Future]:
         """Submit the task to the workflow engine
 
         Args:
             task: Task description
+            topic: Topic for the task
         Returns:
-            Future for the result object
+            Future for the result object, if any that needs a "return to user" callback is created
         """
         pass
 
     def process_queue(self, topic: str, task: Result):
         # Launch the task
-        future = self._submit(task)
+        future = self._submit(task, topic)
 
         # Create the callback
-        future.add_done_callback(lambda x: self._perform_callback(x, task, topic))
+        if future is not None:
+            future.add_done_callback(lambda x: self.perform_callback(x, task, topic))
 
 
 def run_and_record_timing(func: Callable, result: Result) -> Result:
@@ -160,15 +174,23 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Start resolving any proxies in the input asynchronously
     start_time = perf_counter()
-    resolve_proxies_async(result.args)
-    resolve_proxies_async(result.kwargs)
+    proxies = []
+    for arg in result.args:
+        proxies.extend(resolve_proxies_async(arg))
+    for value in result.kwargs.values():
+        proxies.extend(resolve_proxies_async(value))
     result.time_async_resolve_proxies = perf_counter() - start_time
 
     # Execute the function
     start_time = perf_counter()
     success = True
     try:
-        output = func(*result.args, **result.kwargs)
+        if '_resources' in result.kwargs:
+            logger.warning('`_resources` provided as a kwargs. Unexpected things are about to happen')
+        if '_resources' in signature(func).parameters:
+            output = func(*result.args, **result.kwargs, _resources=result.resources)
+        else:
+            output = func(*result.args, **result.kwargs)
     except BaseException as e:
         output = None
         success = False
@@ -190,7 +212,26 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     worker_info['hostname'] = platform.node()
     result.worker_info = worker_info
 
+    result.mark_compute_ended()
+
     # Re-pack the results
     result.time_serialize_results = result.serialize()
+
+    # Get the statistics for the proxy resolution
+    for proxy in proxies:
+        # Get the key associated with this proxy
+        key = ps.proxy.get_key(proxy)
+
+        # Get the store associated with this proxy
+        store = ps.store.get_store(proxy)
+        if store.has_stats:
+            # Get the stats and convert them to a JSON-serializable form
+            stats = store.stats(proxy)
+            stats = dict((k, asdict(v)) for k, v in stats.items())
+
+            # Store the data along with the stats
+            result.proxy_timing[key] = stats
+        else:
+            result.proxy_timing[key] = {}
 
     return result

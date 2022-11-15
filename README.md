@@ -1,8 +1,9 @@
 # Colmena
 
-[![Build Status](https://app.travis-ci.com/exalearn/colmena.svg?branch=master)](https://app.travis-ci.com/exalearn/colmena)
+[![CI](https://github.com/exalearn/colmena/actions/workflows/CI.yml/badge.svg)](https://github.com/exalearn/colmena/actions/workflows/CI.yml)
 [![Documentation Status](https://readthedocs.org/projects/colmena/badge/?version=latest)](https://colmena.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://badge.fury.io/py/colmena.svg)](https://badge.fury.io/py/colmena)
+[![Coverage Status](https://coveralls.io/repos/github/exalearn/colmena/badge.svg?branch=master)](https://coveralls.io/github/exalearn/colmena?branch=master)
 
 Colmena is a library that supports applications which steer large campaigns of simulations on supercomputers.
 Such "high-throughput" searches are commonly deployed on HPC and are, historically, 

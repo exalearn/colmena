@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial, update_wrapper
 from threading import Event, local, Thread, Barrier
 from traceback import TracebackException
-from typing import Optional, Callable, List, Union, Dict
+from typing import Optional, Callable, List, Union, Dict, Tuple
 
 import os
 
@@ -23,7 +23,8 @@ def agent(func: Optional[Callable] = None, startup: bool = False):
 
     Args:
         func: Do not directly pass this variable. It is used as an argument to the decorator
-        startup: Whether this agent exiting should trigger other agents to stop. All agents will still stop if it exits with an exception
+        startup: Whether this agent exiting normally should trigger other agents to stop.
+            All agents will still stop if it exits with an exception
     """
 
     def decorator(f: Callable):
@@ -41,7 +42,7 @@ def agent(func: Optional[Callable] = None, startup: bool = False):
 def _result_event_agent(thinker: 'BaseThinker', process_func: Callable, topic: Optional[str]):
     """Wrapper function for result processing agents"""
     # Wait until we get a result
-    while not thinker.done.is_set():
+    while not (thinker.done.is_set() and thinker.submitters_done.is_set()) or thinker.queues.active_count > 0:
         result = thinker.queues.get_result(timeout=_DONE_REACTION_TIME, topic=topic)
         if result is not None:
             process_func(thinker, result)
@@ -123,8 +124,10 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
 
     # Loop until the thinker is completed
     reallocator_thread: Optional[ReallocatorThread] = None
+    thinker.logger.info(f'Configured and waiting for {event_name} to be set')
     while not thinker.done.is_set():
         if event.wait(_DONE_REACTION_TIME):
+            thinker.logger.info(f'Event {event_name} has been triggered')
             # If desired, launch the resource-allocation thread
             if reallocate_resources:
                 reallocator_thread = ReallocatorThread(
@@ -143,9 +146,10 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
                 reallocator_thread.join()
 
             # Wait until all agents that responded to this event finish
-            my_id = barrier.wait()
-            if my_id == 0:
-                event.clear()
+            barrier.wait()
+
+            # Then reset the event
+            event.clear()
 
 
 def event_responder(func: Optional[Callable] = None, event_name: str = None,
@@ -167,7 +171,7 @@ def event_responder(func: Optional[Callable] = None, event_name: str = None,
     You must configure from where these resources are acquired, in which resource pool
     they are placed, and where they are re-allocated after the thread completes.
     The thread will allocate up to the maximum number of slots defined and
-    then reallocate _all slots available to that pool_ to the designated resource.
+    then reallocate *all slots available to that pool* to the designated resource.
 
     Args:
         func: Do not directly pass this variable. It is used as an argument to the decorator
@@ -199,10 +203,18 @@ def event_responder(func: Optional[Callable] = None, event_name: str = None,
     return decorator(func)
 
 
-def _launch_agent(func: Callable, thinker: 'BaseThinker'):
+def _launch_agent(func: Callable, thinker: 'BaseThinker') -> Tuple[bool, Optional[BaseException], Callable]:
     """Shim function for launching an agent
 
     Sets the thread-local variables for a class, such as its name and default topic
+
+    Args:
+        func: Colmena agent to be launched
+        thinker: The thinker instance associated with the func
+    Returns:
+        - Whether the execution was successful
+        - An exception, if it was not successful
+        - The original function being called
     """
 
     # Set the thread-local options for this agent
@@ -210,24 +222,31 @@ def _launch_agent(func: Callable, thinker: 'BaseThinker'):
     thinker.local_details.name = name
     thinker.local_details.logger = thinker.make_logger(name)
 
+    # Run any startup logic
+    thinker.prepare_agent()
+
     # Mark that this thread has launched
     thinker.logger.info(f'{name} started')
 
     # Launch it
-    was_exc = False
+    exc_data = None
     try:
         func(thinker)
     except BaseException as exc:
         thinker.logger.error(f'Raised an exception. {exc}')
-        was_exc = True
-        raise
-    finally:
-        # If a "critical" function, set the "done" flag
-        if was_exc or not getattr(func, '_colmena_startup', False):
-            thinker.done.set()
+        exc_data = exc
 
-        # Mark that the thread has crashed
-        thinker.logger.info(f'{name} completed')
+    # If a "critical" function, set the "done" flag
+    if exc_data is not None or not getattr(func, '_colmena_startup', False):
+        thinker.done.set()
+
+    # Run any tear-down logic
+    thinker.tear_down_agent()
+
+    # Mark that the thread has crashed
+    thinker.logger.info(f'{name} completed')
+
+    return exc_data is None, exc_data, func
 
 
 class _AgentData(local):
@@ -295,8 +314,9 @@ class BaseThinker(Thread):
         self.queues = queue
         self.queues.set_role('client')
 
-        # Create some basic events and locks
-        self.done: Event = Event()
+        # Create events that mark when the w
+        self.done: Event = Event()  # Tracks when agents should start shutting down
+        self.submitters_done: Event = Event()  # Set when all task_submitter agents are closed
 
         # Create barriers shared by event_responder agents
         self.barriers: Dict[str, Barrier] = {}
@@ -308,6 +328,24 @@ class BaseThinker(Thread):
     def logger(self) -> logging.Logger:
         """Get the logger for the active thread"""
         return self.local_details.logger
+
+    @property
+    def agent_name(self):
+        """Name of the agent"""
+        return self.local_details.name
+
+    def prepare_agent(self):
+        """Logic ran before launching an agent.
+
+        Override to define how to set up an agent.
+        Consider using :meth:`local_details` to store any agent-specific objects"""
+        pass
+
+    def tear_down_agent(self):
+        """Logic ran after an agent completes.
+
+        Override to define any tear down logic."""
+        pass
 
     def make_logging_handler(self) -> Optional[logging.Handler]:
         """Override to create a distinct logging handler for log messages emitted from this object"""
@@ -372,20 +410,50 @@ class BaseThinker(Thread):
 
         # Launch the thread
         threads = []
+        active_submitters = 0
         with ThreadPoolExecutor(max_workers=len(functions)) as executor:
             # Submit all worker threads
             for f in functions:
                 threads.append(executor.submit(_launch_agent, f, self))
+                if f._colmena_agent_type == 'task_submitter':
+                    active_submitters += 1
             self.logger.info(f'Launched all {len(functions)} functions')
+            if active_submitters > 0:
+                self.logger.info(f'Found {active_submitters} task submitter agents')
+            else:
+                self.logger.info('No task submitter agents')
+                self.submitters_done.set()
+            active_agents = len(functions)
 
             # Wait until any completes, then set the "gen_done" event to
             #  signal all remaining threads to finish after completing their work
             for finished in as_completed(threads):
-                exc = finished.exception()
-                if exc is None:
-                    self.logger.info('Thread completed without problems')
+                # Get the thread information
+                success, exc, func = finished.result()
+                name = func.__name__
+
+                # Report on the closure of the thread
+                active_agents -= 1
+                if success:
+                    self.logger.info(f'{name} completed without problems.'
+                                     f' {active_agents}/{len(functions)} remain active')
                 else:
                     tb = TracebackException.from_exception(exc)
-                    self.logger.error(f'Thread failed: {exc}.\nTraceback: {"".join(tb.format())}')
+                    self.logger.error(f'{name} failed: {exc}.\nTraceback: {"".join(tb.format())}')
+
+                # Check on whether the thread was an
+                if func._colmena_agent_type == 'task_submitter':
+                    active_submitters -= 1
+                    if active_submitters == 0:
+                        self.logger.info('All task submission agents have completed')
+                        self.submitters_done.set()
+
+                        # Create a log message for when all tasks finish
+                        if self.queues.active_count > 0:
+                            def _log_all_done():
+                                self.queues.wait_until_done()
+                                self.logger.info('All tasks have finished running. Task receivers will start exiting')
+
+                            Thread(target=_log_all_done, daemon=True).start()
 
         self.logger.info(f"{self.__class__.__name__} completed")

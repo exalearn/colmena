@@ -1,153 +1,284 @@
+from __future__ import annotations
+
 import argparse
-import json
 import logging
 import os
 import sys
 import time
+from datetime import datetime
 
 import numpy as np
-
-from datetime import datetime
-from typing import Any
-
+import proxystore as ps
+from funcx import FuncXClient
 from parsl import HighThroughputExecutor
 from parsl.addresses import address_by_hostname
 from parsl.config import Config
-from parsl.launchers import AprunLauncher, SimpleLauncher
-from parsl.providers import LocalProvider, CobaltProvider
+from parsl.launchers import AprunLauncher
+from parsl.providers import LocalProvider
 
+from colmena.redis.queue import ClientQueues
+from colmena.redis.queue import make_queue_pairs
 from colmena.task_server import ParslTaskServer
-from colmena.redis.queue import make_queue_pairs, ClientQueues
-from colmena.thinker import BaseThinker, agent
+from colmena.task_server.base import BaseTaskServer
+from colmena.task_server.funcx import FuncXTaskServer
+from colmena.thinker import agent
+from colmena.thinker import BaseThinker
 
 
 def get_args():
     parser = argparse.ArgumentParser(
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--config', default=None,
-                        help='JSON Config file to override argparse defaults')
-    parser.add_argument('--redis-host', default='localhost',
-                        help='Redis server IP')
-    parser.add_argument('--redis-port', default='6379',
-                        help='Redis server port')
-    parser.add_argument('--local-host', action='store_true', default=False,
-                        help='Launch jobs on local host')
-    parser.add_argument('--task-input-size', type=float, default=1,
-                        help='Data amount to send to tasks [MB]')
-    parser.add_argument('--task-output-size', type=float, default=1,
-                        help='Data amount to return from tasks [MB]')
-    parser.add_argument('--task-interval', type=float, default=0.001,
-                        help='Interval between new task generation [s]')
-    parser.add_argument('--task-count', type=int, default=100,
-                        help='Number of task to generate')
-    parser.add_argument('--worker-count', type=int, default=10,
-                        help='workers to use (worker/node=worker-count//node')
-    parser.add_argument('--use-value-server', action='store_true', default=False,
-                        help='Use the value server for sending data to worker')
-    parser.add_argument('--value-server-threshold', type=float, default=1,
-                        help='Threshold object size for value server [MB]')
-    parser.add_argument('--reuse-data', action='store_true', default=False,
-                        help='Send the same input to each task')
-    parser.add_argument('--output-dir', type=str, default='runs',
-                        help='output dir')
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
 
-    args = parser.parse_args()
+    backend_group = parser.add_mutually_exclusive_group(required=True)
+    backend_group.add_argument(
+        '--funcx',
+        action='store_true',
+        help='Use the FuncX Colmena Task Server',
+    )
+    backend_group.add_argument(
+        '--parsl',
+        action='store_true',
+        help='Use the Parsl Colmena Task Server',
+    )
 
-    if args.config is not None:
-        with open(args.config) as f:
-            for key, value in json.load(f).items():
-                if key in args:
-                    setattr(args, key, value)
-                else:
-                    logging.error('Unknown key {} in {}'.format(
-                            key, args.config))
-    
-    return args
+    task_group = parser.add_argument_group()
+    task_group.add_argument(
+        '--redis-host',
+        default='localhost',
+        help='Redis server IP',
+    )
+    task_group.add_argument(
+        '--redis-port',
+        default='6379',
+        help='Redis server port',
+    )
+    task_group.add_argument(
+        '--input-size',
+        type=float,
+        default=1,
+        help='Data amount to send to tasks [MB]',
+    )
+    task_group.add_argument(
+        '--output-size',
+        type=float,
+        default=1,
+        help='Data amount to return from tasks [MB]',
+    )
+    task_group.add_argument(
+        '--interval',
+        type=float,
+        default=0.001,
+        help='Interval between new task generation [s]',
+    )
+    task_group.add_argument(
+        '--count',
+        type=int,
+        default=100,
+        help='Number of task to generate',
+    )
+    task_group.add_argument(
+        '--sleep-time',
+        type=int,
+        default=0,
+        help='Optional sleep time for each task',
+    )
+    task_group.add_argument(
+        '--reuse-data',
+        action='store_true',
+        default=False,
+        help='Send the same input to each task',
+    )
+    task_group.add_argument(
+        '--output-dir',
+        type=str,
+        default='runs',
+        help='output directory',
+    )
+
+    funcx_group = parser.add_argument_group()
+    funcx_group.add_argument(
+        '--endpoint',
+        required='--funcx' in sys.argv,
+        help='FuncX endpoint for task execution',
+    )
+
+    parsl_group = parser.add_argument_group()
+    parsl_group.add_argument(
+        '--local',
+        action='store_true',
+        default=False,
+        help='Launch jobs on local host',
+    )
+    parsl_group.add_argument(
+        '--workers',
+        type=int,
+        default=10,
+        help='# workers to use (worker/node=worker-count//node',
+    )
+
+    ps_group = parser.add_argument_group()
+    ps_backend_group = parser.add_mutually_exclusive_group(required=False)
+    ps_backend_group.add_argument(
+        '--ps-file',
+        action='store_true',
+        help='Use the ProxyStore file backend.',
+    )
+    ps_backend_group.add_argument(
+        '--ps-globus',
+        action='store_true',
+        help='Use the ProxyStore Globus backend.',
+    )
+    ps_backend_group.add_argument(
+        '--ps-redis',
+        action='store_true',
+        help='Use the ProxyStore redis backend.',
+    )
+    ps_group.add_argument(
+        '--ps-threshold',
+        type=float,
+        default=0.1,
+        help='Threshold object size for ProxyStore [MB]',
+    )
+    ps_group.add_argument(
+        '--ps-file-dir',
+        required='--ps-file' in sys.argv,
+        help='Temp directory to store proxied object in.',
+    )
+    ps_group.add_argument(
+        '--ps-globus-config',
+        required='--ps-globus' in sys.argv,
+        help='Globus Endpoint config file to use with ProxyStore.',
+    )
+
+    return parser.parse_args()
 
 
 def empty_array(size: int) -> np.ndarray:
     return np.empty(int(1000 * 1000 * size / 4), dtype=np.float32)
 
 
-def target_function(data: np.ndarray, output_size: int) -> np.ndarray:
+def target_function(
+    data: np.ndarray,
+    output_size: int,
+    sleep_time: int = 0,
+) -> np.ndarray:
     import numpy as np
-    import time
+    from time import sleep
 
-    time.sleep(5)  # simulate more imports/setup
-    # Check that ObjectProxy acts as the wrapped np object
-    assert isinstance(data, np.ndarray), 'got type {}'.format(data)
-    time.sleep(0.005)  # simulate more computation
+    # Check that proxy acts as the wrapped np object
+    assert isinstance(data, np.ndarray), f'got type {data}'
+
+    sleep(sleep_time)  # simulate additional work
+
     return np.empty(int(1000 * 1000 * output_size / 4), dtype=np.float32)
 
 
 class Thinker(BaseThinker):
-
-    def __init__(self,
-                 queue: ClientQueues,
-                 task_input_size: int,
-                 task_output_size: int,
-                 task_count: int,
-                 task_interval: float,
-                 use_value_server: bool,
-                 reuse_data: bool,
-                 ):
+    def __init__(
+        self,
+        queue: ClientQueues,
+        input_size: int,
+        output_size: int,
+        task_count: int,
+        interval: float,
+        sleep_time: int,
+        reuse_data: bool,
+    ):
         super().__init__(queue)
-        self.task_input_size = task_input_size
-        self.task_output_size = task_output_size
+        self.input_size = input_size
+        self.output_size = output_size
         self.task_count = task_count
-        self.task_interval = task_interval
-        self.use_value_server = use_value_server
+        self.interval = interval
+        self.sleep_time = sleep_time
         self.reuse_data = reuse_data
         self.count = 0
 
     def __repr__(self):
-        return ("SyntheticDataThinker(\n" + 
-                "    task_input_size={}\n".format(self.task_input_size) +
-                "    task_output_size={}\n".format(self.task_output_size) +
-                "    task_count={}\n".format(self.task_count) +
-                "    task_interval={}\n)".format(self.task_interval)
+        return (
+            f'{self.__class__.__name__}(\n'
+            f'    input_size={self.input_size}\n'
+            f'    output_size={self.output_size}\n'
+            f'    task_count={self.task_count}\n'
+            f'    interval={self.interval}\n'
+            f'    sleep_time={self.sleep_time}\n'
+            f'    reuse_data={self.reuse_data}\n)'
         )
 
     @agent
     def consumer(self):
         for _ in range(self.task_count):
             result = self.queues.get_result(topic='generate')
-            self.logger.info('Got result: {}'.format(str(result).replace('\n', ' ')))
+            self.logger.info(
+                'Got result: {}'.format(str(result).replace('\n', ' ')),
+            )
 
     @agent
     def producer(self):
         if self.reuse_data:
-            input_data = empty_array(self.task_input_size)
+            input_data = empty_array(self.input_size)
         while not self.done.is_set():
             if not self.reuse_data:
-                input_data = empty_array(self.task_input_size)
-            self.queues.send_inputs(input_data,
-                    self.task_output_size, method='target_function',
-                    topic='generate')
+                input_data = empty_array(self.input_size)
+            self.queues.send_inputs(
+                input_data,
+                self.output_size,
+                self.sleep_time,
+                method='target_function',
+                topic='generate',
+            )
             self.count += 1
             if self.count >= self.task_count:
                 break
-            time.sleep(self.task_interval)
+            time.sleep(self.interval)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     args = get_args()
 
-    out_dir = os.path.join(args.output_dir, 
-            datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S'))
+    out_dir = os.path.join(
+        args.output_dir,
+        datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S'),
+    )
     os.makedirs(out_dir, exist_ok=True)
 
     # Set up the logging
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         level=logging.INFO,
-        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
-                  logging.StreamHandler(sys.stdout)]
+        handlers=[
+            logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
+            logging.StreamHandler(sys.stdout),
+        ],
     )
 
-    logging.info('Args: {}'.format(args))
+    logging.info(f'Args: {args}')
 
-    value_server_threshold = args.value_server_threshold * 1000 * 1000 if args.use_value_server else None
+    ps_name: str | None
+    if args.ps_file:
+        ps_name = 'file'
+        ps.store.init_store('file', name=ps_name, store_dir=args.ps_file_dir)
+    elif args.ps_globus:
+        ps_name = 'globus'
+        endpoints = ps.store.globus.GlobusEndpoints.from_json(
+            args.ps_globus_config,
+        )
+        ps.store.init_store(
+            'globus',
+            name=ps_name,
+            endpoints=endpoints,
+            timeout=60,
+        )
+    elif args.ps_redis:
+        ps_name = 'redis'
+        ps.store.init_store(
+            'redis',
+            name=ps_name,
+            hostname=args.redis_host,
+            port=args.redis_port,
+        )
+    else:
+        ps_name = None
 
     # Make the queues
     client_queues, server_queues = make_queue_pairs(
@@ -156,42 +287,52 @@ if __name__ == "__main__":
         topics=['generate'],
         serialization_method='pickle',
         keep_inputs=False,
-        value_server_threshold=value_server_threshold
-    ) 
+        proxystore_name=ps_name,
+        proxystore_threshold=int(args.ps_threshold * 1000 * 1000),
+    )
 
-
-    # Define the worker configuration
-    if args.local_host:
-        executors = [HighThroughputExecutor(max_workers=args.worker_count)]
-    else:
-        node_count = int(os.environ.get('COBALT_JOBSIZE', 1))
-        executors=[
-            HighThroughputExecutor(
-                address=address_by_hostname(),
-                label='workers',
-                max_workers=args.worker_count,
-                cores_per_worker=max(1, args.worker_count // node_count),
-                provider=LocalProvider(
-                    nodes_per_block=node_count,
-                    init_blocks=1,
-                    max_blocks=1,
-                    launcher=AprunLauncher('-d 64 --cc depth'),
-                    worker_init='module load miniconda-3\nconda activate colmena\n'
+    # Create the task server
+    doer: BaseTaskServer
+    if args.funcx:
+        fcx = FuncXClient()
+        doer = FuncXTaskServer(
+            {target_function: args.endpoint},
+            fcx,
+            server_queues,
+        )
+    elif args.parsl:
+        # Define the worker configuratio
+        if args.local:
+            executors = [HighThroughputExecutor(max_workers=args.workers)]
+        else:
+            node_count = int(os.environ.get('COBALT_JOBSIZE', 1))
+            executors = [
+                HighThroughputExecutor(
+                    address=address_by_hostname(),
+                    label='workers',
+                    max_workers=args.worker_count,
+                    cores_per_worker=max(1, args.workers // node_count),
+                    provider=LocalProvider(
+                        nodes_per_block=node_count,
+                        init_blocks=1,
+                        max_blocks=1,
+                        launcher=AprunLauncher('-d 64 --cc depth'),
+                        worker_init=(
+                            'module load miniconda-3\nconda activate colmena\n'
+                        ),
+                    ),
                 ),
-            ),
-        ]
-
-    config = Config(executors=executors, run_dir=out_dir)
-
-    doer = ParslTaskServer([target_function], server_queues, config)
+            ]
+        config = Config(executors=executors, run_dir=out_dir)
+        doer = ParslTaskServer([target_function], server_queues, config)
 
     thinker = Thinker(
         queue=client_queues,
-        task_input_size=args.task_input_size,
-        task_output_size=args.task_output_size,
-        task_count=args.task_count,
-        task_interval=args.task_interval,
-        use_value_server=args.use_value_server,
+        input_size=args.input_size,
+        output_size=args.output_size,
+        task_count=args.count,
+        interval=args.interval,
+        sleep_time=args.sleep_time,
         reuse_data=args.reuse_data,
     )
 
@@ -215,6 +356,8 @@ if __name__ == "__main__":
     # Wait for the task server to complete
     doer.join()
 
-    # Print the output result
-    logging.info('Finished. Runtime = {}s'.format(time.time() - start_time))
+    if ps_name is not None:
+        ps.store.get_store(ps_name).cleanup()
 
+    # Print the output result
+    logging.info(f'Finished. Runtime = {time.time() - start_time}s')

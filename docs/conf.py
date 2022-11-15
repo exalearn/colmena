@@ -37,6 +37,8 @@ extensions = [
 # Configuration for rendering classes
 autoclass_content = 'both'
 
+# Packages that we can install
+autodoc_mock_imports = ["funcx"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -64,6 +66,7 @@ html_static_path = ['_static']
 intersphinx_mapping = {
     'python': ('https://docs.python.org/', None),
     'parsl': ('https://parsl.readthedocs.io/en/stable/', None),
+    'funcx': ('https://funcx.readthedocs.io/en/latest/', None)
 }
 
 

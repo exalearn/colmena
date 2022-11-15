@@ -1,6 +1,6 @@
 """Utilities for tracking resources"""
 from threading import Semaphore, Lock, Event, Thread
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional, Union, Callable, Any
 from time import monotonic
 from math import inf
 import logging
@@ -131,6 +131,8 @@ class ResourceCounter:
 
         Draws only from the pool of nodes allocated to this task
 
+        Blocks until the request completes
+
         Args:
             task: Name of the task
             n_slots: Number of slots to request
@@ -181,20 +183,38 @@ class ResourceCounter:
         return success
 
     def reallocate(self, task_from: Optional[str], task_to: Optional[str], n_slots: Union[int, str],
+                   block: bool = True, callback: Optional[Callable[[], Any]] = None,
                    timeout: float = -1, cancel_if: Optional[Event] = None) -> bool:
         """Transfer computer resources from one task to another
+
+        Blocks until complete, unless ``block`` is set to ``False``
 
         Args:
             task_from: Which task to pull resources from (None to request un-allocated nodes)
             task_to: Which task to add resources to (None to de-allocate nodes)
             n_slots: Number of nodes to request. Set to "all" to reallocate all slots (all allocated slots, not just all available slots)
+            block: Whether to block until the tasks completes
+            callback: Callback function. Only used if the call is non-blocking
             timeout: Maximum time to wait for the request to be filled
             cancel_if: Cancel the request if this event happens
         Returns:
-            Whether request was fulfilled
+            Whether request was fulfilled. Always ``True`` if ``block==False``
         """
         if task_to == task_from:
             raise ValueError(f'Resources cannot be moved between the same pool. task_from = "{task_from}" = task_to')
+
+        if not block:
+            logger.debug('Initiating a non-blocking resource transfer')
+
+            def _function():
+                self.reallocate(task_from, task_to, n_slots, block=True, timeout=timeout, cancel_if=cancel_if)
+                if callback is not None:
+                    callback()
+
+            thr = Thread(target=_function, daemon=True)
+            thr.start()
+            assert thr.is_alive(), thr.join()
+            return True
 
         # Pull nodes from the remaining
         with self._allocation_lock[task_from]:

@@ -23,6 +23,8 @@ class FakeClient:
         return uuid
 
 
+# TODO (wardlt): This mocked version does not mimic the real versions' multi-threaded nature, which
+#  means it does not suffer the same problems when being copied over to a subprocess
 class FakeExecutor:
     """Faked FuncXExecutor that generates "futures" but does not communicate with FuncX"""
 

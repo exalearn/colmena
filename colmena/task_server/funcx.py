@@ -39,13 +39,19 @@ class FuncXTaskServer(FutureBasedTaskServer):
     def __init__(self, methods: Dict[Callable, str],
                  funcx_client: FuncXClient,
                  queues: PipeQueue,
-                 timeout: Optional[int] = None):
+                 timeout: Optional[int] = None,
+                 batch_enabled: bool = True,
+                 batch_interval: float = 1.0,
+                 batch_size: int = 100):
         """
         Args:
             methods: Map of functions to the endpoint on which it will run
             funcx_client: Authenticated FuncX client
             queues: Queues used to communicate with thinker
             timeout: Timeout for requests from the task queue
+            batch_enabled: Whether to use FuncX's batch submission feature
+            batch_interval: Maximum time to wait between batch  submissions
+            batch_size: Maximum number of task request to receive before submitting
         """
         super(FuncXTaskServer, self).__init__(queues, timeout)
 
@@ -63,17 +69,38 @@ class FuncXTaskServer(FutureBasedTaskServer):
             # Store the FuncX information for the function
             self.registered_funcs[func_name] = (new_func, endpoint)
 
-        # Create the executor and queue of tasks to be submitted back to the user
-        self.fx_exec = FuncXExecutor(self.fx_client)
+        # Placeholder for the executor and queue of tasks to be submitted back to the user
+        self.fx_exec: Optional[FuncXExecutor] = None
+        self._batch_options = dict(
+            batch_enabled=batch_enabled,
+            batch_size=batch_size,
+            batch_interval=batch_interval
+        )
 
-    def _submit(self, task: Result) -> Future:
+    def perform_callback(self, future: Future, result: Result, topic: str):
+        # Check if the failure was due to a ManagerLost
+        #  TODO (wardlt): Remove when we have retry support in FuncX
+        exc = future.exception()
+        if 'Task failure due to loss of manager' in str(exc):
+            logger.info('Caught an task that failed due to a lost manager. Resubmitting')
+            self.process_queue(topic, result)
+        else:
+            super().perform_callback(future, result, topic)
+
+    def _submit(self, task: Result, topic: str) -> Future:
         # Lookup the appropriate function ID and endpoint
         func, endp_id = self.registered_funcs[task.method]
+
+        task.mark_start_task_submission()
 
         # Submit it to FuncX to be executed
         future: Future = self.fx_exec.submit(func, task, endpoint_id=endp_id)
         logger.info(f'Submitted {task.method} to run on {endp_id}')
         return future
+
+    def _setup(self):
+        self.fx_exec = FuncXExecutor(self.fx_client, **self._batch_options)
+        logger.info('Created a FuncX executor')
 
     def _cleanup(self):
         self.fx_exec.shutdown()

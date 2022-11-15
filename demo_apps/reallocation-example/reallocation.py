@@ -211,9 +211,6 @@ class Thinker(BaseThinker):
         # Set the new size for triggering re-training
         self.retrain_size = len(self.database) + self.retrain_after
 
-        # Mark that we are ready for re-training
-        self.retrain.clear()
-
         # Save the result to disk
         with open(self.retrain_path, 'a') as fp:
             print(result.json(exclude={'inputs', 'value'}), file=fp)
