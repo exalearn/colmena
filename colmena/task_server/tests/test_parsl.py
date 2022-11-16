@@ -6,7 +6,7 @@ from parsl.config import Config
 from pytest import fixture, mark
 import proxystore as ps
 
-from colmena.queue.base import BaseQueue
+from colmena.queue.base import ColmenaQueue
 
 from colmena.queue.python import PipeQueue
 from colmena.models import ResourceRequirements
@@ -49,7 +49,7 @@ def store():
 
 
 @fixture(autouse=True)
-def server_and_queue(config, store) -> Tuple[ParslTaskServer, BaseQueue]:
+def server_and_queue(config, store) -> Tuple[ParslTaskServer, ColmenaQueue]:
     queues = PipeQueue(proxystore_name='store', proxystore_threshold=5000, serialization_method='pickle')
     server = ParslTaskServer([f, capitalize, bad_task, EchoTask(), FakeMPITask(), count_nodes], queues, config)
     yield server, queues

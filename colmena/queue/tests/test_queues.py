@@ -4,13 +4,13 @@ from multiprocessing import Pool
 from pytest import fixture, raises, mark
 
 from colmena.exceptions import TimeoutException, KillSignalException
-from colmena.queue.base import BaseQueue
+from colmena.queue.base import ColmenaQueue
 from colmena.queue.python import PipeQueue
 from colmena.queue.redis import RedisQueue
 
 
 @fixture(params=[PipeQueue, RedisQueue])
-def queue(request) -> BaseQueue:
+def queue(request) -> ColmenaQueue:
     return request.param(['a', 'b'])
 
 

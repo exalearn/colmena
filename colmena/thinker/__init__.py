@@ -11,7 +11,7 @@ import os
 import logging
 
 from colmena.exceptions import TimeoutException
-from colmena.queue.base import BaseQueue
+from colmena.queue.base import ColmenaQueue
 from colmena.thinker.resources import ResourceCounter, ReallocatorThread
 
 logger = logging.getLogger(__name__)
@@ -301,7 +301,7 @@ class BaseThinker(Thread):
     Start the thinker by calling ``.start()``
     """
 
-    def __init__(self, queue: BaseQueue, resource_counter: Optional[ResourceCounter] = None,
+    def __init__(self, queue: ColmenaQueue, resource_counter: Optional[ResourceCounter] = None,
                  daemon: bool = True, **kwargs):
         """
             Args:

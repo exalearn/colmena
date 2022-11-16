@@ -4,11 +4,11 @@ from typing import Collection, Union, Optional, Dict, Tuple
 from multiprocessing import Pipe
 
 from colmena.exceptions import TimeoutException, KillSignalException
-from colmena.queue.base import BaseQueue
+from colmena.queue.base import ColmenaQueue
 from colmena.models import SerializationMethod
 
 
-class PipeQueue(BaseQueue):
+class PipeQueue(ColmenaQueue):
     """Queues using Python's implementation
     of `multiprocessing Pipes <https://docs.python.org/3/library/multiprocessing.html#exchanging-objects-between-processes>`_"""
 

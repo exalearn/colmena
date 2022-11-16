@@ -18,7 +18,7 @@ from parsl.app.bash import BashApp
 from parsl.config import Config
 from parsl.app.python import PythonApp
 
-from colmena.queue.base import BaseQueue
+from colmena.queue.base import ColmenaQueue
 from colmena.models import Result, ExecutableTask, FailureInformation, ResourceRequirements
 from colmena.proxy import resolve_proxies_async
 from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
@@ -313,7 +313,7 @@ class ParslTaskServer(FutureBasedTaskServer):
     """
 
     def __init__(self, methods: List[Union[Callable, Tuple[Callable, Dict]]],
-                 queues: BaseQueue,
+                 queues: ColmenaQueue,
                  config: Config,
                  timeout: Optional[int] = None,
                  default_executors: Union[str, List[str]] = 'all'):

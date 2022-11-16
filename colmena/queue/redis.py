@@ -8,7 +8,7 @@ import redis
 from colmena.exceptions import TimeoutException, KillSignalException
 from colmena.models import SerializationMethod
 
-from colmena.queue.base import BaseQueue
+from colmena.queue.base import ColmenaQueue
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def _error_if_unconnected(f):
     return wrapper
 
 
-class RedisQueue(BaseQueue):
+class RedisQueue(ColmenaQueue):
     """A basic redis queue for communications used by the task server
 
     A queue is defined by its prefix and a "topic" designation.

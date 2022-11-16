@@ -2,7 +2,7 @@
 from pytest import raises, fixture, warns
 
 from colmena.models import SerializationMethod
-from colmena.queue.base import BaseQueue
+from colmena.queue.base import ColmenaQueue
 from colmena.queue.python import PipeQueue
 
 
@@ -12,7 +12,7 @@ class Test:
 
 
 @fixture()
-def queue() -> BaseQueue:
+def queue() -> ColmenaQueue:
     return PipeQueue(['a', 'b'])
 
 
