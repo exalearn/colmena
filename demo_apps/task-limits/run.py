@@ -9,28 +9,23 @@ import numpy as np
 from scipy.stats import truncnorm
 
 from datetime import datetime
-from typing import Any
 
 from parsl import HighThroughputExecutor
 from parsl.addresses import address_by_hostname
 from parsl.config import Config
-from parsl.launchers import AprunLauncher, SimpleLauncher
-from parsl.providers import LocalProvider, CobaltProvider
+from parsl.launchers import AprunLauncher
+from parsl.providers import LocalProvider
 
-from colmena.method_server import ParslMethodServer
-from colmena.redis.queue import make_queue_pairs, ClientQueues
+from colmena.queue import ColmenaQueue, PipeQueue
+from colmena.task_server import ParslTaskServer
 from colmena.thinker import BaseThinker, agent
 
 
 def get_args():
     parser = argparse.ArgumentParser(
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--config', default=None,
                         help='JSON Config file to override argparse defaults')
-    parser.add_argument('--redis-host', default='localhost',
-                        help='Redis server IP')
-    parser.add_argument('--redis-port', default='6379',
-                        help='Redis server port')
     parser.add_argument('--local-host', action='store_true', default=False,
                         help='Launch jobs on local host')
     parser.add_argument('--task-input-size', type=float, default=1,
@@ -41,10 +36,10 @@ def get_args():
                         help='Number of task to complete')
     parser.add_argument('--worker-count', type=int, default=10,
                         help='Number of tasks per node')
-    parser.add_argument('--task-length', type=float, default=1, 
-                       help='Length of task in seconds')
+    parser.add_argument('--task-length', type=float, default=1,
+                        help='Length of task in seconds')
     parser.add_argument('--task-length-std', type=float, default=0.1,
-                       help='Standard deviation of task length, expressed as a fraction of task length')
+                        help='Standard deviation of task length, expressed as a fraction of task length')
     parser.add_argument('--use-value-server', action='store_true', default=False,
                         help='Use the value server for sending data to worker')
     parser.add_argument('--value-server-threshold', type=float, default=1,
@@ -63,8 +58,8 @@ def get_args():
                     setattr(args, key, value)
                 else:
                     logging.error('Unknown key {} in {}'.format(
-                            key, args.config))
-    
+                        key, args.config))
+
     return args
 
 
@@ -82,15 +77,14 @@ def target_function(data: np.ndarray, output_size: int, runtime: float) -> np.nd
 class Thinker(BaseThinker):
 
     def __init__(self,
-                 queue: ClientQueues,
+                 queue: ColmenaQueue,
                  task_input_size: int,
                  task_output_size: int,
                  task_count: int,
                  length_mean: float,
                  length_std: float,
                  parallel_tasks: int,
-                 out_dir: str
-                 ):
+                 out_dir: str):
         """
         Args:
             queue
@@ -112,7 +106,7 @@ class Thinker(BaseThinker):
         self.count = 0
         self.time_dist = truncnorm(0, np.inf, scale=length_std, loc=length_mean)
         self.out_dir = out_dir
-    
+
     def submit(self):
         """Submit a new task to queue"""
         input_data = empty_array(self.task_input_size)
@@ -129,12 +123,11 @@ class Thinker(BaseThinker):
                 print(result.json(exclude={'inputs', 'value'}), file=fp)
                 self.count += 1
                 self.logger.info(f'Completed task {self.count}/{self.task_count}')
-                
+
             for i in range(self.parallel_tasks):
                 result = self.queues.get_result(topic='generate')
                 print(result.json(exclude={'inputs', 'value'}), file=fp)
-                self.logger.info(f'Retrieved remaining task {i+1}/{self.parallel_tasks}')
-                
+                self.logger.info(f'Retrieved remaining task {i + 1}/{self.parallel_tasks}')
 
     @agent(startup=False)
     def startup(self):
@@ -163,15 +156,12 @@ if __name__ == "__main__":
     value_server_threshold = args.value_server_threshold * 1000 * 1000 if args.use_value_server else None
 
     # Make the queues
-    client_queues, server_queues = make_queue_pairs(
-        args.redis_host,
-        args.redis_port,
+    queues = PipeQueue(
         topics=['generate'],
         serialization_method='pickle',
         keep_inputs=False,
-        value_server_threshold=value_server_threshold
+        proxystore_threshold=value_server_threshold
     )
-
 
     # Define the worker configuration
     if args.local_host:
@@ -179,7 +169,7 @@ if __name__ == "__main__":
         executors = [HighThroughputExecutor(max_workers=args.worker_count)]
     else:
         node_count = int(os.environ.get('COBALT_JOBSIZE', 1))
-        executors=[
+        executors = [
             HighThroughputExecutor(
                 address=address_by_hostname(),
                 label='workers',
@@ -198,10 +188,10 @@ if __name__ == "__main__":
 
     config = Config(executors=executors, run_dir=out_dir)
 
-    doer = ParslMethodServer([target_function], server_queues, config)
+    doer = ParslTaskServer([target_function], queues, config)
 
     thinker = Thinker(
-        queue=client_queues,
+        queue=queues,
         task_input_size=args.task_input_size,
         task_output_size=args.task_output_size,
         task_count=args.task_count,
@@ -210,7 +200,7 @@ if __name__ == "__main__":
         length_std=args.task_length * args.task_length_std,
         out_dir=out_dir
     )
-    
+
     # Save the configuration
     with open(os.path.join(out_dir, 'config.json'), 'w') as fp:
         params = args.__dict__.copy()
@@ -233,7 +223,7 @@ if __name__ == "__main__":
         thinker.join()
         logging.info('Task generator has completed')
     finally:
-        client_queues.send_kill_signal()
+        queues.send_kill_signal()
 
     # Wait for the method server to complete
     doer.join()

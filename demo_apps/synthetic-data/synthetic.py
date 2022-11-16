@@ -16,8 +16,8 @@ from parsl.config import Config
 from parsl.launchers import AprunLauncher
 from parsl.providers import LocalProvider
 
-from colmena.redis.queue import ClientQueues
-from colmena.redis.queue import make_queue_pairs
+from colmena.queue.python import PipeQueue
+from colmena.queue.base import ColmenaQueue
 from colmena.task_server import ParslTaskServer
 from colmena.task_server.base import BaseTaskServer
 from colmena.task_server.funcx import FuncXTaskServer
@@ -177,7 +177,7 @@ def target_function(
 class Thinker(BaseThinker):
     def __init__(
         self,
-        queue: ClientQueues,
+        queue: ColmenaQueue,
         input_size: int,
         output_size: int,
         task_count: int,
@@ -281,9 +281,7 @@ if __name__ == '__main__':
         ps_name = None
 
     # Make the queues
-    client_queues, server_queues = make_queue_pairs(
-        args.redis_host,
-        args.redis_port,
+    queues = PipeQueue(
         topics=['generate'],
         serialization_method='pickle',
         keep_inputs=False,
@@ -298,10 +296,10 @@ if __name__ == '__main__':
         doer = FuncXTaskServer(
             {target_function: args.endpoint},
             fcx,
-            server_queues,
+            queues,
         )
     elif args.parsl:
-        # Define the worker configuratio
+        # Define the worker configuration
         if args.local:
             executors = [HighThroughputExecutor(max_workers=args.workers)]
         else:
@@ -310,7 +308,7 @@ if __name__ == '__main__':
                 HighThroughputExecutor(
                     address=address_by_hostname(),
                     label='workers',
-                    max_workers=args.worker_count,
+                    max_workers=args.workers,
                     cores_per_worker=max(1, args.workers // node_count),
                     provider=LocalProvider(
                         nodes_per_block=node_count,
@@ -324,10 +322,10 @@ if __name__ == '__main__':
                 ),
             ]
         config = Config(executors=executors, run_dir=out_dir)
-        doer = ParslTaskServer([target_function], server_queues, config)
+        doer = ParslTaskServer([target_function], queues, config)
 
     thinker = Thinker(
-        queue=client_queues,
+        queue=queues,
         input_size=args.input_size,
         output_size=args.output_size,
         task_count=args.count,
@@ -351,7 +349,7 @@ if __name__ == '__main__':
         thinker.join()
         logging.info('Task generator has completed')
     finally:
-        client_queues.send_kill_signal()
+        queues.send_kill_signal()
 
     # Wait for the task server to complete
     doer.join()

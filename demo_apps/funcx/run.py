@@ -1,14 +1,17 @@
 """Perform GPR Active Learning where Bayesian optimization is used to select a new
 calculation as soon as one calculation completes"""
 from funcx import FuncXClient
+
+from colmena.queue.base import ColmenaQueue
+from colmena.queue.python import PipeQueue
 from colmena.task_server.funcx import FuncXTaskServer
 from colmena.thinker import BaseThinker, agent
-from colmena.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
 from functools import partial, update_wrapper
 from datetime import datetime
+import proxystore as ps
 from time import sleep
 import numpy as np
 import argparse
@@ -16,7 +19,7 @@ import logging
 import json
 import sys
 import os
-import proxystore as ps
+
 
 
 # Hard code the function to be optimized
@@ -56,7 +59,7 @@ def ackley(x: np.ndarray, a=20, b=0.2, c=2 * np.pi, mean_rt=0, std_rt=0.1) -> np
 class Thinker(BaseThinker):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, queues: ClientQueues, output_dir: str, dim: int = 2,
+    def __init__(self, queues: ColmenaQueue, output_dir: str, dim: int = 2,
                  n_guesses: int = 100, batch_size: int = 10, opt_delay: float = 0):
         """
         Args:
@@ -131,10 +134,6 @@ class Thinker(BaseThinker):
 if __name__ == '__main__':
     # User inputs
     parser = argparse.ArgumentParser()
-    parser.add_argument("--redishost", default="127.0.0.1",
-                        help="Address at which the redis server can be reached")
-    parser.add_argument("--redisport", default="6379",
-                        help="Port on which redis is available")
     parser.add_argument("--num-guesses", "-n", help="Total number of guesses", type=int, default=16)
     parser.add_argument("--num-parallel", "-p", help="Number of guesses to evaluate in parallel (i.e., the batch size)",
                         type=int, default=2)
@@ -174,13 +173,7 @@ if __name__ == '__main__':
         serialization_method = 'json'
 
     # Connect to the redis server
-    client_queues, server_queues = make_queue_pairs(
-        args.redishost,
-        args.redisport,
-        serialization_method=serialization_method,
-        proxystore_name='default',
-        proxystore_threshold=args.proxystore_threshold
-    )
+    queues = PipeQueue()
 
     # Log in to FuncX
     fx_client = FuncXClient()
@@ -188,8 +181,8 @@ if __name__ == '__main__':
     # Create the task server and task generator
     my_ackley = partial(ackley, mean_rt=args.runtime, std_rt=args.runtime_var)
     update_wrapper(my_ackley, ackley)
-    doer = FuncXTaskServer({my_ackley: args.endpoint}, fx_client, server_queues)
-    thinker = Thinker(client_queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
+    doer = FuncXTaskServer({my_ackley: args.endpoint}, fx_client, queues)
+    thinker = Thinker(queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
                       batch_size=args.num_parallel, opt_delay=args.opt_delay)
     logging.info('Created the task server and task generator')
 
@@ -203,7 +196,7 @@ if __name__ == '__main__':
         thinker.join()
         logging.info('Task generator has completed')
     finally:
-        client_queues.send_kill_signal()
+        queues.send_kill_signal()
 
     # Wait for the task server to complete
     doer.join()
