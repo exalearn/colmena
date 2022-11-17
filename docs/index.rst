@@ -42,6 +42,7 @@ illustrate how to implement different thinking applications that solve optimizat
    how-to
    thinker
    task-servers
+   queues
    source/modules
 
 Why the name "Colmena?"

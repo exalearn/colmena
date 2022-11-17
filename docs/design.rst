@@ -124,6 +124,9 @@ Creating it requires no other services or configuration beyond the topics:
 Task inputs are serialized using Pickle (we support most Python objects this way),
 and task information is communicated over queues as JSON-serialized objects.
 
+`Other implementations <queues.html>`_ of the queue, such as a Redis-backed version (:class:`~colmena.queue.redis.RedisQueue`)
+are available.
+
 
 Life-Cycle of a Task
 --------------------
