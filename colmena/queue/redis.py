@@ -43,7 +43,7 @@ class RedisQueues(ColmenaQueues):
                  port: int = 6379,
                  prefix: str = uuid4(),
                  serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
-                 keep_inputs: bool = False,
+                 keep_inputs: bool = True,
                  proxystore_name: Optional[Union[str, Dict[str, str]]] = None,
                  proxystore_threshold: Optional[Union[int, Dict[str, int]]] = None):
         """

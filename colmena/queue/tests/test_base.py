@@ -73,7 +73,6 @@ def test_results(queue):
     request.serialize()
     queue.send_result(request, topic)
     result = queue.get_result(topic=topic)
-    result.deserialize()
     assert result.value == 1
 
 
@@ -102,6 +101,7 @@ def test_clear_inputs(queue):
     """Test clearing the inputs after storing the result"""
 
     # Sent a method request
+    queue.keep_inputs = False
     queue.send_inputs(1)
     _, result = queue.get_task()
     result.deserialize()

@@ -31,7 +31,7 @@ class ColmenaQueues:
     def __init__(self,
                  topics: Collection[str],
                  serialization_method: Union[str, SerializationMethod] = SerializationMethod.JSON,
-                 keep_inputs: bool = False,
+                 keep_inputs: bool = True,
                  proxystore_name: Optional[Union[str, Dict[str, str]]] = None,
                  proxystore_threshold: Optional[Union[int, Dict[str, int]]] = None):
         """

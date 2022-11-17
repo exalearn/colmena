@@ -15,7 +15,7 @@ class PipeQueues(ColmenaQueues):
     def __init__(self,
                  topics: Collection[str] = (),
                  serialization_method: Union[str, SerializationMethod] = SerializationMethod.PICKLE,
-                 keep_inputs: bool = False,
+                 keep_inputs: bool = True,
                  proxystore_name: Optional[Union[str, Dict[str, str]]] = None,
                  proxystore_threshold: Optional[Union[int, Dict[str, int]]] = None):
         super().__init__(topics, serialization_method, keep_inputs, proxystore_name, proxystore_threshold)

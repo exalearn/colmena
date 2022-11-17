@@ -40,7 +40,7 @@ class ResourceCounter:
     of the resource utilization semaphore.
     """
 
-    def __init__(self, total_slots: int, task_types: List[str]):
+    def __init__(self, total_slots: int, task_types: List[str] = ()):
         """
         Args:
             total_slots: Total number of nodes available to the resources
@@ -50,7 +50,7 @@ class ResourceCounter:
         self._total_slots = total_slots
 
         # Add a "global" task type
-        my_tasks: List[Optional[str]] = task_types.copy()
+        my_tasks: List[Optional[str]] = list(task_types)
         if None in my_tasks:
             raise ValueError("`None` is reserved as the global task name")
         my_tasks.append(None)
@@ -105,7 +105,7 @@ class ResourceCounter:
             raise KeyError(f'Unknown task name: {task}')
         return self._availability[task]._value
 
-    def release(self, task: Optional[str], n_slots: int, rerequest: bool = False, timeout: float = -1) -> Optional[bool]:
+    def release(self, task: Optional[str] = None, n_slots: int = 1, rerequest: bool = False, timeout: float = -1) -> Optional[bool]:
         """Register that nodes for a particular task are available
         and, optionally, re-request those nodes for the same task.
 
