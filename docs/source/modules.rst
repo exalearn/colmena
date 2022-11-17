@@ -6,7 +6,7 @@ colmena
 .. toctree::
 
     colmena.task_server
-    colmena.redis
+    colmena.queue
     colmena.models
     colmena.thinker
     colmena.exceptions

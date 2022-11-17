@@ -17,7 +17,7 @@ Queues
 The ``self.queue`` attribute of a Thinker class manages communication to the task server.
 Each agent can use it to submit tasks or wait for results from the task server.
 
-The :class:`~colmena.redis.queue.ClientQueues` object must be provided to the constructor.
+The :class:`~colmena.queue.base.ColmenaQueues` object must be provided to the constructor.
 
 Logger
 ++++++
@@ -54,12 +54,12 @@ to the constructor for this feature to be available.
 
 .. code-block:: python
 
-    from colmena.redis.queue import ClientQueues
+    from colmena.queue import ColmenaQueues
     from colmena.thinker import BaseThinker, ResourceCounter, agent
 
 
     class ResourceLimited(BaseThinker):
-        def __init__(self, queues: ClientQueues, nodes: int = 1):
+        def __init__(self, queues: ColmenaQueues, nodes: int = 1):
             """
             Args:
                 queues: Queues to use to communicate with the task server

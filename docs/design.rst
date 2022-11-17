@@ -1,61 +1,43 @@
 Design
 ======
 
-Colmena is a library on which you can build applications to steer
-ensembles of simulations running on HPC resources.
-This portion of the documentation discuss the components of Colmena
-and illustrate how they work together.
+Colmena is a library for applications that steer
+ensembles of simulations running on distributed computing resources.
+We describe the concepts behind Colmena here.
 
 Key Concepts
 ------------
 
-Applications based on Colmena are typically composed of two separate processes:
-a "Thinker" application and a "Doer" application.
-The "Thinker" application determines the computations to perform and
-communicates specifications to the "Doer."
-These computations can consist of both the target simulations to be
-performed (e.g., a DFT code) *and* computations used to decide which
-simulation to perform next (e.g., training and inference of a machine-learned
-surrogate model).
+Applications based on Colmena have two parts: a "Thinker" and "Doer".
+The Thinker determines which computations to perform and
+delegates them to the Doer.
 
 .. image:: _static/overview.svg
     :height: 200px
     :align: center
 
-"Thinker": Active Learning Agent
-++++++++++++++++++++++++++++++++
+"Thinker": Planning Agent
++++++++++++++++++++++++++
 
-The "Thinker" process is responsible for generating tasks to send to the task server.
-Colmena supports many different kinds of task generation methods each with
-different concurrency and optimization performance tradeoffs.
-For example, one could develop a batch optimization algorithm
-that waits for every simulation in a batch to complete before
-sending deciding new simulations or a streaming optimization
-tool that continuously maintains a queue of new computations.
+The "Thinker" is defines the strategy for a computational campaign.
+The strategy is expressed by a series of "agents" that identify
+which computations to run and adapt to their results.
+As `demonstrated in our optimization examples <how-to#creating-a-thinker-application>`_,
+complex strategies are simple if broken into many agents.
+
 
 "Doer": task server
 +++++++++++++++++++
 
 The "Doer" server accepts tasks specification, deploys tasks on remote services
 and sends results back to the Thinker agent(s).
-The "Doer" process also stores information about available
-methods including task descriptions (e.g., a DAG representation of a workflow)
-and supports updating that task descriptions on request
-(e.g., updating to a latest version of a machine learning model).
-
-Communication
-+++++++++++++
-
-Communication between the "Thinker" and "Doer" is asynchronous
-and follows a very specific pattern.
-"Thinker" applications make requests to the task server for computations
-and receive the results in no particular order.
+Doers are interfaces to workflow engies, such as `Parsl <https://parsl-project.org>`_
+or `FuncX <https://funcx.org/>`_.
 
 Implementation
 --------------
 
-Our current implementation of Colmena is based around a Parsl workflow
-engine to manage computations and Redis for asynchronous communication.
+The Thinker and Doer from Colmena run as separate Python processes that interact over queues.
 
 .. image:: _static/implementation.svg
     :align: center
@@ -63,15 +45,34 @@ engine to manage computations and Redis for asynchronous communication.
 Client
 ++++++
 
-The "Thinker" process, which we refer to as the client,
-in a Colmena application is custom software developed to
-decide which tasks are run.
+The "Thinker" process is a Python program that runs a separate thread for each agent.
 
-The client communicates by either writing *task requests* to or reading *results* from
-Redis queues.
-Tasks and results are communicated as JSON objects and contain the inputs to a task,
-the outputs of the task, and a variety of profiling data (e.g., task runtime,
-time inputs received by task server).
+Agents are functions that define which computations to run by sending *task request*
+to a task server or reading *results* from a queue.
+Results are returned in the order they are completed.
+
+A simple "run a large batch in parallel" can be defined with a single agent:
+
+.. code-block:: python
+
+    class Thinker(BaseThinker)
+
+        # ...
+
+        @agent
+        def run_batch(self):
+            # Submit computations
+            for x in self.to_run:
+                self.queues.send_inputs(x, method='f')
+
+            # Collect results
+            results = [self.queues.get_result() for _ in range(len(self.to_run))]
+
+            # Find best
+            best_ind = np.argmin([r.value for r in results])
+            print(f'Best result: {results[best_in].args}')
+
+
 We provide a Python API for the message format, :class:`~colmena.models.Result`,
 which provides utility operations for tasks that include accessing the positional
 or keyword arguments for a task and serializing the inputs and results.
@@ -79,53 +80,50 @@ or keyword arguments for a task and serializing the inputs and results.
 Task Server
 +++++++++++
 
-We implement a task server based on `Parsl <https://parsl-project.org>`_.
-Parsl provides a model of distributed computing in Python that meshes well with
-Python's native :mod:`concurrent.futures` module and allows for users to express complex
-workflows in Python.
-We create :class:`~parsl.app.PythonApp` for each of the methods available in the task server,
-which allows us to use them as part of Parsl workflows and execute them on distributed resources.
+We support Task Servers that `use different workflow engines <task-servers.html>`_,
+but all follow the same pattern.
+Each are defined by registering computations (often expressed as Python functions) to be run,
+a set of available computational resources,
+and a queue to communicate with the client.
 
-The :class:`~colmena.task_server.ParslMethodServer` itself is a multi-process, multi-threaded Python application:
+The best Task Server to start with is Parsl, :class:`~colmena.task_server.parsl.ParslTaskServer`.
+Having it run tasks locally can be achieved by
 
-1. *Intake Thread*: The intake thread reads task requests from the input Redis queue(s), deserializes
-   them and submits the appropriate tasks to Parsl. Submitting a task to Parsl involves calling
-   the ``PythonApp`` for a certain method defined in the input specification and creating a workflow
-   such that the result from the method will be sent back to the queue.
-2. *Parsl Threads*: Parsl is a multi-threaded application which handles launching and communicating
-   with worker processes. These workers can reside on other systems (e.g., compute or launch nodes on HPC).
-3. *Output Process*: Each task is defined as a two-step workflow in Parsl: "perform task" followed by
-   "output results". The "output results" step in the workflow is performed on a collection of porcesses
-   managed by Parsl.
-4. *Error Collection Thread*: Tasks which fail to run are periodically sent back to the client
-   over the Redis queue. The Error thread captures errors reported from Parsl and adds them to the Redis queue.
+.. code-block::
+
+    # Function
+    def f(x):
+        return x ** 2 - 3
+
+    # Compute configuration
+    from parsl.configs.htex_local import config
+
+    # Communicator
+    queues = PipeQueues()
+
+    # Doer
+    doer = ParslTaskServer([f], queues, config)
+
 
 Communication
 +++++++++++++
 
-Communication between the client and task server occurs using Redis queues.
-Each Colmena application has at least two queues: an "inputs" queue for task
-requests and a "results" queue for results.
-By default, operations will pull from these two default queues.
-Colmena also supports creating "topical" queues for tasks for special categories
-(e.g., tasks associated with active learning vs simulations).
-Client processes can filter to only read from these topical queues, which simplifies
-breaking a "Thinker" application in multiple sub-agents.
+Task requests and results are communicated between Thinker and Doer via queues.
+Thinkers submit a task request to one queue and receive results in a second as soon as possible it completes.
+Users can also denote tasks with a "topics" if there are tasks used by different agents.
 
-The :mod:`colmena.redis.queue` module contains utility classes for interacting with these redis queues.
-For example, the :class:`~colmena.redis.queue.ClientQueues` provides a wrapper for use by a client process.
-One utility operation, ``send_inputs``, wraps task descriptions in the ``Result`` class,
-serializes the inputs, and pushes them to the result queue.
-There is a corresponding, ``get_result``, operation which pulls a result from the result queue
-and deserializes the result.
-Each of these operations can be supplied with a topic to either send inputs with a
-designated topic or to receive only a result with a certain topic.
+The easiest-to-configure queue, :class:`~colmena.queue.python.PipeQueues`, is based on Python's multiprocessing Pipes.
+Creating it requires no other services or configuration beyond the topics:
 
-There is a corresponding queue wrapper for the task server, :class:`~colmena.redis.queue.MethodServerQueues`,
-that provides the matching operations to the ``ClientQueues``.
-Both need to be created to point to the same Redis server and have the same list of topic names,
-and Colmena provides a :meth:`colmena.redis.queue.make_queue_pairs` to generate a matched
-set of queues at the beginning of an application.
+.. code-block::
+
+    queues = PipeQueues(topics=['steer', 'simulate'])
+    queues.send_inputs(1, method='expensive_func', topic='simulation')
+    result = queue.get_result(topic='simulation')
+
+Task inputs are serialized using Pickle (we support most Python objects this way),
+and task information is communicated over queues as JSON-serialized objects.
+
 
 Life-Cycle of a Task
 --------------------
