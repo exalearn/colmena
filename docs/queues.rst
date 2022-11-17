@@ -10,7 +10,10 @@ Python Pipes
 :class:`~colmena.queue.python.PipeQueues` uses `Python Pipes <https://docs.python.org/3/library/multiprocessing.html#pipes-and-queues>`_ transmit data
 between two Python processes.
 
-**Advantages**: Simple setup (no configuration or other services required)
+**Advantages**:
+
+- Simple setup (no configuration or other services required)
+- Very portable. Uses only Python native libraries
 
 **Disadvantages**:
 
@@ -30,7 +33,8 @@ Redis
 - Applications can use multiple Thinkers and Task Servers
 - Redis server can also serve as a backend for ProxyStore
 
-**Disadvantages**;
+**Disadvantages**:
 
 - Redis must run as a second service
+- Redis is difficult to install on some OSs or architectures
 - Open ports or SSH tunnels may be required if Redis on separate host from Task Server/Thinker
