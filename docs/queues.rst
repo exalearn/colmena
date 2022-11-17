@@ -7,10 +7,8 @@ Colmena supports multiple backends for queues that pass data between Thinker and
 Python Pipes
 ------------
 
-**Class**:
-
-:class:`~colmena.queues.python.PipeQueues` uses `Python Pipes <https://docs.python.org/3/library/multiprocessing.html#pipes-and-queues>`_ transmit data
-between two Python processes without the need for any intermediate server.
+:class:`~colmena.queue.python.PipeQueues` uses `Python Pipes <https://docs.python.org/3/library/multiprocessing.html#pipes-and-queues>`_ transmit data
+between two Python processes.
 
 **Advantages**: Simple setup (no configuration or other services required)
 
@@ -23,7 +21,7 @@ between two Python processes without the need for any intermediate server.
 Redis
 -----
 
-:class:`~colmena.queues.redis.RedisQueue` uses `Redis <https://redis.io/>`_, a high-performance in-memory data store.
+:class:`~colmena.queue.redis.RedisQueues` uses `Redis <https://redis.io/>`_, a high-performance in-memory data store.
 
 **Advantages**:
 
