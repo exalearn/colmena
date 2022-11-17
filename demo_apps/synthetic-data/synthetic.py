@@ -16,8 +16,8 @@ from parsl.config import Config
 from parsl.launchers import AprunLauncher
 from parsl.providers import LocalProvider
 
-from colmena.queue.python import PipeQueue
-from colmena.queue.base import ColmenaQueue
+from colmena.queue.python import PipeQueues
+from colmena.queue.base import ColmenaQueues
 from colmena.task_server import ParslTaskServer
 from colmena.task_server.base import BaseTaskServer
 from colmena.task_server.funcx import FuncXTaskServer
@@ -177,7 +177,7 @@ def target_function(
 class Thinker(BaseThinker):
     def __init__(
         self,
-        queue: ColmenaQueue,
+        queue: ColmenaQueues,
         input_size: int,
         output_size: int,
         task_count: int,
@@ -281,7 +281,7 @@ if __name__ == '__main__':
         ps_name = None
 
     # Make the queues
-    queues = PipeQueue(
+    queues = PipeQueues(
         topics=['generate'],
         serialization_method='pickle',
         keep_inputs=False,

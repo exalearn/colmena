@@ -1,8 +1,8 @@
 """Perform GPR Active Learning where we periodicially dedicate resources to
 re-prioritizing a list of simulations to run"""
 from colmena.models import Result
-from colmena.queue.base import ColmenaQueue
-from colmena.queue.python import PipeQueue
+from colmena.queue.base import ColmenaQueues
+from colmena.queue.python import PipeQueues
 from colmena.thinker import BaseThinker, result_processor, task_submitter, event_responder
 from colmena.task_server import ParslTaskServer
 from colmena.thinker.resources import ResourceCounter
@@ -94,7 +94,7 @@ def reprioritize_queue(database: List[Tuple[np.ndarray, float]],
 class Thinker(BaseThinker):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, queues: ColmenaQueue,
+    def __init__(self, queues: ColmenaQueues,
                  output_dir: str,
                  dim: int = 2,
                  retrain_after: int = 5,
@@ -232,7 +232,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Connect to the redis server
-    queues = PipeQueue(keep_inputs=True, topics=['thinker', 'doer'])
+    queues = PipeQueues(keep_inputs=True, topics=['thinker', 'doer'])
 
     # Make the output directory
     out_dir = os.path.join('runs',

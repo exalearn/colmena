@@ -16,7 +16,7 @@ from parsl.config import Config
 from parsl.launchers import AprunLauncher
 from parsl.providers import LocalProvider
 
-from colmena.queue import ColmenaQueue, PipeQueue
+from colmena.queue import ColmenaQueues, PipeQueues
 from colmena.task_server import ParslTaskServer
 from colmena.thinker import BaseThinker, agent
 
@@ -77,7 +77,7 @@ def target_function(data: np.ndarray, output_size: int, runtime: float) -> np.nd
 class Thinker(BaseThinker):
 
     def __init__(self,
-                 queue: ColmenaQueue,
+                 queue: ColmenaQueues,
                  task_input_size: int,
                  task_output_size: int,
                  task_count: int,
@@ -156,7 +156,7 @@ if __name__ == "__main__":
     value_server_threshold = args.value_server_threshold * 1000 * 1000 if args.use_value_server else None
 
     # Make the queues
-    queues = PipeQueue(
+    queues = PipeQueues(
         topics=['generate'],
         serialization_method='pickle',
         keep_inputs=False,

@@ -1,10 +1,10 @@
 """Perform GPR Active Learning where simulations are sent in batches"""
 from pathlib import Path
 
-from colmena.queue.base import ColmenaQueue
+from colmena.queue.base import ColmenaQueues
 from colmena.thinker import BaseThinker, agent
 from colmena.task_server import ParslTaskServer
-from colmena.queue.python import PipeQueue
+from colmena.queue.python import PipeQueues
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
@@ -24,7 +24,7 @@ from sim import Simulation
 class Thinker(BaseThinker):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, queues: ColmenaQueue, output_dir: str, n_guesses: int = 100, batch_size: int = 10):
+    def __init__(self, queues: ColmenaQueues, output_dir: str, n_guesses: int = 100, batch_size: int = 10):
         """
         Args:
             output_dir (str): Output path
@@ -110,7 +110,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Connect to the redis server
-    queues = PipeQueue(keep_inputs=True)
+    queues = PipeQueues(keep_inputs=True)
 
     # Make the output directory
     out_dir = os.path.join('runs',

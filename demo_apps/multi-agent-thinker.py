@@ -7,7 +7,7 @@ from parsl import HighThroughputExecutor
 from parsl.config import Config
 
 from colmena.task_server import ParslTaskServer
-from colmena.queue import ColmenaQueue, PipeQueue
+from colmena.queue import PipeQueues
 from colmena.thinker import BaseThinker, agent
 
 
@@ -28,7 +28,7 @@ if __name__ == "__main__":
                                   logging.StreamHandler(sys.stdout)])
 
     # Make the queues
-    queues = PipeQueue(topics=['generate', 'simulate'], keep_inputs=True)
+    queues = PipeQueues(topics=['generate', 'simulate'], keep_inputs=True)
 
     # Define the worker configuration
     config = Config(executors=[HighThroughputExecutor()])

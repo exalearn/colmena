@@ -2,8 +2,8 @@
 calculation as soon as one calculation completes"""
 from funcx import FuncXClient
 
-from colmena.queue.base import ColmenaQueue
-from colmena.queue.python import PipeQueue
+from colmena.queue.base import ColmenaQueues
+from colmena.queue.python import PipeQueues
 from colmena.task_server.funcx import FuncXTaskServer
 from colmena.thinker import BaseThinker, agent
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
@@ -59,7 +59,7 @@ def ackley(x: np.ndarray, a=20, b=0.2, c=2 * np.pi, mean_rt=0, std_rt=0.1) -> np
 class Thinker(BaseThinker):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, queues: ColmenaQueue, output_dir: str, dim: int = 2,
+    def __init__(self, queues: ColmenaQueues, output_dir: str, dim: int = 2,
                  n_guesses: int = 100, batch_size: int = 10, opt_delay: float = 0):
         """
         Args:
@@ -173,7 +173,7 @@ if __name__ == '__main__':
         serialization_method = 'json'
 
     # Connect to the redis server
-    queues = PipeQueue()
+    queues = PipeQueues()
 
     # Log in to FuncX
     fx_client = FuncXClient()
