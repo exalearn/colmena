@@ -11,8 +11,8 @@ from concurrent.futures import Future
 from funcx import FuncXClient
 from funcx.sdk.executor import FuncXExecutor
 
-from colmena.redis.queue import TaskServerQueues
 from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
+from colmena.queue.python import PipeQueues
 
 from colmena.models import Result
 
@@ -38,7 +38,7 @@ class FuncXTaskServer(FutureBasedTaskServer):
 
     def __init__(self, methods: Dict[Callable, str],
                  funcx_client: FuncXClient,
-                 queues: TaskServerQueues,
+                 queues: PipeQueues,
                  timeout: Optional[int] = None,
                  batch_enabled: bool = True,
                  batch_interval: float = 1.0,

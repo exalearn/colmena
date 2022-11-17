@@ -1,12 +1,12 @@
 Building a Colmena Application
 ==============================
 
-Creating a new application with Colmena involves defining a "tasks server" to
+Creating a new application with Colmena involves defining a "task server"
 that deploys expensive functions and a "thinker" application that
 decides which tasks to submit.
-We describe each topic separately.
 
-See `Design <./design.html>`_ for details on Colmena architecture.
+.. note::
+    See `Design <./design.html>`_ for details on Colmena architecture.
 
 Configuring a Task Server
 -------------------------
@@ -15,7 +15,7 @@ The task server for Colmena is configured with the list of methods, a
 list available computational resources and a mapping of which methods
 can use each resource.
 
-We describe the :class:`~colmena.task_server.ParslTaskServer` in this document,
+We describe the :class:`~colmena.task_server.parsl.ParslTaskServer` in this document,
 although `more are available <task-servers.html>`_.
 
 Defining Methods
@@ -195,7 +195,7 @@ Creating a "Thinker" Application
 Colmena is designed to support many different algorithms for creating tasks and
 responding to results.
 Such "thinking" applications take the form of threads that send and receive results
-to/from the task server(s) using the Redis queues.
+to/from the task server(s) using queues.
 Colmena provides as :class:`~colmena.thinker.BaseThinker` class to simplify creating
 multi-threaded applications.
 
@@ -225,8 +225,7 @@ A minimal Thinker is as follows:
 
 The example shows us a few key concepts:
 
-1. You communicate with the task server using ``self.queues``, which provides
-   `a wrapper over the Redis queues <https://colmena.readthedocs.io/en/latest/source/colmena.redis.html#colmena.redis.queue.ClientQueues>`_.
+1. You communicate with the task server using ``self.queues``
 2. Operations within the a Thinker are marked with the ``@agent`` decorator.
 3. Calling ``thinker.run()`` launches all agent threads within that class
    and runs until all complete.
@@ -234,7 +233,7 @@ The example shows us a few key concepts:
 Submitting Tasks
 ~~~~~~~~~~~~~~~~
 
-:class:`~colmena.redis.queue.ClientQueues` provides communication to the task server
+:class:`~colmena.queues.base.ColmenaQueues` provides communication to the task server
 and is available as the ``self.queues`` class attribute.
 
 Submit requests to the task server with the ``send_inputs`` function.
@@ -450,7 +449,7 @@ Its tasks are labeled with the "thinker" topic.
 Creating a ``main.py``
 ----------------------
 
-The script used to launch a Colmena application must create the Redis queues and
+The script used to launch a Colmena application must create the queues and
 launch the task server and thinking application.
 
 A common pattern is as follows:
@@ -458,17 +457,17 @@ A common pattern is as follows:
 .. code-block:: python
 
     from colmena.task_server import ParslTaskServer
-    from colmena.redis.queue import make_queue_pairs
+    from colmena.queue import PipeQueues
 
     if __name__ == "__main__":
         # [ ... Create the Parsl configuration, list of functions, ... ]
 
         # Generate the queue pairs
-        client_queues, server_queues = make_queue_pairs('localhost', serialization_method='json')
+        queues = PipeQueues(keep_inputs=True, serialization_method='json')
 
         # Instantiate the task server and thinker
-        task_server = ParslTaskServer(functions, server_queues, config)
-        thinker = Thinker(client_queues)
+        task_server = ParslTaskServer(functions, queues, config)
+        thinker = Thinker(queues)
 
         try:
             # Launch the servers
@@ -479,25 +478,20 @@ A common pattern is as follows:
             thinker.join()
         finally:
             # Send a shutdown signal to the task server
-            client_queues.send_kill_signal()
+            ueues.send_kill_signal()
 
         # Wait for the task server to complete
         doer.join()
 
 The above script can be run as any other python code (e.g., ``python run.py``)
-once you have started Redis (e.g., calling ``redis-server``).
 
 We have described configuration options for task server and thinker applications earlier.
 The key options to discuss here are those of the communication queues.
 
-The :meth:`colmena.redis.queue.create_queue_pairs` function creates Redis queues with matching options
-for the thinking application (client) and task server.
-These options include the network address of the Redis server,
-a list of "topics" that define separate queues for certain types of tasks,
-and a few communication options, such as:
+The :meth:`~colmena.queue.python.PipeQueues` object manages communication between Thinker and Task Server.
+It takes a few options in addition to the topics of tasks, such as
 
 - ``serialization_method``: Whether to use JSON or Pickle to serialize inputs and outputs.
   Either may produce smaller objects or provide faster conversion depending on your data types.
-- ``keep_inputs``: Whether to retain inputs in ``Result`` object after task has completed.
-  Removing inputs could speed communication but may complicate debugging.
-
+- ``keep_inputs``: Whether to retain inputs in the :class:`~colmena.models.Result` object after task has completed.
+  Removing inputs could speed communication but may complicate steering logic.

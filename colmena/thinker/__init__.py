@@ -10,7 +10,8 @@ import os
 
 import logging
 
-from colmena.redis.queue import ClientQueues
+from colmena.exceptions import TimeoutException
+from colmena.queue.base import ColmenaQueues
 from colmena.thinker.resources import ResourceCounter, ReallocatorThread
 
 logger = logging.getLogger(__name__)
@@ -38,17 +39,19 @@ def agent(func: Optional[Callable] = None, startup: bool = False):
     return decorator(func)
 
 
-# TODO (wardlt): Write these functions as a subclass of Callable so we make less use of hidden attributes of function objects.
+# TODO (wardlt): Write these functions as a subclass of Callable, so we make less use of hidden attributes of function objects
 def _result_event_agent(thinker: 'BaseThinker', process_func: Callable, topic: Optional[str]):
     """Wrapper function for result processing agents"""
     # Wait until we get a result
     while not (thinker.done.is_set() and thinker.submitters_done.is_set()) or thinker.queues.active_count > 0:
-        result = thinker.queues.get_result(timeout=_DONE_REACTION_TIME, topic=topic)
-        if result is not None:
-            process_func(thinker, result)
+        try:
+            result = thinker.queues.get_result(timeout=_DONE_REACTION_TIME, topic=topic)
+        except TimeoutException:
+            continue
+        process_func(thinker, result)
 
 
-def result_processor(func: Optional[Callable] = None, topic: Optional[str] = None):
+def result_processor(func: Optional[Callable] = None, topic: str = 'default'):
     """Decorator that builds agents which respond to results becoming available in a queue
 
     Decorated functions must take a single argument: a result object
@@ -298,7 +301,7 @@ class BaseThinker(Thread):
     Start the thinker by calling ``.start()``
     """
 
-    def __init__(self, queue: ClientQueues, resource_counter: Optional[ResourceCounter] = None,
+    def __init__(self, queue: ColmenaQueues, resource_counter: Optional[ResourceCounter] = None,
                  daemon: bool = True, **kwargs):
         """
             Args:
@@ -312,6 +315,7 @@ class BaseThinker(Thread):
         # Define thinker-wide collectives
         self.rec = resource_counter
         self.queues = queue
+        self.queues.set_role('client')
 
         # Create events that mark when the w
         self.done: Event = Event()  # Tracks when agents should start shutting down

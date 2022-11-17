@@ -15,7 +15,7 @@ import proxystore as ps
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.models import Result, FailureInformation
 from colmena.proxy import resolve_proxies_async
-from colmena.redis.queue import TaskServerQueues
+from colmena.queue.base import ColmenaQueues
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class BaseTaskServer(Process, metaclass=ABCMeta):
     Implementations should also provide a `_cleanup` function that releases any resources reserved by the task server.
     """
 
-    def __init__(self, queues: TaskServerQueues, timeout: Optional[int] = None):
+    def __init__(self, queues: ColmenaQueues, timeout: Optional[int] = None):
         """
         Args:
             queues (TaskServerQueues): Queues for the task server
@@ -90,6 +90,7 @@ class BaseTaskServer(Process, metaclass=ABCMeta):
 
         Blocks until the inputs queue is closed and all tasks have completed"""
         logger.info(f"Started task server {self.__class__.__name__} on {self.ident}")
+        self.queues.set_role('server')
 
         # Perform any setup operations
         self._setup()

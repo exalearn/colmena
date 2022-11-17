@@ -7,7 +7,7 @@ from parsl import HighThroughputExecutor
 from parsl.config import Config
 
 from colmena.task_server import ParslTaskServer
-from colmena.redis.queue import make_queue_pairs
+from colmena.queue import PipeQueues
 from colmena.thinker import BaseThinker, agent
 
 
@@ -28,12 +28,12 @@ if __name__ == "__main__":
                                   logging.StreamHandler(sys.stdout)])
 
     # Make the queues
-    client_queues, server_queues = make_queue_pairs('127.0.0.1', topics=['generate', 'simulate'])
+    queues = PipeQueues(topics=['generate', 'simulate'], keep_inputs=True)
 
     # Define the worker configuration
     config = Config(executors=[HighThroughputExecutor()])
 
-    doer = ParslTaskServer([target_function, task_generator], server_queues, config)
+    doer = ParslTaskServer([target_function, task_generator], queues, config)
 
     # Define the thinker
     class Thinker(BaseThinker):
@@ -65,7 +65,7 @@ if __name__ == "__main__":
                 self.logger.info(f'Created a new guess: {result.value:.2f}')
                 self.queues.send_inputs(result.value, method='target_function', topic='simulate')
 
-    thinker = Thinker(client_queues)
+    thinker = Thinker(queues)
     logging.info('Created the task server and task generator')
 
     try:
@@ -78,7 +78,7 @@ if __name__ == "__main__":
         thinker.join()
         logging.info('Task generator has completed')
     finally:
-        client_queues.send_kill_signal()
+        queues.send_kill_signal()
 
     # Wait for the task server to complete
     doer.join()

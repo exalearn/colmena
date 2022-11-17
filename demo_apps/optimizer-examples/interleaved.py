@@ -1,10 +1,9 @@
 """Perform GPR Active Learning where one threads continually re-prioritizes a list of
 simulations to run and a second thread sebmits """
-
-
+from colmena.queue.base import ColmenaQueues
+from colmena.queue.python import PipeQueues
 from colmena.thinker import BaseThinker, agent
 from colmena.task_server import ParslTaskServer
-from colmena.redis.queue import ClientQueues, make_queue_pairs
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
@@ -92,7 +91,7 @@ def reprioritize_queue(database: List[Tuple[np.ndarray, float]],
 class Thinker(BaseThinker):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, queues: ClientQueues,  output_dir: str, dim: int = 2,
+    def __init__(self, queues: ColmenaQueues, output_dir: str, dim: int = 2,
                  n_guesses: int = 100, batch_size: int = 10, opt_delay: float = 0,
                  search_space_size: int = 1000):
         """
@@ -202,10 +201,6 @@ class Thinker(BaseThinker):
 if __name__ == '__main__':
     # User inputs
     parser = argparse.ArgumentParser()
-    parser.add_argument("--redishost", default="127.0.0.1",
-                        help="Address at which the redis server can be reached")
-    parser.add_argument("--redisport", default="6379",
-                        help="Port on which redis is available")
     parser.add_argument("--num-guesses", "-n", help="Total number of guesses", type=int, default=100)
     parser.add_argument("--num-parallel", "-p", help="Number of guesses to evaluate in parallel (i.e., the batch size)",
                         type=int, default=os.cpu_count())
@@ -215,10 +210,8 @@ if __name__ == '__main__':
     parser.add_argument('--opt-delay', help="Minimum runtime for the optimization function", type=float, default=2.)
     args = parser.parse_args()
 
-    # Connect to the redis server
-    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport,
-                                                    serialization_method='pickle',
-                                                    topics=['thinker', 'doer'])
+    # Make queue to connect Thinker and Task Server
+    queues = PipeQueues(keep_inputs=True, topics=['doer', 'thinker'])
 
     # Make the output directory
     out_dir = os.path.join('runs',
@@ -273,8 +266,8 @@ if __name__ == '__main__':
     update_wrapper(my_rep, reprioritize_queue)
     doer = ParslTaskServer([(my_ackley, {'executors': ['simulation']}),
                             (my_rep, {'executors': ['task_generator']})],
-                           server_queues, config)
-    thinker = Thinker(client_queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
+                           queues, config)
+    thinker = Thinker(queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
                       batch_size=args.num_parallel)
     logging.info('Created the task server and task generator')
 
@@ -288,7 +281,13 @@ if __name__ == '__main__':
         thinker.join()
         logging.info('Task generator has completed')
     finally:
-        client_queues.send_kill_signal()
+        queues.send_kill_signal()
+
+    # Print out the result
+    train_X, train_y = zip(*thinker.database)
+    best_ind = np.argmin(train_y)
+    train_X = np.array(train_X)
+    logging.info(f'Done! Best result {np.array2string(train_X[best_ind, :], precision=2)} = {train_y[best_ind]:.2f}')
 
     # Wait for the task server to complete
     doer.join()

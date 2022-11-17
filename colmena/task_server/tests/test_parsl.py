@@ -6,9 +6,11 @@ from parsl.config import Config
 from pytest import fixture, mark
 import proxystore as ps
 
+from colmena.queue.base import ColmenaQueues
+
+from colmena.queue.python import PipeQueues
 from colmena.models import ResourceRequirements
 from .test_base import EchoTask, FakeMPITask
-from colmena.redis.queue import ClientQueues, make_queue_pairs
 from colmena.task_server.parsl import ParslTaskServer
 
 
@@ -47,15 +49,12 @@ def store():
 
 
 @fixture(autouse=True)
-def server_and_queue(config, store) -> Tuple[ParslTaskServer, ClientQueues]:
-    """Make a simple task server"""
-    client_q, server_q = make_queue_pairs('localhost', clean_slate=True,
-                                          proxystore_name='store', proxystore_threshold=5000,
-                                          serialization_method='pickle')
-    server = ParslTaskServer([f, capitalize, bad_task, EchoTask(), FakeMPITask(), count_nodes], server_q, config)
-    yield server, client_q
+def server_and_queue(config, store) -> Tuple[ParslTaskServer, ColmenaQueues]:
+    queues = PipeQueues(proxystore_name='store', proxystore_threshold=5000, serialization_method='pickle')
+    server = ParslTaskServer([f, capitalize, bad_task, EchoTask(), FakeMPITask(), count_nodes], queues, config)
+    yield server, queues
     if server.is_alive():
-        client_q.send_kill_signal()
+        queues.send_kill_signal()
         server.join(timeout=30)
 
 
@@ -112,7 +111,7 @@ def test_error_handling(server_and_queue):
     server.start()
 
     # Send a result and then get the error message back
-    queue.send_inputs(None, method='f')
+    queue.send_inputs(None, method='f', keep_inputs=True)
     result = queue.get_result()
     assert result.args == (None,)
     assert result.value is None
@@ -134,7 +133,7 @@ def test_bash(server_and_queue):
     server.start()
 
     # Send a standard task
-    queue.send_inputs(1, method='echotask')
+    queue.send_inputs(1, method='echotask', keep_inputs=True)
     result = queue.get_result()
     assert result.success, result.failure_info
     assert result.value == '1\n'
@@ -143,7 +142,7 @@ def test_bash(server_and_queue):
     assert result.inputs == ((1,), {})
 
     # Send an MPI task
-    queue.send_inputs(1, method='fakempitask')
+    queue.send_inputs(1, method='fakempitask', keep_inputs=True)
     result = queue.get_result()
     assert result.success, result.failure_info
     assert result.value == '-N 1 -n 1 --cc depth echo -n 1\n'  # We're actually testing that it makes the correct command string
@@ -152,11 +151,10 @@ def test_bash(server_and_queue):
     assert result.inputs == ((1,), {})
 
     # Send an MPI task
-    queue.send_inputs(1, method='fakempitask', resources=ResourceRequirements(node_count=2, cpu_processes=4))
+    queue.send_inputs(1, method='fakempitask', keep_inputs=True, resources=ResourceRequirements(node_count=2, cpu_processes=4))
     result = queue.get_result()
     assert result.success, result.failure_info
     assert result.value == '-N 8 -n 4 --cc depth echo -n 1\n'
-    assert result.keep_inputs
     assert result.additional_timing['exec_execution'] > 0
     assert result.inputs == ((1,), {})
 

@@ -1,9 +1,10 @@
 """Perform GPR Active Learning where simulations are sent in batches"""
 from pathlib import Path
 
+from colmena.queue.base import ColmenaQueues
 from colmena.thinker import BaseThinker, agent
 from colmena.task_server import ParslTaskServer
-from colmena.redis.queue import ClientQueues, make_queue_pairs
+from colmena.queue.python import PipeQueues
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
@@ -23,7 +24,7 @@ from sim import Simulation
 class Thinker(BaseThinker):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, queues: ClientQueues, output_dir: str, n_guesses: int = 100, batch_size: int = 10):
+    def __init__(self, queues: ColmenaQueues, output_dir: str, n_guesses: int = 100, batch_size: int = 10):
         """
         Args:
             output_dir (str): Output path
@@ -69,7 +70,7 @@ class Thinker(BaseThinker):
                         )
 
                     # Store the result
-                    train_X.append(result.args)
+                    train_X.append(result.args[0])
                     train_y.append(result.value)
 
             if len(train_X) > self.n_guesses:
@@ -94,23 +95,22 @@ class Thinker(BaseThinker):
                 self.queues.send_inputs(best_ei.tolist())
             self.logger.info('Sent all of the inputs')
 
-        self.logger.info('Done!')
+        # Print out the result
+        best_ind = np.argmin(train_y)
+        train_X = np.array(train_X)
+        self.logger.info(f'Done! Best result {np.array2string(train_X[best_ind], precision=2)} = {train_y[best_ind]:.2f}')
 
 
 if __name__ == '__main__':
     # User inputs
     parser = argparse.ArgumentParser()
-    parser.add_argument("--redishost", default="127.0.0.1",
-                        help="Address at which the redis server can be reached")
-    parser.add_argument("--redisport", default="6379",
-                        help="Port on which redis is available")
     parser.add_argument("--num-guesses", "-n", help="Total number of guesses", type=int, default=100)
     parser.add_argument("--num-parallel", "-p", help="Number of guesses to evaluate in parallel (i.e., the batch size)",
                         type=int, default=os.cpu_count())
     args = parser.parse_args()
 
     # Connect to the redis server
-    client_queues, server_queues = make_queue_pairs(args.redishost, args.redisport, serialization_method='json')
+    queues = PipeQueues(keep_inputs=True)
 
     # Make the output directory
     out_dir = os.path.join('runs',
@@ -139,8 +139,8 @@ if __name__ == '__main__':
 
     # Create the task server and task generator
     my_sim = Simulation(Path('./simulate'))
-    doer = ParslTaskServer([my_sim], server_queues, config, default_executors=['htex'])
-    thinker = Thinker(client_queues, out_dir, n_guesses=args.num_guesses, batch_size=args.num_parallel)
+    doer = ParslTaskServer([my_sim], queues, config, default_executors=['htex'])
+    thinker = Thinker(queues, out_dir, n_guesses=args.num_guesses, batch_size=args.num_parallel)
     logging.info('Created the task server and task generator')
 
     try:
@@ -153,7 +153,7 @@ if __name__ == '__main__':
         thinker.join()
         logging.info('Task generator has completed')
     finally:
-        client_queues.send_kill_signal()
+        queues.send_kill_signal()
 
     # Wait for the task server to complete
     doer.join()

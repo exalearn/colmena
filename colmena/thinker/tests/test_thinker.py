@@ -5,7 +5,7 @@ from time import sleep
 from pytest import fixture, mark
 
 from colmena.models import Result
-from colmena.redis.queue import make_queue_pairs
+from colmena.queue.python import PipeQueues
 from colmena.thinker import BaseThinker, agent, result_processor, task_submitter, event_responder
 from colmena.thinker.resources import ResourceCounter
 
@@ -64,7 +64,7 @@ class ExampleThinker(BaseThinker):
 
 @fixture()
 def queues():
-    return make_queue_pairs('localhost')
+    return PipeQueues([])
 
 
 def test_detection():
@@ -86,11 +86,10 @@ def test_detection():
 def test_run(queues):
     """Test the behavior of all agents"""
     # Make the server and thinker
-    client, server = queues
     flag = Event()
     rec = ResourceCounter(1, ["event"])
     rec.acquire(None, 1)
-    th = ExampleThinker(client, rec, flag, daemon=True)
+    th = ExampleThinker(queues, rec, flag, daemon=True)
 
     # Launch it and wait for it to run
     th.start()
@@ -106,10 +105,10 @@ def test_run(queues):
     assert th.teardown_result == "hello_goodbye"
 
     # Test task processor: Push a result to the queue and make sure it was received
-    client.send_inputs(1)
-    _, task = server.get_task()
+    queues.send_inputs(1)
+    topic, task = queues.get_task()
     task.set_result(4)
-    server.send_result(task)
+    queues.send_result(task, topic=topic)
     sleep(0.1)
     assert th.last_value == 4
 
@@ -137,15 +136,15 @@ def test_run(queues):
     assert not th.event.is_set()
 
     # Set the "finish" flag after sending a result out
-    client.send_inputs(1)
+    queues.send_inputs(1)
     flag.set()
     sleep(1)
     assert th.is_alive()
 
     # The system should not exit until all results are back
-    _, task = server.get_task()
+    topic, task = queues.get_task()
     task.set_result(4)
-    server.send_result(task)
+    queues.send_result(task, topic)
     assert th.queues.wait_until_done(timeout=2)
     sleep(0.1)
     assert not th.is_alive()
@@ -154,8 +153,6 @@ def test_run(queues):
 @mark.timeout(5)
 def test_exception(queues):
     """Verify that thinkers stop properly with an exception"""
-
-    client, server = queues
 
     # Make a thinker that will fail on startup
     class BadThinker(BaseThinker):
@@ -175,5 +172,5 @@ def test_exception(queues):
             raise ValueError()
 
     # Will only exit within a timeout if the exception is properly set
-    thinker = BadThinker(client)
+    thinker = BadThinker(queues)
     thinker.run()

@@ -34,18 +34,14 @@ Translating our target function, *f(x)*, and search algorithm into Python yields
 
 Colmena applications are split into a "thinker" application generates tasks that are executed
 on remote resources.
-The two applications communicate via Redis queues.
-
-First, launch redis in the background: ``redis-server``
-
-We setup the Redis queues in Python using Colmena's "queue building" function:
+The easiest way to connect them is using Python's native interprocess communication via our :class:`~colmena.queue.python.PipeQueues`:
 
 .. code-block:: python
 
-    client_queues, server_queues = make_queue_pairs('localhost', topics=['generate', 'simulate'])
+    queues = PipeQueues(keep_inputs=True, topics=['generate', 'simulate'])
 
-This command connects to a server on localhost and creates separates queues for simulation and task
-generation results.
+This command creates separates queue for simulation and task generation results, and
+ensures that the task inputs will get sent back to the client with the result.
 
 Using ProxyStore
 ++++++++++++++++
@@ -55,21 +51,23 @@ To enable the use of ProxyStore, a ProxyStore backend must be initialized.
 The name of the ProxyStore backend and a threshold value (bytes) can be passed via the parameters :code:`proxystore_name` and :code:`proxystore_threshold` to :code:`make_queue_pairs`.
 Any input/output object of a target function larger than :code:`proxystore_threshold` will be automatically passed via ProxyStore.
 
-For example, a common use case is to initialize ProxyStore to use the same Redis server that Colmena uses for the queues.
+For example, a common use case is to initialize ProxyStore to use a Redis server to communicate data directly to workers
 
 .. code-block:: python
 
     import proxystore as ps
-    from colmena.redis.queue import make_queue_pairs
+    from colmena.queue import PipeQueues
 
     ps.store.init_store(
-        'redis', name='default-store', hostname=REDISHOST, port=REDISPORT
+        'redis', name='default-store'
     )
 
-    client_queues, server_queues = make_queue_pairs(
-        REDISHOST, REDISPORT, serialization_method='pickle',
-        proxystore_name='default-store', proxystore_threshold=100000
+    queue = PipeQueues(
+        proxystore_name='default-store',
+        proxystore_threshold=100000
     )
+
+ Any object larger than 100kB will get sent via Redis, reducing the communication costs of your application.
 
 More details on initializing ProxyStore backends can be found in the `docs <https://proxystore.readthedocs.io/en/latest/source/proxystore.store.html>`_.
 
@@ -91,7 +89,7 @@ The list of methods and resources are used to define the "task server":
 
 .. code-block:: python
 
-    doer = ParslMethodServer([target_function, task_generator], server_queues, config)
+    doer = ParslTaskServer([target_function, task_generator], queues, config)
 
 3. Write the thinker
 --------------------
@@ -163,7 +161,7 @@ Accordingly, we call their ``.start()`` methods to launch them.
         thinker.join()
         logging.info('Task generator has completed')
     finally:
-        client_queues.send_kill_signal()
+        queues.send_kill_signal()
 
     # Wait for the task server to complete
     doer.join()
@@ -181,7 +179,7 @@ The application will produce a prolific about of log messages, including:
 
 2. Messages from the Colmena queue or task server
 
-    ``... - colmena.redis.queue - INFO - Client received a task_generator result with topic generate```
+    ``... - colmena.queue.base - INFO - Client received a task_generator result with topic generate```
 
 3. Parsl workflow engine status messages
 
@@ -190,5 +188,5 @@ The application will produce a prolific about of log messages, including:
 6. Learning more
 ----------------
 
-We recommend reading more from our How-To guide next.
+We recommend reading more from our `how-to guide <how-to.html>`_ next.
 With that knowledge in hand, try improving the optimization algorithm from this example.

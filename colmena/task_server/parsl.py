@@ -18,9 +18,9 @@ from parsl.app.bash import BashApp
 from parsl.config import Config
 from parsl.app.python import PythonApp
 
+from colmena.queue.base import ColmenaQueues
 from colmena.models import Result, ExecutableTask, FailureInformation, ResourceRequirements
 from colmena.proxy import resolve_proxies_async
-from colmena.redis.queue import TaskServerQueues
 from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
 
 logger = logging.getLogger(__name__)
@@ -261,13 +261,13 @@ class ParslTaskServer(FutureBasedTaskServer):
 
     .. code-block:: python
 
-        ParslTaskServer([(f, {'executors': ['a']})], queues, config)
+        ParslTaskServer([(f, {'executors': ['a']})], queue, config)
 
     and also using a default executor
 
     .. code-block:: python
 
-        ParslTaskServer([f], queues, config, default_executors=['a'])
+        ParslTaskServer([f], queue, config, default_executors=['a'])
 
     Further configuration options for each method can be defined
     in the list of methods.
@@ -313,7 +313,7 @@ class ParslTaskServer(FutureBasedTaskServer):
     """
 
     def __init__(self, methods: List[Union[Callable, Tuple[Callable, Dict]]],
-                 queues: TaskServerQueues,
+                 queues: ColmenaQueues,
                  config: Config,
                  timeout: Optional[int] = None,
                  default_executors: Union[str, List[str]] = 'all'):
@@ -325,7 +325,7 @@ class ParslTaskServer(FutureBasedTaskServer):
                 is a function and the second is a dictionary of the arguments being used to create
                 the Parsl ParslApp see `Parsl documentation
                 <https://parsl.readthedocs.io/en/stable/stubs/parsl.app.app.python_app.html#parsl.app.app.python_app>`_.
-            queues (TaskServerQueues): Queues for the task server
+            queues: Queues for the task server
             config: Parsl configuration
             timeout (int): Timeout, if desired
             default_executors: Executor or list of executors to use by default.

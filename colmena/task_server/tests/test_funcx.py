@@ -7,7 +7,7 @@ from pytest_mock import MockFixture
 from pytest import fixture, mark
 
 from colmena.models import Result
-from colmena.redis.queue import make_queue_pairs
+from colmena.queue.python import PipeQueues
 from colmena.task_server.funcx import FuncXTaskServer
 
 
@@ -50,31 +50,31 @@ def mock_funcx(mocker: MockFixture):
 def test_mocked_server(mock_funcx):
     # Create the task server with a single, no-op function
     client = FakeClient()
-    client_q, server_q = make_queue_pairs('localhost', clean_slate=True)
+    queues = PipeQueues()
 
     def func(x):
         if x is None:
             raise MemoryError()
         return x
-    fts = FuncXTaskServer({func: 'fake_endp'}, client, server_q)
+    fts = FuncXTaskServer({func: 'fake_endp'}, client, queues)
     fts.start()
 
     # Submit a task to the queue and see how it works
     try:
         # Send a task that will execute properly
-        client_q.send_inputs(1, method='func')
+        queues.send_inputs(1, method='func')
         sleep(1)
-        result = client_q.get_result()
+        result = queues.get_result()
         assert result.success
         assert result.value == 1
 
         # Send a task that will throw a memory error
-        client_q.send_inputs(None, method='func')
+        queues.send_inputs(None, method='func')
         sleep(1)
-        result = client_q.get_result()
+        result = queues.get_result()
         assert not result.success
         assert 'MemoryError' in result.failure_info.exception
 
     finally:
-        client_q.send_kill_signal()
+        queues.send_kill_signal()
         fts.join()
