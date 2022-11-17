@@ -110,6 +110,18 @@ Visit the [Quickstart](https://colmena.readthedocs.io/en/latest/quickstart.html)
 
 See the [`demo_apps`](./demo_apps) to see a variety of ways to use Colmena.
 
+## Learning More
+
+Our [Read-the-Docs](https://colmena.readthedocs.io/en/latest/) provides the most up-to-date information about Colmena.
+
+You can also learn more about Colmena in the papers we published about it:
+
+- Ward et al. "Colmena: Scalable Machine-Learning-Based Steering of Ensemble Simulations for High Performance Computing".
+  _2021 IEEE/ACM Workshop on Machine Learning in High Performance Computing Environments (MLHPC)_
+  [[doi](https://doi.org/10.1109/MLHPC54614.2021.00007)] [[ArXiv](https://arxiv.org/abs/2110.02827)]
+  [[slides](https://www.researchgate.net/publication/357777568)]
+  [[YouTube](https://youtu.be/-3KnbJcm-tQ)]
+
 ## Acknowledgements 
 
 This project was supported in part by the Exascale Computing Project (17-SC-20-SC) of the U.S. Department of Energy (DOE) and by DOE’s Advanced Scientific Research Office (ASCR) under contract DE-AC02-06CH11357.
