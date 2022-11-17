@@ -2,8 +2,8 @@
 from pytest import raises, fixture, warns
 
 from colmena.models import SerializationMethod
-from colmena.queue.base import ColmenaQueue
-from colmena.queue.python import PipeQueue
+from colmena.queue.base import ColmenaQueues
+from colmena.queue.python import PipeQueues
 
 
 class Test:
@@ -12,8 +12,8 @@ class Test:
 
 
 @fixture()
-def queue() -> ColmenaQueue:
-    return PipeQueue(['a', 'b'])
+def queue() -> ColmenaQueues:
+    return PipeQueues(['a', 'b'])
 
 
 def test_role(queue):

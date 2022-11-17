@@ -5,7 +5,7 @@ from time import sleep
 from pytest import fixture, mark
 
 from colmena.models import Result
-from colmena.queue.python import PipeQueue
+from colmena.queue.python import PipeQueues
 from colmena.thinker import BaseThinker, agent, result_processor, task_submitter, event_responder
 from colmena.thinker.resources import ResourceCounter
 
@@ -64,7 +64,7 @@ class ExampleThinker(BaseThinker):
 
 @fixture()
 def queues():
-    return PipeQueue([])
+    return PipeQueues([])
 
 
 def test_detection():

@@ -8,13 +8,13 @@ import redis
 from colmena.exceptions import TimeoutException, KillSignalException
 from colmena.models import SerializationMethod
 
-from colmena.queue.base import ColmenaQueue
+from colmena.queue.base import ColmenaQueues
 
 logger = logging.getLogger(__name__)
 
 
 def _error_if_unconnected(f):
-    def wrapper(queue: 'RedisQueue', *args, **kwargs) -> Any:
+    def wrapper(queue: 'RedisQueues', *args, **kwargs) -> Any:
         if not queue.is_connected:
             raise ConnectionError('Not connected. Did you call `.connect()`?')
         return f(queue, *args, **kwargs)
@@ -22,7 +22,7 @@ def _error_if_unconnected(f):
     return wrapper
 
 
-class RedisQueue(ColmenaQueue):
+class RedisQueues(ColmenaQueues):
     """A basic redis queue for communications used by the task server
 
     A queue is defined by its prefix and a "topic" designation.

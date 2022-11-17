@@ -7,7 +7,7 @@ from pytest_mock import MockFixture
 from pytest import fixture, mark
 
 from colmena.models import Result
-from colmena.queue.python import PipeQueue
+from colmena.queue.python import PipeQueues
 from colmena.task_server.funcx import FuncXTaskServer
 
 
@@ -50,7 +50,7 @@ def mock_funcx(mocker: MockFixture):
 def test_mocked_server(mock_funcx):
     # Create the task server with a single, no-op function
     client = FakeClient()
-    queues = PipeQueue()
+    queues = PipeQueues()
 
     def func(x):
         if x is None:

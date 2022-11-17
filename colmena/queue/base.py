@@ -21,7 +21,7 @@ class QueueRole(str, Enum):
     CLIENT = 'client'
 
 
-class ColmenaQueue:
+class ColmenaQueues:
     """Base class for a queue used in Colmena.
 
     Follows the basic ``get`` and ``put`` semantics of most queues,
