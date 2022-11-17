@@ -43,6 +43,7 @@ illustrate how to implement different thinking applications that solve optimizat
    thinker
    task-servers
    queues
+   examples
    source/modules
 
 Why the name "Colmena?"
@@ -53,6 +54,14 @@ Colmena applications, like their namesake,
 feature independent agents that perform a variety
 of tasks over their lifetimes without complicated
 communication between each other.
+
+Citing Colmena
+--------------
+
+If you use Colmena in academic research cite our 2021 paper:
+`link <https://doi.org/10.1109/MLHPC54614.2021.00007>`_
+`bibtex <https://www.doi2bib.org/bib/https://doi.org/10.1109/MLHPC54614.2021.00007>`_
+
 
 Indices and tables
 ------------------
