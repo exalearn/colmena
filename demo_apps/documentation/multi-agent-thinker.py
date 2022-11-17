@@ -24,7 +24,7 @@ if __name__ == "__main__":
     # Set up the logging
     logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                         level=logging.INFO,
-                        handlers=[logging.FileHandler('runtime.log'),
+                        handlers=[logging.FileHandler('../runtime.log'),
                                   logging.StreamHandler(sys.stdout)])
 
     # Make the queues

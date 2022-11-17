@@ -7,7 +7,7 @@ For this exercise, our goal is to find a point that minimizes :math:`f(x) = x^2`
 using a simple search algorithm: pick a new point within ±0.5 from minimum so far.
 
 This tutorial will explain our
-`multi-agent-thinker.py <https://github.com/exalearn/colmena/blob/master/demo_apps/multi-agent-thinker.py>`_
+`multi-agent-thinker.py <https://github.com/exalearn/colmena/blob/master/demo_apps/documentation/multi-agent-thinker.py>`_
 demo application.
 
 0. Write functions
