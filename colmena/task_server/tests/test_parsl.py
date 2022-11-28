@@ -1,7 +1,7 @@
 """Tests for the Parsl implementation of the task server"""
 from typing import Tuple, List
 
-from parsl import HighThroughputExecutor
+from parsl import HighThroughputExecutor, ThreadPoolExecutor
 from parsl.config import Config
 from pytest import fixture, mark
 import proxystore as ps
@@ -31,11 +31,20 @@ def count_nodes(x, _resources: ResourceRequirements):
 
 
 # Make the Parsl configuration. Use LocalThreads for Mac and Windows compatibility
-@fixture()
-def config(tmpdir):
+@fixture(params=[['thread'], ['htex']])
+def config(request, tmpdir):
+
+    backend = request.param[0]
+    if backend == 'htex':
+        executor = HighThroughputExecutor()
+    elif backend == 'thread':
+        executor = ThreadPoolExecutor()
+    else:
+        raise ValueError(f'Executor backend not defined: {backend}')
+
     return Config(
         executors=[
-            HighThroughputExecutor()
+            executor,
         ],
         strategy=None,
         run_dir=str(tmpdir),
