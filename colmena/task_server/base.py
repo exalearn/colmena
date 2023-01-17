@@ -10,7 +10,7 @@ from multiprocessing import Process
 from time import perf_counter
 from typing import Optional, Callable
 
-import proxystore as ps
+import proxystore
 
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.models import Result, FailureInformation
@@ -220,10 +220,14 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     # Get the statistics for the proxy resolution
     for proxy in proxies:
         # Get the key associated with this proxy
-        key = ps.proxy.get_key(proxy)
+        key = proxystore.store.utils.get_key(proxy)
+
+        # ProxyStore keys are NamedTuples so we cast to a string
+        # so we can use the key as a JSON key.
+        key = str(key)
 
         # Get the store associated with this proxy
-        store = ps.store.get_store(proxy)
+        store = proxystore.store.get_store(proxy)
         if store.has_stats:
             # Get the stats and convert them to a JSON-serializable form
             stats = store.stats(proxy)

@@ -4,7 +4,8 @@ from typing import Tuple, List
 from parsl import HighThroughputExecutor
 from parsl.config import Config
 from pytest import fixture, mark
-import proxystore as ps
+import proxystore
+from proxystore.store.redis import RedisStore
 
 from colmena.queue.base import ColmenaQueues
 
@@ -43,9 +44,13 @@ def config(tmpdir):
 
 
 # Make a proxy store for larger objects
-@fixture()
+@fixture(scope='module')
 def store():
-    return ps.store.init_store(ps.store.STORES.REDIS, name='store', hostname='localhost', port=6379, stats=True)
+    store = RedisStore('store', hostname='localhost', port=6379, stats=True)
+    proxystore.store.register_store(store)
+    yield store
+    proxystore.store.unregister_store(store)
+    store.close()
 
 
 @fixture(autouse=True)

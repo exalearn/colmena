@@ -222,7 +222,7 @@ class ColmenaQueues:
                 'proxystore_threshold': self.proxystore_threshold[topic],
                 # Pydantic prefers to not have types as attributes so we
                 # get the string corresponding to the type of the store we use
-                'proxystore_type': ps.store.STORES.get_str_by_type(type(store)),
+                'proxystore_type': store.__class__.__name__,
                 'proxystore_kwargs': store.kwargs
             })
 
