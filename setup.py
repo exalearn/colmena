@@ -23,7 +23,7 @@ setup(
     install_requires=install_requires,
     python_requires=">=3.7.*",
     extras_require={
-        'funcx': ['funcx>=1']
+        'funcx': ['funcx>=1.0.5']
     },
     classifiers=[
         "Development Status :: 3 - Alpha",

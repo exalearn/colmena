@@ -30,7 +30,7 @@ class FuncXTaskServer(FutureBasedTaskServer):
     You must also provide a :class:`FuncXClient` that the task server can use to authenticate with the
     FuncX web service.
 
-    The task server works using the :class:`FuncXExecutor` to communicate with FuncX via a web sockets. 
+    The task server works using the :class:`FuncXExecutor` to communicate with FuncX via a RabbitMQ. 
     Once the task service process is created, the `FuncXClient` is used to instantiate a new
     `FuncXExecutor` to perform work, and we use callbacks on the Python :class:`Future` objects
     to send completed work back to the task queue.
