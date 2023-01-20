@@ -8,8 +8,7 @@ from functools import partial, update_wrapper
 from typing import Dict, Callable, Optional, Tuple
 from concurrent.futures import Future
 
-from funcx import FuncXClient
-from funcx.sdk.executor import FuncXExecutor
+from funcx import FuncXClient, FuncXExecutor
 
 from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
 from colmena.queue.python import PipeQueues
@@ -31,32 +30,30 @@ class FuncXTaskServer(FutureBasedTaskServer):
     You must also provide a :class:`FuncXClient` that the task server can use to authenticate with the
     FuncX web service.
 
-    The task server works using the :class:`FuncXExecutor` to communicate with FuncX via a websocket.
-    `FuncXExecutor` receives completed work, and we use callbacks on the Python :class:`Future` objects
-    to send that completed work back to the task queue.
+    The task server works using the :class:`FuncXExecutor` to communicate with FuncX via a RabbitMQ. 
+    Once the task service process is created, the `FuncXClient` is used to instantiate a new
+    `FuncXExecutor` to perform work, and we use callbacks on the Python :class:`Future` objects
+    to send completed work back to the task queue.
     """
 
     def __init__(self, methods: Dict[Callable, str],
                  funcx_client: FuncXClient,
                  queues: PipeQueues,
                  timeout: Optional[int] = None,
-                 batch_enabled: bool = True,
-                 batch_interval: float = 1.0,
-                 batch_size: int = 100):
+                 batch_size: int = 128):
         """
         Args:
             methods: Map of functions to the endpoint on which it will run
             funcx_client: Authenticated FuncX client
             queues: Queues used to communicate with thinker
             timeout: Timeout for requests from the task queue
-            batch_enabled: Whether to use FuncX's batch submission feature
-            batch_interval: Maximum time to wait between batch  submissions
             batch_size: Maximum number of task request to receive before submitting
         """
         super(FuncXTaskServer, self).__init__(queues, timeout)
 
-        # Store the FuncX client
+        # Store the client that has already been authenticated.
         self.fx_client = funcx_client
+        self.fx_exec: FuncXExecutor = None
 
         # Create a function with the latest version of the wrapper function
         self.registered_funcs: Dict[str, Tuple[Callable, str]] = {}  # Function name -> (funcX id, endpoints)
@@ -65,16 +62,12 @@ class FuncXTaskServer(FutureBasedTaskServer):
             func_name = func.__name__
             new_func = partial(run_and_record_timing, func)
             update_wrapper(new_func, func)
-
+            func_fxid = self.fx_client.register_function(new_func)
             # Store the FuncX information for the function
-            self.registered_funcs[func_name] = (new_func, endpoint)
+            self.registered_funcs[func_name] = (func_fxid, endpoint)
 
-        # Placeholder for the executor and queue of tasks to be submitted back to the user
-        self.fx_exec: Optional[FuncXExecutor] = None
         self._batch_options = dict(
-            batch_enabled=batch_enabled,
             batch_size=batch_size,
-            batch_interval=batch_interval
         )
 
     def perform_callback(self, future: Future, result: Result, topic: str):
@@ -93,14 +86,21 @@ class FuncXTaskServer(FutureBasedTaskServer):
 
         task.mark_start_task_submission()
 
-        # Submit it to FuncX to be executed
-        future: Future = self.fx_exec.submit(func, task, endpoint_id=endp_id)
+        # set the executor's endpoint before submitting the task
+        self.fx_exec.endpoint_id = endp_id
+
+        logger.info(f'Submitting function {func} to run on {endp_id}')
+        
+        # Submit it to funcX to be executed
+        future = self.fx_exec.submit_to_registered_function(func, kwargs={'result': task})
+
         logger.info(f'Submitted {task.method} to run on {endp_id}')
         return future
 
     def _setup(self):
-        self.fx_exec = FuncXExecutor(self.fx_client, **self._batch_options)
-        logger.info('Created a FuncX executor')
+        # Create an executor to asynchronously transmit funcX tasks and recieve results
+        self.fx_exec = FuncXExecutor(funcx_client=self.fx_client, 
+                                     batch_size=self._batch_options['batch_size'])
 
     def _cleanup(self):
         self.fx_exec.shutdown()
