@@ -20,4 +20,4 @@ dependencies:
       - git+https://github.com/parsl/parsl.git  # TODO (wardlt) 23Apr22: Remove when Parsl is pushed to PyPi next
       - pydantic
       - proxystore>=0.3.1
-      - funcx<=0.3.6
+      - funcx<=1.0.7
