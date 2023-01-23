@@ -16,6 +16,7 @@ jobs:
         python-version: 3.7  # Start with the earliest version
     - name: Install dependencies
       run: |
+        pip install -U pip setuptools
         pip install -e.[funcx,test]
     - name: Start redis
       run: redis-server &> /dev/null &
