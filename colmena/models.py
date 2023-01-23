@@ -16,8 +16,10 @@ from typing import Any, Tuple, Dict, Optional, Union, List
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, Extra
-import proxystore as ps
 
+from proxystore.proxy import Proxy
+
+from colmena.proxy import get_store
 from colmena.proxy import proxy_json_encoder
 
 logger = logging.getLogger(__name__)
@@ -296,19 +298,17 @@ class Result(BaseModel):
             if (
                     self.proxystore_name is not None and
                     self.proxystore_threshold is not None and
-                    not isinstance(value, ps.proxy.Proxy) and
+                    not isinstance(value, Proxy) and
                     value_size >= self.proxystore_threshold
             ):
                 # Proxy the value. We use the id of the object as the key
                 # so multiple copies of the object are not added to ProxyStore,
                 # but the value in ProxyStore will still be updated.
-                store = ps.store.get_store(self.proxystore_name)
-                if store is None:
-                    store = ps.store.init_store(
-                        self.proxystore_type,
-                        name=self.proxystore_name,
-                        **self.proxystore_kwargs
-                    )
+                store = get_store(
+                    name=self.proxystore_name,
+                    kind=self.proxystore_type,
+                    **self.proxystore_kwargs,
+                )
                 value_proxy = store.proxy(value, evict=evict)
                 logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
                 # Serialize the proxy with Colmena's utilities. This is
