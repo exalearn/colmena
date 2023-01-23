@@ -9,6 +9,7 @@ import logging
 import proxystore as ps
 
 from colmena.models import Result, SerializationMethod, ResourceRequirements
+from colmena.proxy import get_class_path
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +223,7 @@ class ColmenaQueues:
                 'proxystore_threshold': self.proxystore_threshold[topic],
                 # Pydantic prefers to not have types as attributes so we
                 # get the string corresponding to the type of the store we use
-                'proxystore_type': store.__class__.__name__,
+                'proxystore_type': get_class_path(type(store)),
                 'proxystore_kwargs': store.kwargs
             })
 

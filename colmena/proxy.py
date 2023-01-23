@@ -1,13 +1,9 @@
 """Utilities for interacting with ProxyStore"""
 import logging
+import importlib
 import warnings
 
 import proxystore
-from proxystore.store.endpoint import EndpointStore
-from proxystore.store.file import FileStore
-from proxystore.store.globus import GlobusStore
-from proxystore.store.local import LocalStore
-from proxystore.store.redis import RedisStore
 from proxystore.proxy import extract
 from proxystore.proxy import is_resolved
 from proxystore.proxy import Proxy
@@ -18,17 +14,23 @@ from typing import Any, Union, List, Optional, Type
 
 logger = logging.getLogger(__name__)
 
-STORES = {
-    'EndpointStore': EndpointStore,
-    'FileStore': FileStore,
-    'GlobusStore': GlobusStore,
-    'LocalStore': LocalStore,
-    'RedisStore': RedisStore,
-}
-
 
 class ProxyJSONSerializationWarning(Warning):
     pass
+
+
+def get_class_path(cls: Type[Any]) -> str:
+    """Get the fully qualified pass of a type."""
+    return f'{cls.__module__}.{cls.__qualname__}'
+
+
+def import_class(path: str) -> Type[Any]:
+    """Import class via its fully qualified pass."""
+    module_path, _, name = path.rpartition('.')
+    if len(module_path) == 0:
+        raise ImportError(f'Class path must contain at least one module. Got {path}')
+    module = importlib.import_module(module_path)
+    return getattr(module, name)
 
 
 def get_store(
@@ -36,15 +38,18 @@ def get_store(
     kind: Optional[Union[Type[Store], str]] = None,
     **kwargs: Any,
 ) -> Optional[Store]:
-    """Get a Store by name or create one if none exists.
+    """Get a Store by name or create one if it does not already exist.
 
     Args:
         name (str): name of the store.
-        kind (type[Store], str): type of store to initialize if one with the
-            same `name` is not found. If a string, the correct type will be
-            resolved using the ``STORES`` mapping. If ``None`` (the default),
-            no store will be initialized.
-        kwargs: keyword arguments to initialize the store with.
+        kind (type[Store], str): if ``None``, (the default) this function will
+            lookup the store by `name` returning either the found store or
+            ``None``. If not ``None`` and a store by `name` does not exist,
+            `kind` will be used to initialize and register a new store. The
+            type of `kind` can be a string with the fully qualified class path
+            or the class type itself.
+        kwargs: keyword arguments to initialize the store with. Only used if
+            a store does not already exist and `kind` is not ``None``.
 
     Returns:
         The store registered as `name` or a newly intialized and registered
@@ -53,7 +58,7 @@ def get_store(
     store = proxystore.store.get_store(name)
     if store is None and kind is not None:
         if isinstance(kind, str):
-            kind = STORES[kind]
+            kind = import_class(kind)
         store = kind(name=name, **kwargs)
         proxystore.store.register_store(store)
     return store
