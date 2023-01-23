@@ -1,5 +1,0 @@
-numpy
-parsl>=1
-pydantic==1.*
-redis==3.4.*
-proxystore>=0.3.3
