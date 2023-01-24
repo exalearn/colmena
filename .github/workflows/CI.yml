@@ -22,11 +22,9 @@ jobs:
       uses: supercharge/redis-github-action@1.4.0
     - name: Lint with flake8
       run: |
-        conda install flake8
         flake8 colmena/
     - name: Test with pytest
       run: |
-        conda install pytest
         pytest --cov-config=.coveragerc --cov=colmena colmena/
     - name: Coveralls
       run: |
