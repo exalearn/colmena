@@ -29,8 +29,8 @@ dependencies = [
     "proxystore==0.4.*"
 ]
 
-[tool.setuptools]
-packages = ['colmena']
+[tool.setuptools.packages.find]
+include = ['colmena*']
 
 [project.urls]
 repository = "https://github.com/exalearn/colmena"
