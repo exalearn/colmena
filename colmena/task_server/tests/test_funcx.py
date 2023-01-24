@@ -1,25 +1,25 @@
 from concurrent.futures import Future
-from typing import Callable
 from time import sleep
 from uuid import uuid4
 
 from pytest_mock import MockFixture
 from pytest import fixture, mark
 
-from colmena.models import Result
 from colmena.queue.python import PipeQueues
 from colmena.task_server.funcx import FuncXTaskServer
+
+my_funcs: dict = {}
 
 
 class FakeClient:
     """Faked FuncXClient that allows you to register functions"""
 
-    def __init__(self):
-        self.my_funcs = {}
-
-    def register_function(self, new_func, function_name: str, description: str, searchable: bool):
+    def register_function(self, new_func, function_name: str = None, **kwargs):
+        global my_funcs
         uuid = uuid4()
-        self.my_funcs[uuid] = (new_func, function_name)
+        if function_name is None:
+            function_name = new_func.__name__
+        my_funcs[uuid] = (new_func, function_name)
         return uuid
 
 
@@ -31,7 +31,11 @@ class FakeExecutor:
     def __init__(self, *args, **kwargs):
         pass
 
-    def submit(self, func: Callable, task: Result, endpoint_id: str):
+    def submit_to_registered_function(self, func: str, kwargs: dict):
+        # Get the function from the global registry
+        global my_funcs
+        func = my_funcs[func][0]
+        task = kwargs['result']
         new_future = Future()
         result = func(task)
         new_future.set_result(result)
@@ -56,6 +60,7 @@ def test_mocked_server(mock_funcx):
         if x is None:
             raise MemoryError()
         return x
+
     fts = FuncXTaskServer({func: 'fake_endp'}, client, queues)
     fts.start()
 
