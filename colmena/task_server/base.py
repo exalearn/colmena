@@ -216,6 +216,10 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Re-pack the results
     result.time_serialize_results = result.serialize()
+    
+    # If the result was proxied, add it of the list of proxies to get stats for
+    if isinstance(result.value, proxystore.proxy.Proxy):
+        proxies.append(result.value)
 
     # Get the statistics for the proxy resolution
     for proxy in proxies:
