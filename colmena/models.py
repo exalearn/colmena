@@ -3,7 +3,7 @@ import logging
 import pickle as pkl
 import shlex
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datetime import datetime
 from enum import Enum
 from io import StringIO
@@ -15,6 +15,7 @@ from traceback import TracebackException
 from typing import Any, Tuple, Dict, Optional, Union, List
 from uuid import uuid4
 
+from proxystore.store.utils import get_key
 from pydantic import BaseModel, Field, Extra
 
 from proxystore.proxy import Proxy
@@ -314,6 +315,21 @@ class Result(BaseModel):
                 value_proxy = store.proxy(value, evict=evict)
                 logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
                 proxies.append(value_proxy)
+
+                # Store the statistics around creating the object
+                key = str(get_key(value_proxy))  # Key is a NamedTuple, so we cast to string
+
+                if store.has_stats:
+                    # Get the stats and convert them to a JSON-serializable form
+                    stats = store.stats(value_proxy)
+                    stats = dict((k, asdict(v)) for k, v in stats.items())
+                else:
+                    stats = {}
+
+                if key in self.proxy_timing:
+                    self.proxy_timing[key].update(stats)
+                else:
+                    self.proxy_timing[key] = stats
 
                 # Serialize the proxy with Colmena's utilities. This is
                 # efficient since the proxy is just a reference and metadata

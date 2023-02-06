@@ -214,11 +214,11 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     result.mark_compute_ended()
 
-    # Re-pack the results
-    result.time_serialize_results, output_proxies = result.serialize()
+    # Re-pack the results. Will store the proxy statistics
+    result.time_serialize_results, _ = result.serialize()
 
     # Get the statistics for the proxy resolution
-    for proxy in input_proxies + output_proxies:
+    for proxy in input_proxies:
         # Get the key associated with this proxy
         key = proxystore.store.utils.get_key(proxy)
 
@@ -232,10 +232,11 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
             # Get the stats and convert them to a JSON-serializable form
             stats = store.stats(proxy)
             stats = dict((k, asdict(v)) for k, v in stats.items())
-
-            # Store the data along with the stats
-            result.proxy_timing[key] = stats
         else:
+            stats = {}
+
+        if key not in result.proxy_timing:
             result.proxy_timing[key] = {}
+        result.proxy_timing[key].update(stats)
 
     return result
