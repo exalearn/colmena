@@ -221,7 +221,7 @@ class ColmenaQueues:
             proxystore_kwargs.update({
                 'proxystore_name': self.proxystore_name[topic],
                 'proxystore_threshold': self.proxystore_threshold[topic],
-                # Pydantic prefers to not have types as attributes so we
+                # Pydantic prefers to not have types as attributes, so we
                 # get the string corresponding to the type of the store we use
                 'proxystore_type': get_class_path(type(store)),
                 'proxystore_kwargs': store.kwargs
@@ -239,9 +239,9 @@ class ColmenaQueues:
         )
 
         # Push the serialized value to the task server
-        result.time_serialize_inputs = result.serialize()
+        result.time_serialize_inputs, proxies = result.serialize()
         self._send_request(result.json(exclude_none=True), topic)
-        logger.info(f'Client sent a {method} task with topic {topic}')
+        logger.info(f'Client sent a {method} task with topic {topic}. Created {len(proxies)} proxies for input values')
 
         # Store the task ID in the active list
         with self._active_lock:

@@ -16,10 +16,9 @@ from typing import Any, Tuple, Dict, Optional, Union, List
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, Extra
-
 from proxystore.proxy import Proxy
 
-from colmena.proxy import get_store
+from colmena.proxy import get_store, store_proxy_stats
 from colmena.proxy import proxy_json_encoder
 
 logger = logging.getLogger(__name__)
@@ -266,15 +265,17 @@ class Result(BaseModel):
         self.time_running = runtime
         self.success = True
 
-    def serialize(self) -> float:
+    def serialize(self) -> Tuple[float, List[Proxy]]:
         """Stores the input and value fields as a pickled objects
 
         Returns:
-            (float) Time to serialize
+            - (float) Time to serialize
+            - List of any proxies that were created
         """
         start_time = perf_counter()
         _value = self.value
         _inputs = self.inputs
+        proxies = []
 
         def _serialize_and_proxy(value, evict=False) -> Tuple[str, int]:
             """Helper function for serializing and proxying
@@ -311,6 +312,11 @@ class Result(BaseModel):
                 )
                 value_proxy = store.proxy(value, evict=evict)
                 logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
+                proxies.append(value_proxy)
+
+                # Update the statistics
+                store_proxy_stats(value_proxy, self.proxy_timing)
+
                 # Serialize the proxy with Colmena's utilities. This is
                 # efficient since the proxy is just a reference and metadata
                 value_str = SerializationMethod.serialize(
@@ -345,7 +351,7 @@ class Result(BaseModel):
                 if 'value' not in self.message_sizes:
                     self.message_sizes['value'] = value_size
 
-            return perf_counter() - start_time
+            return perf_counter() - start_time, proxies
         except Exception as e:
             # Put the original values back
             self.inputs = _inputs

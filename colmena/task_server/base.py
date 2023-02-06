@@ -2,7 +2,6 @@
 import logging
 import os
 import platform
-from dataclasses import asdict
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import Future
 from inspect import signature
@@ -10,11 +9,9 @@ from multiprocessing import Process
 from time import perf_counter
 from typing import Optional, Callable
 
-import proxystore
-
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.models import Result, FailureInformation
-from colmena.proxy import resolve_proxies_async
+from colmena.proxy import resolve_proxies_async, store_proxy_stats
 from colmena.queue.base import ColmenaQueues
 
 logger = logging.getLogger(__name__)
@@ -174,11 +171,11 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Start resolving any proxies in the input asynchronously
     start_time = perf_counter()
-    proxies = []
+    input_proxies = []
     for arg in result.args:
-        proxies.extend(resolve_proxies_async(arg))
+        input_proxies.extend(resolve_proxies_async(arg))
     for value in result.kwargs.values():
-        proxies.extend(resolve_proxies_async(value))
+        input_proxies.extend(resolve_proxies_async(value))
     result.time_async_resolve_proxies = perf_counter() - start_time
 
     # Execute the function
@@ -214,28 +211,11 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     result.mark_compute_ended()
 
-    # Re-pack the results
-    result.time_serialize_results = result.serialize()
+    # Re-pack the results. Will store the proxy statistics
+    result.time_serialize_results, _ = result.serialize()
 
     # Get the statistics for the proxy resolution
-    for proxy in proxies:
-        # Get the key associated with this proxy
-        key = proxystore.store.utils.get_key(proxy)
-
-        # ProxyStore keys are NamedTuples so we cast to a string
-        # so we can use the key as a JSON key.
-        key = str(key)
-
-        # Get the store associated with this proxy
-        store = proxystore.store.get_store(proxy)
-        if store.has_stats:
-            # Get the stats and convert them to a JSON-serializable form
-            stats = store.stats(proxy)
-            stats = dict((k, asdict(v)) for k, v in stats.items())
-
-            # Store the data along with the stats
-            result.proxy_timing[key] = stats
-        else:
-            result.proxy_timing[key] = {}
+    for proxy in input_proxies:
+        store_proxy_stats(proxy, result.proxy_timing)
 
     return result

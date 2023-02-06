@@ -2,13 +2,14 @@
 import logging
 import importlib
 import warnings
+from dataclasses import asdict
 
 import proxystore
 from proxystore.proxy import extract
 from proxystore.proxy import is_resolved
 from proxystore.proxy import Proxy
 from proxystore.store.base import Store
-from proxystore.store.utils import resolve_async
+from proxystore.store.utils import resolve_async, get_key
 
 from typing import Any, Union, List, Optional, Type
 
@@ -145,3 +146,32 @@ def resolve_proxies_async(args: Union[object, list, tuple, dict]) -> List[Proxy]
         for x in args:
             resolve_async_if_proxy(args[x])
     return output
+
+
+def store_proxy_stats(proxy: Proxy, proxy_timing: dict):
+    """Store the timings associated with a proxy, if available
+
+    Args:
+        proxy: Proxy to evaluate
+        proxy_timing: Dictionary in which to store timings to be updated
+    """
+    # Get the key associated with this proxy
+    key = get_key(proxy)
+
+    # ProxyStore keys are NamedTuples so we cast to a string
+    # so we can use the key as a JSON key.
+    key = str(key)
+
+    # Get the store associated with this proxy
+    store = get_store(proxy)
+    if store.has_stats:
+        # Get the stats and convert them to a JSON-serializable form
+        stats = store.stats(proxy)
+        stats = dict((k, asdict(v)) for k, v in stats.items())
+    else:
+        stats = {}
+
+    # Update existing timings
+    if key not in proxy_timing:
+        proxy_timing[key] = {}
+    proxy_timing[key].update(stats)

@@ -49,7 +49,7 @@ def store():
     store = RedisStore('store', hostname='localhost', port=6379, stats=True)
     proxystore.store.register_store(store)
     yield store
-    proxystore.store.unregister_store(store)
+    proxystore.store.unregister_store(store.name)
     store.close()
 
 
@@ -198,7 +198,7 @@ def test_proxy(server_and_queue, store):
     queue.send_inputs([little_string], big_string, method='capitalize')
     result = queue.get_result()
     assert result.success, result.failure_info.exception
-    assert len(result.proxy_timing) == 2  # There are two proxies to resolve
+    assert len(result.proxy_timing) == 3  # There are two proxies to resolve, one is created
 
     # Proxy the results ahead of time
     little_proxy = store.proxy(little_string)
@@ -206,11 +206,11 @@ def test_proxy(server_and_queue, store):
     queue.send_inputs([little_proxy], big_string, method='capitalize')
     result = queue.get_result()
     assert result.success, result.failure_info.exception
-    assert len(result.proxy_timing) == 2
+    assert len(result.proxy_timing) == 3
 
     # Try it with a kwarg
     queue.send_inputs(['a'], big_string, input_kwargs={'little': little_proxy}, method='capitalize',
                       keep_inputs=False)  # TODO (wardlt): test does not work with keep-inputs=True
     result = queue.get_result()
     assert result.success, result.failure_info.exception
-    assert len(result.proxy_timing) == 2
+    assert len(result.proxy_timing) == 3
