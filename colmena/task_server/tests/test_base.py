@@ -79,3 +79,4 @@ def test_run_function(store):
 
     # Make sure we have stats for both proxies
     assert len(result.proxy_timing) == 2
+    assert all('set_bytes' in v for v in result.proxy_timing.values())

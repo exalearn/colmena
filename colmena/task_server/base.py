@@ -2,7 +2,6 @@
 import logging
 import os
 import platform
-from dataclasses import asdict
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import Future
 from inspect import signature
@@ -10,11 +9,9 @@ from multiprocessing import Process
 from time import perf_counter
 from typing import Optional, Callable
 
-import proxystore
-
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.models import Result, FailureInformation
-from colmena.proxy import resolve_proxies_async
+from colmena.proxy import resolve_proxies_async, store_proxy_stats
 from colmena.queue.base import ColmenaQueues
 
 logger = logging.getLogger(__name__)
@@ -219,24 +216,6 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Get the statistics for the proxy resolution
     for proxy in input_proxies:
-        # Get the key associated with this proxy
-        key = proxystore.store.utils.get_key(proxy)
-
-        # ProxyStore keys are NamedTuples so we cast to a string
-        # so we can use the key as a JSON key.
-        key = str(key)
-
-        # Get the store associated with this proxy
-        store = proxystore.store.get_store(proxy)
-        if store.has_stats:
-            # Get the stats and convert them to a JSON-serializable form
-            stats = store.stats(proxy)
-            stats = dict((k, asdict(v)) for k, v in stats.items())
-        else:
-            stats = {}
-
-        if key not in result.proxy_timing:
-            result.proxy_timing[key] = {}
-        result.proxy_timing[key].update(stats)
+        store_proxy_stats(proxy, result.proxy_timing)
 
     return result
