@@ -174,11 +174,11 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
 
     # Start resolving any proxies in the input asynchronously
     start_time = perf_counter()
-    proxies = []
+    input_proxies = []
     for arg in result.args:
-        proxies.extend(resolve_proxies_async(arg))
+        input_proxies.extend(resolve_proxies_async(arg))
     for value in result.kwargs.values():
-        proxies.extend(resolve_proxies_async(value))
+        input_proxies.extend(resolve_proxies_async(value))
     result.time_async_resolve_proxies = perf_counter() - start_time
 
     # Execute the function
@@ -215,14 +215,10 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     result.mark_compute_ended()
 
     # Re-pack the results
-    result.time_serialize_results = result.serialize()
-
-    # If the result was proxied, add it of the list of proxies to get stats for
-    if isinstance(result.value, proxystore.proxy.Proxy):
-        proxies.append(result.value)
+    result.time_serialize_results, output_proxies = result.serialize()
 
     # Get the statistics for the proxy resolution
-    for proxy in proxies:
+    for proxy in input_proxies + output_proxies:
         # Get the key associated with this proxy
         key = proxystore.store.utils.get_key(proxy)
 

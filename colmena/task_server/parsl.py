@@ -124,7 +124,7 @@ def _execute_postprocess(task: ExecutableTask, exit_code: int, result: Result, t
     result.worker_info = worker_info
 
     # Re-pack the results (will use proxystore, if able)
-    result.time_serialize_results = result.serialize()
+    result.time_serialize_results, _ = result.serialize()
 
     # Put the serialized inputs back, if desired
     if result.keep_inputs:
