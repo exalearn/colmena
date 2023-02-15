@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field, Extra
 from proxystore.proxy import Proxy
+from proxystore.store.multi import MultiStore
 
 from colmena.proxy import get_store, store_proxy_stats
 from colmena.proxy import proxy_json_encoder
@@ -162,7 +163,7 @@ class Result(BaseModel):
                                                 "them after the method has completed")
     proxystore_name: Optional[str] = Field(None, description="Name of ProxyStore backend you use for transferring large objects")
     proxystore_type: Optional[str] = Field(None, description="Type of ProxyStore backend being used")
-    proxystore_kwargs: Optional[Dict] = Field(None, description="Kwargs to reinitialize ProxyStore backend")
+    proxystore_kwargs: Optional[Union[Dict, str]] = Field(None, description="Kwargs to reinitialize ProxyStore backend")
     proxystore_threshold: Optional[int] = Field(None,
                                                 description="Proxy all input/output objects larger than this threshold in bytes")
 
@@ -310,7 +311,16 @@ class Result(BaseModel):
                     kind=self.proxystore_type,
                     **self.proxystore_kwargs,
                 )
-                value_proxy = store.proxy(value, evict=evict)
+                assert isinstance(store, MultiStore)
+                topic = (
+                    self.task_info.get('topic', None)
+                    if self.task_info is not None else None
+                )
+                value_proxy = store.proxy(
+                    value,
+                    evict=evict,
+                    subset_tags=(topic, ) if topic is not None else None,
+                )
                 logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
                 proxies.append(value_proxy)
 
@@ -351,6 +361,12 @@ class Result(BaseModel):
                 if 'value' not in self.message_sizes:
                     self.message_sizes['value'] = value_size
 
+            if self.proxystore_kwargs is not None:
+                # MultiStore kwargs are not JSONable so need to serialize them
+                self.proxystore_kwargs = SerializationMethod.serialize(
+                    self.serialization_method, self.proxystore_kwargs
+                )
+
             return perf_counter() - start_time, proxies
         except Exception as e:
             # Put the original values back
@@ -386,6 +402,9 @@ class Result(BaseModel):
             # Deserialize result if it exists
             if _value is not None:
                 self.value = _deserialize(_value)
+
+            if self.proxystore_kwargs is not None:
+                self.proxystore_kwargs = _deserialize(self.proxystore_kwargs)
 
             return perf_counter() - start_time
         except Exception as e:

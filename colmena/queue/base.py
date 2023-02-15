@@ -7,6 +7,7 @@ from typing import Optional, Tuple, Any, Collection, Union, Dict, Set
 import logging
 
 import proxystore as ps
+from proxystore.store.multi import MultiStore
 
 from colmena.models import Result, SerializationMethod, ResourceRequirements
 from colmena.proxy import get_class_path
@@ -40,10 +41,11 @@ class ColmenaQueues:
             topics: Names of topics that are known for this queue
             serialization_method: Method used to serialize task inputs and results
             keep_inputs: Whether to return task inputs with the result object
-            proxystore_name (str, dict): Name of ProxyStore backend to use for all
-                topics or a mapping of topic to ProxyStore backend for specifying
-                backends for certain tasks. If a mapping is provided but a topic is
-                not in the mapping, ProxyStore will not be used.
+            proxystore_name (str): Name of ProxyStore MultiStore instance to
+                use for all topics or a mapping of topic to ProxyStore MultiStore
+                instance, If a mapping is provided but a topic is not in the mapping,
+                ProxyStore will not be used. Topic names of tasks will be used
+                as subset_tags passed to the Store.
             proxystore_threshold (int, dict): Threshold in bytes for using
                 ProxyStore to transfer objects. Optionally can pass a dict
                 mapping topics to threshold to use different threshold values
@@ -86,6 +88,10 @@ class ColmenaQueues:
                     f'ProxyStore backend with name "{ps_name}" was not '
                     'found. This is likely because the store needs to be '
                     'initialized prior to initializing the Colmena queue.'
+                )
+            if not isinstance(store, MultiStore):
+                raise TypeError(
+                    'ProxyStore backends must be instances of MultiStore.'
                 )
 
         # Log the ProxyStore configuration
@@ -226,6 +232,11 @@ class ColmenaQueues:
                 'proxystore_type': get_class_path(type(store)),
                 'proxystore_kwargs': store.kwargs
             })
+
+        # Needed in Result.serialize so topic can be passed to MultiStore.proxy()
+        if task_info is None:
+            task_info = {}
+        task_info['topic'] = topic
 
         # Create a new Result object
         result = Result(
