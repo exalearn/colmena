@@ -200,6 +200,9 @@ class ColmenaQueues:
         """
         self._check_role(QueueRole.CLIENT, 'send_inputs')
 
+        # Make sure the queue topic exists
+        assert topic in self.topics, f'Unknown topic: {topic}. Known are: {", ".join(self.topics)}'
+
         # Make fake kwargs, if needed
         if input_kwargs is None:
             input_kwargs = dict()

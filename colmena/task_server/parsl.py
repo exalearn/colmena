@@ -330,10 +330,8 @@ class ParslTaskServer(FutureBasedTaskServer):
             timeout (int): Timeout, if desired
             default_executors: Executor or list of executors to use by default.
         """
-        super().__init__(queues, timeout)
-
         # Insert _output_workers to the thread count
-        executors = config.executors.copy()
+        executors = list(config.executors)
         config.executors = executors
 
         # Get a list of default executors that _does not_ include the output workers
@@ -393,6 +391,9 @@ class ParslTaskServer(FutureBasedTaskServer):
         self.default_method_ = list(self.methods_.keys())[0] if len(self.methods_) == 1 else None
         if self.default_method_ is not None:
             logger.info(f'There is only one method, so we are using {self.default_method_} as a default')
+
+        # Initialize the base class
+        super().__init__(queues, self.methods_.keys(), timeout)
 
     def _submit(self, task: Result, topic: str) -> Optional[Future]:
         # Determine which method to run

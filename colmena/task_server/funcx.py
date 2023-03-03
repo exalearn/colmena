@@ -49,8 +49,6 @@ class FuncXTaskServer(FutureBasedTaskServer):
             timeout: Timeout for requests from the task queue
             batch_size: Maximum number of task request to receive before submitting
         """
-        super(FuncXTaskServer, self).__init__(queues, timeout)
-
         # Store the client that has already been authenticated.
         self.fx_client = funcx_client
         self.fx_exec: FuncXExecutor = None
@@ -69,6 +67,9 @@ class FuncXTaskServer(FutureBasedTaskServer):
         self._batch_options = dict(
             batch_size=batch_size,
         )
+
+        # Initialize the outputs
+        super().__init__(queues, self.registered_funcs.keys(), timeout)
 
     def perform_callback(self, future: Future, result: Result, topic: str):
         # Check if the failure was due to a ManagerLost

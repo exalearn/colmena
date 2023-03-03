@@ -7,7 +7,7 @@ from concurrent.futures import Future
 from inspect import signature
 from multiprocessing import Process
 from time import perf_counter
-from typing import Optional, Callable
+from typing import Optional, Callable, Collection
 
 from colmena.exceptions import KillSignalException, TimeoutException
 from colmena.models import Result, FailureInformation
@@ -37,15 +37,16 @@ class BaseTaskServer(Process, metaclass=ABCMeta):
     Implementations should also provide a `_cleanup` function that releases any resources reserved by the task server.
     """
 
-    def __init__(self, queues: ColmenaQueues, timeout: Optional[int] = None):
+    def __init__(self, queues: ColmenaQueues, method_names: Collection[str], timeout: Optional[int] = None):
         """
         Args:
             queues (TaskServerQueues): Queues for the task server
-            timeout (int): Timeout, if desired
+            timeout (int): Timeout for reading from the task queue, if desired
         """
         super().__init__()
         self.queues = queues
         self.timeout = timeout
+        self.method_names = set(method_names)
 
     @abstractmethod
     def process_queue(self, topic: str, task: Result):
@@ -65,8 +66,17 @@ class BaseTaskServer(Process, metaclass=ABCMeta):
                 topic, task = self.queues.get_task(self.timeout)
                 logger.info(f'Received request for {task.method} with topic {topic}')
 
-                # Provide it to the workflow system to be executed
-                self.process_queue(topic, task)
+                # Make sure the method name is valid
+                if task.method in self.method_names:
+                    # Provide it to the workflow system to be executed
+                    self.process_queue(topic, task)
+                else:
+                    task.success = False
+                    task.failure_info = FailureInformation.from_exception(
+                        ValueError(f'Method name "{task.method}" not recognized. Options: {", ".join(self.method_names)}')
+                    )
+                    self.queues.send_result(task, topic)
+
             except KillSignalException:
                 logger.info('Kill signal received')
                 return

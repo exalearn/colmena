@@ -214,3 +214,18 @@ def test_proxy(server_and_queue, store):
     result = queue.get_result()
     assert result.success, result.failure_info.exception
     assert len(result.proxy_timing) == 3
+
+
+@mark.timeout(10)
+def test_bad_method_name(server_and_queue):
+    """Make sure tasks with undefined methods are returned with a meaningful error"""
+
+    # Start the server
+    server, queue = server_and_queue
+    server.start()
+
+    # Make sure it sends back a result
+    queue.send_inputs(1, method='not_a_real_method')
+    result = queue.get_result()
+    assert not result.success
+    assert 'not_a_real_method' in str(result.failure_info.exception)
