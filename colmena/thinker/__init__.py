@@ -301,16 +301,22 @@ class BaseThinker(Thread):
     Start the thinker by calling ``.start()``
     """
 
-    def __init__(self, queue: ColmenaQueues, resource_counter: Optional[ResourceCounter] = None,
-                 daemon: bool = True, **kwargs):
+    def __init__(self,
+                 queue: ColmenaQueues,
+                 resource_counter: Optional[ResourceCounter] = None,
+                 daemon: bool = True,
+                 logger_name: Optional[str] = None,
+                 **kwargs):
         """
             Args:
                 queue: Queue wrapper used to communicate with task server
                 resource_counter: Utility to used track resource utilization
                 daemon: Whether to launch this as a daemon thread
+                logger_name: An optional name to give to the root logger for this thinker
                 **kwargs: Options passed to :class:`Thread`
         """
         super().__init__(daemon=daemon, **kwargs)
+        self.logger_name = logger_name
 
         # Define thinker-wide collectives
         self.rec = resource_counter
@@ -350,10 +356,6 @@ class BaseThinker(Thread):
         Override to define any tear down logic."""
         pass
 
-    def make_logging_handler(self) -> Optional[logging.Handler]:
-        """Override to create a distinct logging handler for log messages emitted from this object"""
-        return None
-
     def make_logger(self, name: Optional[str] = None):
         """Make a sub-logger for our application
 
@@ -364,16 +366,10 @@ class BaseThinker(Thread):
             Logger with an appropriate name
         """
         # Create the logger
-        my_name = self.__class__.__name__.lower()
+        my_name = f'{self.__class__.__module__}.{self.__class__.__name__}' if self.logger_name is None else self.logger_name
         if name is not None:
             my_name += "." + name
         new_logger = logging.getLogger(my_name)
-
-        # Assign the handler to the root logger
-        if name is None:
-            hnd = self.make_logging_handler()
-            if hnd is not None:
-                new_logger.addHandler(hnd)
         return new_logger
 
     @classmethod

@@ -82,6 +82,21 @@ def test_detection():
     assert 'function' in [a.__name__ for a in ExampleThinker.list_agents()]
 
 
+def test_logger_name(queues):
+    """Test the name of loggers"""
+
+    class SimpleThinker(BaseThinker):
+        pass
+
+    # See if the default name holds
+    thinker = SimpleThinker(queues)
+    assert 'SimpleThinker' in thinker.logger.name
+
+    # See if we can provide it its own name
+    thinker = SimpleThinker(queues, logger_name='my_logger')
+    assert thinker.logger.name == 'my_logger'
+
+
 @mark.timeout(5)
 def test_run(queues):
     """Test the behavior of all agents"""
