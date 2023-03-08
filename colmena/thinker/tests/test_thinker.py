@@ -1,4 +1,5 @@
 """Test the Thinker class"""
+import logging
 from threading import Event
 from time import sleep
 
@@ -95,6 +96,31 @@ def test_logger_name(queues):
     # See if we can provide it its own name
     thinker = SimpleThinker(queues, logger_name='my_logger')
     assert thinker.logger.name == 'my_logger'
+
+
+@mark.timeout(5)
+def test_logger_timings(queues, caplog):
+    class TestThinker(BaseThinker):
+        event: Event = Event()
+
+        @event_responder(event_name='event')
+        def a(self):
+            self.done.set()
+
+        @event_responder(event_name='event')
+        def b(self):
+            self.done.set()
+
+    # Start the thinker
+    with caplog.at_level(logging.INFO):
+        thinker = TestThinker(queues, daemon=True)
+        thinker.start()
+        sleep(0.5)
+        thinker.event.set()
+        thinker.join(timeout=1)
+    assert thinker.done.is_set()
+    assert any('Runtime' in record.msg for record in caplog.records if '.a' in record.name)
+    assert sum('All responses to event complete' in record.msg for record in caplog.records) == 1
 
 
 @mark.timeout(5)

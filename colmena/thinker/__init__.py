@@ -3,6 +3,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial, update_wrapper
 from threading import Event, local, Thread, Barrier
+from time import perf_counter
 from traceback import TracebackException
 from typing import Optional, Callable, List, Union, Dict, Tuple
 
@@ -131,6 +132,8 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
     while not thinker.done.is_set():
         if event.wait(_DONE_REACTION_TIME):
             thinker.logger.info(f'Event {event_name} has been triggered')
+
+            start_time = perf_counter()
             # If desired, launch the resource-allocation thread
             if reallocate_resources:
                 reallocator_thread = ReallocatorThread(
@@ -142,6 +145,7 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
 
             # Launch the function
             process_func(thinker)
+            thinker.logger.info(f'Finished responding to {event_name} event. Runtime: {perf_counter() - start_time:.4}s')
 
             # If we are using resource re-allocation, set the stop condition and wait for resources to be freed
             if reallocator_thread is not None:
@@ -149,10 +153,12 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
                 reallocator_thread.join()
 
             # Wait until all agents that responded to this event finish
-            barrier.wait()
+            rank = barrier.wait()
 
             # Then reset the event
             event.clear()
+            if rank == 0:
+                thinker.logger.info(f'All responses to {event_name} complete. Time elapsed: {perf_counter() - start_time:.4}s')
 
 
 def event_responder(func: Optional[Callable] = None, event_name: str = None,
