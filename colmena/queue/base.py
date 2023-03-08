@@ -159,7 +159,7 @@ class ColmenaQueues:
 
         # Get a value
         message = self._get_result(timeout=timeout, topic=topic)
-        logging.debug(f'Received value: {str(message)[:25]}')
+        logger.debug(f'Received value: {str(message)[:25]}')
 
         # Parse the value and mark it as complete
         result_obj = Result.parse_raw(message)
