@@ -151,6 +151,24 @@ def test_logger_timings_process(queues, caplog):
 
 
 @mark.timeout(5)
+def test_logger_timings_submitter(queues, caplog):
+    class TestThinker(BaseThinker):
+
+        @task_submitter()
+        def submit(self):
+            self.done.set()
+
+    # Start the thinker
+    with caplog.at_level(logging.INFO):
+        thinker = TestThinker(queues, ResourceCounter(1), daemon=True)
+        thinker.start()
+        sleep(0.5)
+
+    assert thinker.done.is_set()
+    assert any('Runtime' in record.msg for record in caplog.records if '.submit' in record.name), caplog.record_tuples
+
+
+@mark.timeout(5)
 def test_run(queues):
     """Test the behavior of all agents"""
     # Make the server and thinker

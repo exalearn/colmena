@@ -53,7 +53,7 @@ def _result_event_agent(thinker: 'BaseThinker', process_func: Callable, topic: O
         thinker.logger.info(f'Started to process result for topic={topic}')
         start_time = perf_counter()
         process_func(thinker, result)
-        thinker.logger.info(f'Finished processing result for topic={topic}. Runtime: {perf_counter() - start_time:.4f}s')
+        thinker.logger.info(f'Finished processing result for topic={topic}. Runtime: {perf_counter() - start_time:.4e}s')
 
 
 def result_processor(func: Optional[Callable] = None, topic: str = 'default'):
@@ -87,7 +87,10 @@ def _task_submitter_agent(thinker: 'BaseThinker', process_func: Callable, task_t
         # Wait until resources are free or thinker.done is set
         acq_success = thinker.rec.acquire(task_type, n_slots, cancel_if=thinker.done)
         if acq_success:
+            thinker.logger.info(f'Acquired {n_slots} execution slots of type {task_type}')
+            start_time = perf_counter()
             process_func(thinker)
+            thinker.logger.info(f'Finished submitting new work. Runtime: {perf_counter() - start_time:.4e}s')
 
 
 def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slots: Union[int, str] = 1):
