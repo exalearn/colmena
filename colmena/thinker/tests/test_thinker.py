@@ -1,4 +1,5 @@
 """Test the Thinker class"""
+import logging
 from threading import Event
 from time import sleep
 
@@ -80,6 +81,91 @@ def test_detection():
     # Test detecting the agents
     assert len(ExampleThinker.list_agents()) == 6
     assert 'function' in [a.__name__ for a in ExampleThinker.list_agents()]
+
+
+def test_logger_name(queues):
+    """Test the name of loggers"""
+
+    class SimpleThinker(BaseThinker):
+        pass
+
+    # See if the default name holds
+    thinker = SimpleThinker(queues)
+    assert 'SimpleThinker' in thinker.logger.name
+
+    # See if we can provide it its own name
+    thinker = SimpleThinker(queues, logger_name='my_logger')
+    assert thinker.logger.name == 'my_logger'
+
+
+@mark.timeout(5)
+def test_logger_timings_event(queues, caplog):
+    class TestThinker(BaseThinker):
+        event: Event = Event()
+
+        @event_responder(event_name='event')
+        def a(self):
+            self.done.set()
+
+        @event_responder(event_name='event')
+        def b(self):
+            self.done.set()
+
+    # Start the thinker
+    with caplog.at_level(logging.INFO):
+        thinker = TestThinker(queues, daemon=True)
+        thinker.start()
+        sleep(0.5)
+        thinker.event.set()
+        thinker.join(timeout=1)
+    assert thinker.done.is_set()
+    assert any('Runtime' in record.msg for record in caplog.records if '.a' in record.name)
+    assert sum('All responses to event complete' in record.msg for record in caplog.records) == 1
+
+
+@mark.timeout(5)
+def test_logger_timings_process(queues, caplog):
+    class TestThinker(BaseThinker):
+
+        @result_processor()
+        def process(self, _):
+            self.done.set()
+
+    # Start the thinker
+    thinker = TestThinker(queues, daemon=True)
+    thinker.start()
+
+    # Spoof a result completing
+
+    queues.send_inputs(1, method='test')
+    topic, result = queues.get_task()
+    result.set_result(1, 1)
+    with caplog.at_level(logging.INFO):
+        queues.send_result(result, topic)
+
+        # Wait then check the logs
+        sleep(0.5)
+
+    assert thinker.done.is_set()
+    assert any('Runtime' in record.msg for record in caplog.records if '.process' in record.name), caplog.record_tuples
+
+
+@mark.timeout(5)
+def test_logger_timings_submitter(queues, caplog):
+    class TestThinker(BaseThinker):
+
+        @task_submitter()
+        def submit(self):
+            self.done.set()
+
+    # Start the thinker
+    with caplog.at_level(logging.INFO):
+        thinker = TestThinker(queues, ResourceCounter(1), daemon=True)
+        thinker.start()
+        sleep(0.5)
+
+    assert thinker.done.is_set()
+    assert any('Runtime' in record.msg for record in caplog.records if '.submit' in record.name), caplog.record_tuples
 
 
 @mark.timeout(5)

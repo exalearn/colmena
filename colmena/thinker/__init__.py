@@ -3,6 +3,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial, update_wrapper
 from threading import Event, local, Thread, Barrier
+from time import perf_counter
 from traceback import TracebackException
 from typing import Optional, Callable, List, Union, Dict, Tuple
 
@@ -48,7 +49,11 @@ def _result_event_agent(thinker: 'BaseThinker', process_func: Callable, topic: O
             result = thinker.queues.get_result(timeout=_DONE_REACTION_TIME, topic=topic)
         except TimeoutException:
             continue
+
+        thinker.logger.info(f'Started to process result for topic={topic}')
+        start_time = perf_counter()
         process_func(thinker, result)
+        thinker.logger.info(f'Finished processing result for topic={topic}. Runtime: {perf_counter() - start_time:.4e}s')
 
 
 def result_processor(func: Optional[Callable] = None, topic: str = 'default'):
@@ -82,7 +87,10 @@ def _task_submitter_agent(thinker: 'BaseThinker', process_func: Callable, task_t
         # Wait until resources are free or thinker.done is set
         acq_success = thinker.rec.acquire(task_type, n_slots, cancel_if=thinker.done)
         if acq_success:
+            thinker.logger.info(f'Acquired {n_slots} execution slots of type {task_type}')
+            start_time = perf_counter()
             process_func(thinker)
+            thinker.logger.info(f'Finished submitting new work. Runtime: {perf_counter() - start_time:.4e}s')
 
 
 def task_submitter(func: Optional[Callable] = None, task_type: str = None, n_slots: Union[int, str] = 1):
@@ -131,6 +139,8 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
     while not thinker.done.is_set():
         if event.wait(_DONE_REACTION_TIME):
             thinker.logger.info(f'Event {event_name} has been triggered')
+
+            start_time = perf_counter()
             # If desired, launch the resource-allocation thread
             if reallocate_resources:
                 reallocator_thread = ReallocatorThread(
@@ -142,6 +152,7 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
 
             # Launch the function
             process_func(thinker)
+            thinker.logger.info(f'Finished responding to {event_name} event. Runtime: {perf_counter() - start_time:.4}s')
 
             # If we are using resource re-allocation, set the stop condition and wait for resources to be freed
             if reallocator_thread is not None:
@@ -149,10 +160,12 @@ def _event_responder_agent(thinker: 'BaseThinker', process_func: Callable, event
                 reallocator_thread.join()
 
             # Wait until all agents that responded to this event finish
-            barrier.wait()
+            rank = barrier.wait()
 
             # Then reset the event
             event.clear()
+            if rank == 0:
+                thinker.logger.info(f'All responses to {event_name} complete. Time elapsed: {perf_counter() - start_time:.4}s')
 
 
 def event_responder(func: Optional[Callable] = None, event_name: str = None,
@@ -301,16 +314,22 @@ class BaseThinker(Thread):
     Start the thinker by calling ``.start()``
     """
 
-    def __init__(self, queue: ColmenaQueues, resource_counter: Optional[ResourceCounter] = None,
-                 daemon: bool = True, **kwargs):
+    def __init__(self,
+                 queue: ColmenaQueues,
+                 resource_counter: Optional[ResourceCounter] = None,
+                 daemon: bool = True,
+                 logger_name: Optional[str] = None,
+                 **kwargs):
         """
             Args:
                 queue: Queue wrapper used to communicate with task server
                 resource_counter: Utility to used track resource utilization
                 daemon: Whether to launch this as a daemon thread
+                logger_name: An optional name to give to the root logger for this thinker
                 **kwargs: Options passed to :class:`Thread`
         """
         super().__init__(daemon=daemon, **kwargs)
+        self.logger_name = logger_name
 
         # Define thinker-wide collectives
         self.rec = resource_counter
@@ -350,10 +369,6 @@ class BaseThinker(Thread):
         Override to define any tear down logic."""
         pass
 
-    def make_logging_handler(self) -> Optional[logging.Handler]:
-        """Override to create a distinct logging handler for log messages emitted from this object"""
-        return None
-
     def make_logger(self, name: Optional[str] = None):
         """Make a sub-logger for our application
 
@@ -364,16 +379,10 @@ class BaseThinker(Thread):
             Logger with an appropriate name
         """
         # Create the logger
-        my_name = self.__class__.__name__.lower()
+        my_name = f'{self.__class__.__module__}.{self.__class__.__name__}' if self.logger_name is None else self.logger_name
         if name is not None:
             my_name += "." + name
         new_logger = logging.getLogger(my_name)
-
-        # Assign the handler to the root logger
-        if name is None:
-            hnd = self.make_logging_handler()
-            if hnd is not None:
-                new_logger.addHandler(hnd)
         return new_logger
 
     @classmethod
