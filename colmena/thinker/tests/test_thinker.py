@@ -99,7 +99,7 @@ def test_logger_name(queues):
 
 
 @mark.timeout(5)
-def test_logger_timings(queues, caplog):
+def test_logger_timings_event(queues, caplog):
     class TestThinker(BaseThinker):
         event: Event = Event()
 
@@ -121,6 +121,33 @@ def test_logger_timings(queues, caplog):
     assert thinker.done.is_set()
     assert any('Runtime' in record.msg for record in caplog.records if '.a' in record.name)
     assert sum('All responses to event complete' in record.msg for record in caplog.records) == 1
+
+
+@mark.timeout(5)
+def test_logger_timings_process(queues, caplog):
+    class TestThinker(BaseThinker):
+
+        @result_processor()
+        def process(self, _):
+            self.done.set()
+
+    # Start the thinker
+    thinker = TestThinker(queues, daemon=True)
+    thinker.start()
+
+    # Spoof a result completing
+
+    queues.send_inputs(1, method='test')
+    topic, result = queues.get_task()
+    result.set_result(1, 1)
+    with caplog.at_level(logging.INFO):
+        queues.send_result(result, topic)
+
+        # Wait then check the logs
+        sleep(0.5)
+
+    assert thinker.done.is_set()
+    assert any('Runtime' in record.msg for record in caplog.records if '.process' in record.name), caplog.record_tuples
 
 
 @mark.timeout(5)

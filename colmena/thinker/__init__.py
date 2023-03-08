@@ -49,7 +49,11 @@ def _result_event_agent(thinker: 'BaseThinker', process_func: Callable, topic: O
             result = thinker.queues.get_result(timeout=_DONE_REACTION_TIME, topic=topic)
         except TimeoutException:
             continue
+
+        thinker.logger.info(f'Started to process result for topic={topic}')
+        start_time = perf_counter()
         process_func(thinker, result)
+        thinker.logger.info(f'Finished processing result for topic={topic}. Runtime: {perf_counter() - start_time:.4f}s')
 
 
 def result_processor(func: Optional[Callable] = None, topic: str = 'default'):
