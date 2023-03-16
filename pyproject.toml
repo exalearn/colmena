@@ -1,6 +1,6 @@
 [project]
 name = "colmena"
-version = "0.4.4"
+version = "0.4.5"
 authors = [
     { name = "Globus Labs", email = "labs@globus.org" },
     { name = "Logan Ward", email = "lward@anl.gov" },
