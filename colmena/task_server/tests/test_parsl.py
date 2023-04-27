@@ -4,8 +4,11 @@ from typing import Tuple, List
 from parsl import HighThroughputExecutor
 from parsl.config import Config
 from pytest import fixture, mark
-import proxystore
-from proxystore.store.redis import RedisStore
+
+from proxystore.connectors.redis import RedisConnector
+from proxystore.store import Store
+from proxystore.store import register_store
+from proxystore.store import unregister_store
 
 from colmena.queue.base import ColmenaQueues
 
@@ -46,11 +49,11 @@ def config(tmpdir):
 # Make a proxy store for larger objects
 @fixture(scope='module')
 def store():
-    store = RedisStore('store', hostname='localhost', port=6379, stats=True)
-    proxystore.store.register_store(store)
-    yield store
-    proxystore.store.unregister_store(store.name)
-    store.close()
+    connector = RedisConnector(hostname='localhost', port=6379)
+    with Store('store', connector=connector, metrics=True) as store:
+        register_store(store)
+        yield store
+        unregister_store(store.name)
 
 
 @fixture(autouse=True)
