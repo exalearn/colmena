@@ -25,7 +25,7 @@ classifiers = [
 dependencies = [
     "parsl>=2022",
     "pydantic==1.*",
-    "redis==3.4.*",
+    "redis>=4.3",
     "proxystore==0.4.*"
 ]
 
