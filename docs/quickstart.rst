@@ -47,29 +47,29 @@ Using ProxyStore
 ++++++++++++++++
 
 Colmena can use `ProxyStore <https://github.com/gpauloski/ProxyStore>`_ to efficiently transfer large objects, typically on the order of 100KB or larger, between the thinker and workers directly.
-To enable the use of ProxyStore, a ProxyStore backend must be initialized.
-The name of the ProxyStore backend and a threshold value (bytes) can be passed via the parameters :code:`proxystore_name` and :code:`proxystore_threshold` to :code:`make_queue_pairs`.
+Enable ProxyStore by initializing a `Store <https://docs.proxystore.dev/main/api/store/base/#proxystore.store.base.Store>`_ then passing the name (:code:`proxystore_name`) and threshold size (:code:`proxystore_threshold`) for the store to :code:`make_queue_pairs`.
 Any input/output object of a target function larger than :code:`proxystore_threshold` will be automatically passed via ProxyStore.
 
 For example, a common use case is to initialize ProxyStore to use a Redis server to communicate data directly to workers
 
 .. code-block:: python
 
-    import proxystore as ps
+    from proxystore.connectors.redis import RedisConnector
+    from proxystore.store import Store
+    from proxystore.store import register_store
     from colmena.queue import PipeQueues
 
-    ps.store.init_store(
-        'redis', name='default-store'
-    )
+    store = Store('redis', RedisConnector('localhost', 6379))
+    register_store(store)
 
     queue = PipeQueues(
-        proxystore_name='default-store',
+        proxystore_name='redis',
         proxystore_threshold=100000
     )
 
- Any object larger than 100kB will get sent via Redis, reducing the communication costs of your application.
+Any object larger than 100kB will get sent via Redis, reducing the communication costs of your application.
 
-More details on initializing ProxyStore backends can be found in the `docs <https://proxystore.readthedocs.io/en/latest/source/proxystore.store.html>`_.
+Learn more about ProxyStore and find the "Getting Started" guides at `docs.proxystore.dev <https://docs.proxystore.dev/>`_.
 
 2. Build a task server
 ----------------------

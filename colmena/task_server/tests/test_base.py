@@ -1,8 +1,10 @@
 from typing import Any, Dict, Tuple, List, Optional
 from pathlib import Path
 
+from proxystore.connectors.file import FileConnector
+from proxystore.store import Store
+from proxystore.store import register_store
 from proxystore.store import unregister_store
-from proxystore.store.file import FileStore
 from pytest import fixture
 
 from colmena.models import Result, ExecutableTask, SerializationMethod
@@ -44,9 +46,10 @@ def test_run_with_executable():
 
 @fixture
 def store(tmpdir):
-    store = FileStore(name='store', store_dir=tmpdir, stats=True)
-    yield store
-    unregister_store('store')
+    with Store('store', FileConnector(tmpdir), metrics=True) as store:
+        register_store(store)
+        yield store
+        unregister_store(store)
 
 
 def test_run_function(store):
@@ -59,9 +62,8 @@ def test_run_function(store):
     # Make the result and configure it to use the store
     result = Result(inputs=(('a' * 1024,), {}))
     result.proxystore_name = store.name
-    result.proxystore_type = f'{store.__class__.__module__}.{store.__class__.__name__}'
     result.proxystore_threshold = 128
-    result.proxystore_kwargs = store.kwargs
+    result.proxystore_config = store.config()
 
     # Serialize it
     result.serialization_method = SerializationMethod.PICKLE
@@ -79,4 +81,4 @@ def test_run_function(store):
 
     # Make sure we have stats for both proxies
     assert len(result.proxy_timing) == 2
-    assert all('set_bytes' in v for v in result.proxy_timing.values())
+    assert all('store.proxy' in v['times'] for v in result.proxy_timing.values())
