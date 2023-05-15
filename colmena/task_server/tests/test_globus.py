@@ -6,13 +6,13 @@ from pytest_mock import MockFixture
 from pytest import fixture, mark
 
 from colmena.queue.python import PipeQueues
-from colmena.task_server.funcx import FuncXTaskServer
+from colmena.task_server.globus import GlobusComputeTaskServer
 
 my_funcs: dict = {}
 
 
 class FakeClient:
-    """Faked FuncXClient that allows you to register functions"""
+    """Faked Client that allows you to register functions"""
 
     def register_function(self, new_func, function_name: str = None, **kwargs):
         global my_funcs
@@ -46,12 +46,12 @@ class FakeExecutor:
 
 
 @fixture()
-def mock_funcx(mocker: MockFixture):
-    mocker.patch('colmena.task_server.funcx.FuncXExecutor', FakeExecutor)
+def mock_globus(mocker: MockFixture):
+    mocker.patch('colmena.task_server.globus.Executor', FakeExecutor)
 
 
 @mark.timeout(10)
-def test_mocked_server(mock_funcx):
+def test_mocked_server(mock_globus):
     # Create the task server with a single, no-op function
     client = FakeClient()
     queues = PipeQueues()
@@ -61,7 +61,7 @@ def test_mocked_server(mock_funcx):
             raise MemoryError()
         return x
 
-    fts = FuncXTaskServer({func: 'fake_endp'}, client, queues)
+    fts = GlobusComputeTaskServer({func: 'fake_endp'}, client, queues)
     fts.start()
 
     # Submit a task to the queue and see how it works

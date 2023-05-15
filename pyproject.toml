@@ -37,7 +37,7 @@ repository = "https://github.com/exalearn/colmena"
 documentation = "https://colmena.readthedocs.io/"
 
 [project.optional-dependencies]
-funcx = ['funcx>=1.0.5']
+globus = ['globus-compute-sdk>=1.0.5']
 test = [
     'flake8',
     'pytest',

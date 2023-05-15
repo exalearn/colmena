@@ -17,7 +17,7 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -U pip setuptools
-        pip install -e.[funcx,test]
+        pip install -e.[globus,test]
     - name: Start Redis
       uses: supercharge/redis-github-action@1.4.0
     - name: Lint with flake8
