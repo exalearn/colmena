@@ -1,7 +1,7 @@
 """Task server based on Globus Compute
 
 Globus Compute provides the ability to execute functions on remote "endpoints" that provide access to
- computational resources (e.g., cloud providers, HPC).
+computational resources (e.g., cloud providers, HPC).
 Tasks and results are communicated to/from the endpoint through a cloud service secured using Globus Auth."""
 
 import logging
@@ -32,7 +32,7 @@ class GlobusComputeTaskServer(FutureBasedTaskServer):
      that the task server will use to authenticate with the web service.
 
     The task server works using Globus Compute's :class:`~globus_compute_sdk.executor.Executor`
-     to communicate to the web service over a web socket.
+    to communicate to the web service over a web socket.
     The functions used by the executor are registered when you create the task server,
     and the Executor is launched when you start the task server.
     """
