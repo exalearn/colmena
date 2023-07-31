@@ -1,6 +1,6 @@
 [project]
 name = "colmena"
-version = "0.4.4"
+version = "0.5.0"
 authors = [
     { name = "Globus Labs", email = "labs@globus.org" },
     { name = "Logan Ward", email = "lward@anl.gov" },
@@ -25,8 +25,8 @@ classifiers = [
 dependencies = [
     "parsl>=2022",
     "pydantic==1.*",
-    "redis==3.4.*",
-    "proxystore==0.4.*"
+    "redis>=4.3",
+    "proxystore==0.5.*"
 ]
 
 [tool.setuptools.packages.find]
@@ -37,7 +37,7 @@ repository = "https://github.com/exalearn/colmena"
 documentation = "https://colmena.readthedocs.io/"
 
 [project.optional-dependencies]
-funcx = ['funcx>=1.0.5']
+globus = ['globus-compute-sdk>=1.0.5']
 test = [
     'flake8',
     'pytest',

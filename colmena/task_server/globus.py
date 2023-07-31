@@ -1,6 +1,7 @@
-"""Task server based on FuncX
+"""Task server based on Globus Compute
 
-FuncX provides the ability to execute functions on remote "endpoints" that provide access to computational resources (e.g., cloud providers, HPC).
+Globus Compute provides the ability to execute functions on remote "endpoints" that provide access to
+computational resources (e.g., cloud providers, HPC).
 Tasks and results are communicated to/from the endpoint through a cloud service secured using Globus Auth."""
 
 import logging
@@ -8,7 +9,7 @@ from functools import partial, update_wrapper
 from typing import Dict, Callable, Optional, Tuple
 from concurrent.futures import Future
 
-from funcx import FuncXClient, FuncXExecutor
+from globus_compute_sdk import Client, Executor
 
 from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
 from colmena.queue.python import PipeQueues
@@ -18,50 +19,51 @@ from colmena.models import Result
 logger = logging.getLogger(__name__)
 
 
-class FuncXTaskServer(FutureBasedTaskServer):
-    """Task server that uses FuncX to execute tasks on remote systems
+class GlobusComputeTaskServer(FutureBasedTaskServer):
+    """Task server that uses Globus Compute to execute tasks on remote systems
 
-    Create a FuncXTaskServer by providing a dictionary of functions along with a FuncX endpoint ID
+    Create a task server by providing a dictionary of functions
     mapped to the `endpoint <https://funcx.readthedocs.io/en/latest/endpoints.html>`_
-    on which it should run. The task server will wrap the provided function
+    on which each should run. The task server will wrap the provided function
     in an interface that tracks execution information (e.g., runtime) and
     `registers <https://funcx.readthedocs.io/en/latest/sdk.html#registering-functions>`_
-    the wrapped function with FuncX.
-    You must also provide a :class:`FuncXClient` that the task server can use to authenticate with the
-    FuncX web service.
+    the wrapped function with Globus Compute.
+    You must also provide a Globus Compute :class:`~globus_compute_sdk.client.Client`
+     that the task server will use to authenticate with the web service.
 
-    The task server works using the :class:`FuncXExecutor` to communicate with FuncX via a RabbitMQ.
-    Once the task service process is created, the `FuncXClient` is used to instantiate a new
-    `FuncXExecutor` to perform work, and we use callbacks on the Python :class:`Future` objects
-    to send completed work back to the task queue.
+    The task server works using Globus Compute's :class:`~globus_compute_sdk.executor.Executor`
+    to communicate to the web service over a web socket.
+    The functions used by the executor are registered when you create the task server,
+    and the Executor is launched when you start the task server.
     """
 
-    def __init__(self, methods: Dict[Callable, str],
-                 funcx_client: FuncXClient,
+    def __init__(self,
+                 methods: Dict[Callable, str],
+                 funcx_client: Client,
                  queues: PipeQueues,
                  timeout: Optional[int] = None,
                  batch_size: int = 128):
         """
         Args:
             methods: Map of functions to the endpoint on which it will run
-            funcx_client: Authenticated FuncX client
+            funcx_client: Authenticated Globus Compute client
             queues: Queues used to communicate with thinker
             timeout: Timeout for requests from the task queue
             batch_size: Maximum number of task request to receive before submitting
         """
         # Store the client that has already been authenticated.
         self.fx_client = funcx_client
-        self.fx_exec: FuncXExecutor = None
+        self.fx_exec: Optional[Executor] = None
 
         # Create a function with the latest version of the wrapper function
-        self.registered_funcs: Dict[str, Tuple[Callable, str]] = {}  # Function name -> (funcX id, endpoints)
+        self.registered_funcs: Dict[str, Tuple[str, str]] = {}  # Function name -> (funcX id, endpoints)
         for func, endpoint in methods.items():
             # Make a wrapped version of the function
             func_name = func.__name__
             new_func = partial(run_and_record_timing, func)
             update_wrapper(new_func, func)
             func_fxid = self.fx_client.register_function(new_func)
-            # Store the FuncX information for the function
+            # Store the information for the function
             self.registered_funcs[func_name] = (func_fxid, endpoint)
 
         self._batch_options = dict(
@@ -73,7 +75,7 @@ class FuncXTaskServer(FutureBasedTaskServer):
 
     def perform_callback(self, future: Future, result: Result, topic: str):
         # Check if the failure was due to a ManagerLost
-        #  TODO (wardlt): Remove when we have retry support in FuncX
+        #  TODO (wardlt): Remove when we have retry support in Globus Compute
         exc = future.exception()
         if 'Task failure due to loss of manager' in str(exc):
             logger.info('Caught an task that failed due to a lost manager. Resubmitting')
@@ -97,9 +99,9 @@ class FuncXTaskServer(FutureBasedTaskServer):
         return future
 
     def _setup(self):
-        # Create an executor to asynchronously transmit funcX tasks and recieve results
-        self.fx_exec = FuncXExecutor(funcx_client=self.fx_client,
-                                     batch_size=self._batch_options['batch_size'])
+        # Create an executor to asynchronously transmit funcX tasks and receive results
+        self.fx_exec = Executor(funcx_client=self.fx_client,
+                                batch_size=self._batch_options['batch_size'])
 
     def _cleanup(self):
-        self.fx_exec.shutdown()
+        self.fx_exec.shutdown(cancel_futures=True)

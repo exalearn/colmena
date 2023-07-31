@@ -6,10 +6,9 @@ from threading import Lock, Event
 from typing import Optional, Tuple, Any, Collection, Union, Dict, Set
 import logging
 
-import proxystore as ps
+import proxystore.store
 
 from colmena.models import Result, SerializationMethod, ResourceRequirements
-from colmena.proxy import get_class_path
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +39,11 @@ class ColmenaQueues:
             topics: Names of topics that are known for this queue
             serialization_method: Method used to serialize task inputs and results
             keep_inputs: Whether to return task inputs with the result object
-            proxystore_name (str, dict): Name of ProxyStore backend to use for all
-                topics or a mapping of topic to ProxyStore backend for specifying
-                backends for certain tasks. If a mapping is provided but a topic is
-                not in the mapping, ProxyStore will not be used.
+            proxystore_name (str, dict): Name of a registered ProxyStore
+                `Store` instance. This can be a single name such that the
+                corresponding `Store` is used for all topics or a mapping of
+                topics to registered `Store` names. If a mapping is provided
+                but a topic is not in the mapping, ProxyStore will not be used.
             proxystore_threshold (int, dict): Threshold in bytes for using
                 ProxyStore to transfer objects. Optionally can pass a dict
                 mapping topics to threshold to use different threshold values
@@ -80,11 +80,11 @@ class ColmenaQueues:
         for ps_name in set(self.proxystore_name.values()):
             if ps_name is None:
                 continue
-            store = ps.store.get_store(ps_name)
+            store = proxystore.store.get_store(ps_name)
             if store is None:
                 raise ValueError(
-                    f'ProxyStore backend with name "{ps_name}" was not '
-                    'found. This is likely because the store needs to be '
+                    f'A Store with name "{ps_name}" has not been registered. '
+                    'This is likely because the store needs to be '
                     'initialized prior to initializing the Colmena queue.'
                 )
 
@@ -213,21 +213,17 @@ class ColmenaQueues:
             _keep_inputs = keep_inputs
 
         # Gather ProxyStore info if we are using it with this topic
-        proxystore_kwargs = {}
-        if (
-                self.proxystore_name[topic] is not None and
-                self.proxystore_threshold[topic] is not None
-        ):
-            store = ps.store.get_store(self.proxystore_name[topic])
+        ps_name = self.proxystore_name[topic]
+        ps_threshold = self.proxystore_threshold[topic]
+        ps_kwargs = {}
+        if ps_name is not None and ps_threshold is not None:
+            store = proxystore.store.get_store(ps_name)
             # proxystore_kwargs contains all the information we would need to
             # reconnect to the ProxyStore backend on any worker
-            proxystore_kwargs.update({
-                'proxystore_name': self.proxystore_name[topic],
-                'proxystore_threshold': self.proxystore_threshold[topic],
-                # Pydantic prefers to not have types as attributes, so we
-                # get the string corresponding to the type of the store we use
-                'proxystore_type': get_class_path(type(store)),
-                'proxystore_kwargs': store.kwargs
+            ps_kwargs.update({
+                'proxystore_name': ps_name,
+                'proxystore_threshold': ps_threshold,
+                'proxystore_config': store.config(),
             })
 
         # Create a new Result object
@@ -238,7 +234,7 @@ class ColmenaQueues:
             serialization_method=self.serialization_method,
             task_info=task_info,
             resources=resources or ResourceRequirements(),  # Takes either the user specified or a default
-            **proxystore_kwargs
+            **ps_kwargs
         )
 
         # Push the serialized value to the task server

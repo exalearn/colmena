@@ -15,10 +15,10 @@ colmena.task\_server.parsl
    :undoc-members:
    :show-inheritance:
 
-colmena.task\_server.funcx
+colmena.task\_server.globus
 ---------------------------
 
-.. automodule:: colmena.task_server.funcx
+.. automodule:: colmena.task_server.globus
    :members:
    :undoc-members:
    :show-inheritance:

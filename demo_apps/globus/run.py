@@ -1,11 +1,10 @@
 """Perform GPR Active Learning where Bayesian optimization is used to select a new
 calculation as soon as one calculation completes"""
-from funcx import FuncXClient
-
 from colmena.queue.base import ColmenaQueues
 from colmena.queue.python import PipeQueues
-from colmena.task_server.funcx import FuncXTaskServer
+from colmena.task_server.globus import GlobusComputeTaskServer
 from colmena.thinker import BaseThinker, agent
+from globus_compute_sdk import Client
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
@@ -176,12 +175,12 @@ if __name__ == '__main__':
     queues = PipeQueues()
 
     # Log in to FuncX
-    fx_client = FuncXClient()
+    gc_client = Client()
 
     # Create the task server and task generator
     my_ackley = partial(ackley, mean_rt=args.runtime, std_rt=args.runtime_var)
     update_wrapper(my_ackley, ackley)
-    doer = FuncXTaskServer({my_ackley: args.endpoint}, fx_client, queues)
+    doer = GlobusComputeTaskServer({my_ackley: args.endpoint}, gc_client, queues)
     thinker = Thinker(queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
                       batch_size=args.num_parallel, opt_delay=args.opt_delay)
     logging.info('Created the task server and task generator')

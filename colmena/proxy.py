@@ -1,8 +1,6 @@
 """Utilities for interacting with ProxyStore"""
 import logging
-import importlib
 import warnings
-from dataclasses import asdict
 
 import proxystore
 from proxystore.proxy import extract
@@ -11,7 +9,7 @@ from proxystore.proxy import Proxy
 from proxystore.store.base import Store
 from proxystore.store.utils import resolve_async, get_key
 
-from typing import Any, Union, List, Optional, Type
+from typing import Any, Dict, Union, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -20,47 +18,24 @@ class ProxyJSONSerializationWarning(Warning):
     pass
 
 
-def get_class_path(cls: Type[Any]) -> str:
-    """Get the fully qualified pass of a type."""
-    return f'{cls.__module__}.{cls.__qualname__}'
-
-
-def import_class(path: str) -> Type[Any]:
-    """Import class via its fully qualified pass."""
-    module_path, _, name = path.rpartition('.')
-    if len(module_path) == 0:
-        raise ImportError(f'Class path must contain at least one module. Got {path}')
-    module = importlib.import_module(module_path)
-    return getattr(module, name)
-
-
 def get_store(
     name: str,
-    kind: Optional[Union[Type[Store], str]] = None,
-    **kwargs: Any,
+    config: Optional[Dict[str, Any]] = None,
 ) -> Optional[Store]:
     """Get a Store by name or create one if it does not already exist.
 
     Args:
         name (str): name of the store.
-        kind (type[Store], str): if ``None``, (the default) this function will
-            lookup the store by `name` returning either the found store or
-            ``None``. If not ``None`` and a store by `name` does not exist,
-            `kind` will be used to initialize and register a new store. The
-            type of `kind` can be a string with the fully qualified class path
-            or the class type itself.
-        kwargs: keyword arguments to initialize the store with. Only used if
-            a store does not already exist and `kind` is not ``None``.
+        config: ``Store`` configuration that can be used to reinitialize the
+            ``Store`` if provided and a store with `name` is not found.
 
     Returns:
         The store registered as `name` or a newly intialized and registered
         store if `kind` is not ``None``.
     """
     store = proxystore.store.get_store(name)
-    if store is None and kind is not None:
-        if isinstance(kind, str):
-            kind = import_class(kind)
-        store = kind(name=name, **kwargs)
+    if store is None and config is not None:
+        store = Store.from_config(config)
         proxystore.store.register_store(store)
     return store
 
@@ -163,11 +138,11 @@ def store_proxy_stats(proxy: Proxy, proxy_timing: dict):
     key = str(key)
 
     # Get the store associated with this proxy
-    store = get_store(proxy)
-    if store.has_stats:
+    store = proxystore.store.get_store(proxy)
+    if store.metrics is not None:
         # Get the stats and convert them to a JSON-serializable form
-        stats = store.stats(proxy)
-        stats = dict((k, asdict(v)) for k, v in stats.items())
+        metrics = store.metrics.get_metrics(proxy)
+        stats = metrics.as_dict() if metrics is not None else {}
     else:
         stats = {}
 

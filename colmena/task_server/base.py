@@ -122,7 +122,7 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
         """Send a completed result back to queue. Used as a callback for complete tasks
 
         Args:
-            future: Future created by FuncX
+            future: Future for a task
             result: Initial result object. Used if the future throws an exception
             topic: Topic used to send back to the user
         """

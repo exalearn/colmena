@@ -213,7 +213,6 @@ class ResourceCounter:
 
             thr = Thread(target=_function, daemon=True)
             thr.start()
-            assert thr.is_alive(), thr.join()
             return True
 
         # Pull nodes from the remaining
