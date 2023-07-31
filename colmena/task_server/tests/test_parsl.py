@@ -47,9 +47,9 @@ def config(tmpdir):
 
 
 # Make a proxy store for larger objects
-@fixture(scope='module')
-def store(tmp_path):
-    connector = FileConnector(store_dir=str(tmp_path))
+@fixture()
+def store(tmpdir):
+    connector = FileConnector(store_dir=str(tmpdir))
     with Store('store', connector=connector, metrics=True) as store:
         register_store(store)
         yield store
