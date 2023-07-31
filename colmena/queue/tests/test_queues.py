@@ -1,8 +1,8 @@
 """Tests across different queue implementations"""
 from multiprocessing import Pool
-from shutil import which
 
 from pytest import fixture, raises, mark
+from redis import Redis, ConnectionError
 
 from colmena.exceptions import TimeoutException, KillSignalException
 from colmena.queue.base import ColmenaQueues
@@ -10,8 +10,15 @@ from colmena.queue.python import PipeQueues
 from colmena.queue.redis import RedisQueues
 
 # Determine which classes to test
+
+has_redis = True
+try:
+    client = Redis()
+    client.ping()
+except ConnectionError:
+    has_redis = False
+
 to_test = [PipeQueues]
-has_redis = which('redis-server') is not None
 if has_redis:
     to_test.append(RedisQueues)
 
