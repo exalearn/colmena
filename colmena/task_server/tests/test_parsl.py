@@ -3,9 +3,9 @@ from typing import Tuple, List
 
 from parsl import HighThroughputExecutor
 from parsl.config import Config
+from proxystore.connectors.file import FileConnector
 from pytest import fixture, mark
 
-from proxystore.connectors.redis import RedisConnector
 from proxystore.store import Store
 from proxystore.store import register_store
 from proxystore.store import unregister_store
@@ -39,17 +39,17 @@ def count_nodes(x, _resources: ResourceRequirements):
 def config(tmpdir):
     return Config(
         executors=[
-            HighThroughputExecutor(max_workers=1, address='localhost')
+            HighThroughputExecutor(max_workers=1)
         ],
         strategy=None,
-        run_dir=str(tmpdir),
+        run_dir=str(tmpdir / 'run'),
     )
 
 
 # Make a proxy store for larger objects
-@fixture(scope='module')
-def store():
-    connector = RedisConnector(hostname='localhost', port=6379)
+@fixture()
+def store(tmpdir):
+    connector = FileConnector(store_dir=str(tmpdir / 'proxy-store'))
     with Store('store', connector=connector, metrics=True) as store:
         register_store(store)
         yield store
