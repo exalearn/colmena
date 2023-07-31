@@ -1,5 +1,6 @@
 """Tests across different queue implementations"""
 from multiprocessing import Pool
+from shutil import which
 
 from pytest import fixture, raises, mark
 
@@ -8,8 +9,14 @@ from colmena.queue.base import ColmenaQueues
 from colmena.queue.python import PipeQueues
 from colmena.queue.redis import RedisQueues
 
+# Determine which classes to test
+to_test = [PipeQueues]
+has_redis = which('redis-server') is not None
+if has_redis:
+    to_test.append(RedisQueues)
 
-@fixture(params=[PipeQueues, RedisQueues])
+
+@fixture(params=to_test)
 def queue(request) -> ColmenaQueues:
     return request.param(['a', 'b'])
 
