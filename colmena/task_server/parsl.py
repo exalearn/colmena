@@ -330,13 +330,9 @@ class ParslTaskServer(FutureBasedTaskServer):
             timeout (int): Timeout, if desired
             default_executors: Executor or list of executors to use by default.
         """
-        # Insert _output_workers to the thread count
-        executors = list(config.executors)
-        config.executors = executors
-
-        # Get a list of default executors that _does not_ include the output workers
+        # Get a list of default executors
         if default_executors == 'all':
-            default_executors = [e.label for e in executors]
+            default_executors = [e.label for e in config.executors]
 
         # Store the Parsl configuration
         self.config = config
