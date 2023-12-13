@@ -276,6 +276,11 @@ class Result(BaseModel):
         _inputs = self.inputs
         proxies = []
 
+        if self.proxystore_name is not None:
+            store = get_store(name=self.proxystore_name, config=self.proxystore_config)
+        else:
+            store = None
+
         def _serialize_and_proxy(value, evict=False) -> Tuple[str, int]:
             """Helper function for serializing and proxying
 
@@ -296,18 +301,11 @@ class Result(BaseModel):
             value_size = sys.getsizeof(value_str)
 
             if (
-                    self.proxystore_name is not None and
+                    store is not None and
                     self.proxystore_threshold is not None and
                     not isinstance(value, Proxy) and
                     value_size >= self.proxystore_threshold
             ):
-                # Proxy the value. We use the id of the object as the key
-                # so multiple copies of the object are not added to ProxyStore,
-                # but the value in ProxyStore will still be updated.
-                store = get_store(
-                    name=self.proxystore_name,
-                    config=self.proxystore_config,
-                )
                 value_proxy = store.proxy(value, evict=evict)
                 logger.debug(f'Proxied object of type {type(value)} with id={id(value)}')
                 proxies.append(value_proxy)
