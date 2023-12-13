@@ -26,7 +26,7 @@ dependencies = [
     "parsl>=2022",
     "pydantic==1.*",
     "redis>=4.3",
-    "proxystore==0.5.*"
+    "proxystore>=0.5.0,<0.7.0"
 ]
 
 [tool.setuptools.packages.find]
