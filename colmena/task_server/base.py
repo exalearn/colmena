@@ -177,7 +177,7 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     result.mark_compute_started()
 
     # Unpack the inputs
-    result.time_deserialize_inputs = result.deserialize()
+    result.time.deserialize_inputs = result.deserialize()
 
     # Start resolving any proxies in the input asynchronously
     start_time = perf_counter()
@@ -186,7 +186,7 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
         input_proxies.extend(resolve_proxies_async(arg))
     for value in result.kwargs.values():
         input_proxies.extend(resolve_proxies_async(value))
-    result.time_async_resolve_proxies = perf_counter() - start_time
+    result.time.async_resolve_proxies = perf_counter() - start_time
 
     # Execute the function
     start_time = perf_counter()
@@ -222,10 +222,10 @@ def run_and_record_timing(func: Callable, result: Result) -> Result:
     result.mark_compute_ended()
 
     # Re-pack the results. Will store the proxy statistics
-    result.time_serialize_results, _ = result.serialize()
+    result.time.serialize_results, _ = result.serialize()
 
     # Get the statistics for the proxy resolution
     for proxy in input_proxies:
-        store_proxy_stats(proxy, result.proxy_timing)
+        store_proxy_stats(proxy, result.time.proxy)
 
     return result

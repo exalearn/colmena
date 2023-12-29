@@ -73,12 +73,12 @@ def test_run_function(store):
     run_and_record_timing(lambda x: x.upper(), result)
 
     # Make sure the timings are all set
-    assert result.time_running > 0
-    assert result.time_async_resolve_proxies > 0
-    assert result.time_deserialize_inputs > 0
-    assert result.time_serialize_results > 0
-    assert result.time_compute_ended > result.time_compute_started
+    assert result.time.running > 0
+    assert result.time.async_resolve_proxies > 0
+    assert result.time.deserialize_inputs > 0
+    assert result.time.serialize_results > 0
+    assert result.timestamp.compute_ended > result.timestamp.compute_started
 
     # Make sure we have stats for both proxies
-    assert len(result.proxy_timing) == 2
-    assert all('store.proxy' in v['times'] for v in result.proxy_timing.values())
+    assert len(result.time.proxy) == 2
+    assert all('store.proxy' in v['times'] for v in result.time.proxy.values())

@@ -163,7 +163,7 @@ class ColmenaQueues:
 
         # Parse the value and mark it as complete
         result_obj = Result.parse_raw(message)
-        result_obj.time_deserialize_results = result_obj.deserialize()
+        result_obj.time.deserialize_results = result_obj.deserialize()
         result_obj.mark_result_received()
 
         # Some logging
@@ -238,7 +238,7 @@ class ColmenaQueues:
         )
 
         # Push the serialized value to the task server
-        result.time_serialize_inputs, proxies = result.serialize()
+        result.time.serialize_inputs, proxies = result.serialize()
         self._send_request(result.json(exclude_none=True), topic)
         logger.info(f'Client sent a {method} task with topic {topic}. Created {len(proxies)} proxies for input values')
 

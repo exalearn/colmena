@@ -133,8 +133,7 @@ def store_proxy_stats(proxy: Proxy, proxy_timing: dict):
     # Get the key associated with this proxy
     key = get_key(proxy)
 
-    # ProxyStore keys are NamedTuples so we cast to a string
-    # so we can use the key as a JSON key.
+    # ProxyStore keys are NamedTuples, so we cast to a string to use as a JSON key.
     key = str(key)
 
     # Get the store associated with this proxy

@@ -70,8 +70,8 @@ class SerializationMethod(str, Enum):
 
 
 def _serialized_str_to_bytes_shim(
-    s: str,
-    method: Union[str, SerializationMethod],
+        s: str,
+        method: Union[str, SerializationMethod],
 ) -> bytes:
     """Shim between Colmena serialized objects and bytes.
 
@@ -99,8 +99,8 @@ def _serialized_str_to_bytes_shim(
 
 
 def _serialized_bytes_to_obj_wrapper(
-    b: str,
-    method: Union[str, SerializationMethod],
+        b: str,
+        method: Union[str, SerializationMethod],
 ) -> Any:
     """Wrapper which converts bytes to strings before deserializing.
 
@@ -161,6 +161,42 @@ class ResourceRequirements(BaseModel):
         return self.node_count * self.cpu_processes
 
 
+class Timestamps(BaseModel):
+    """A class which records the system times at which key events in a task occurred
+
+    All should be in UTC.
+    """
+
+    created: float = Field(description="Time this value object was created",
+                           default_factory=lambda: datetime.now().timestamp())
+    input_received: float = Field(None, description="Time the inputs was received by the task server")
+    compute_started: float = Field(None, description="Time workflow process began executing a task")
+    compute_ended: float = Field(None, description="Time workflow process finished executing a task")
+    result_sent: float = Field(None, description="Time message was sent from the server")
+    result_received: float = Field(None, description="Time value was received by client")
+    start_task_submission: float = Field(None, description="Time marking the start of the task submission to workflow engine")
+    task_received: float = Field(None, description="Time task result received from workflow engine")
+
+
+class TimeSpans(BaseModel):
+    """Amount of time elapsed between major events
+
+    All are recorded in seconds
+    """
+
+    running: float = Field(None, description="Runtime of the method, if available")
+    serialize_inputs: float = Field(None, description="Time required to serialize inputs on client")
+    deserialize_inputs: float = Field(None, description="Time required to deserialize inputs on worker")
+    serialize_results: float = Field(None, description="Time required to serialize results on worker")
+    deserialize_results: float = Field(None, description="Time required to deserialize results on client")
+    async_resolve_proxies: float = Field(None, description="Time required to start async resolves of proxies")
+    proxy: Dict[str, Dict[str, dict]] = Field(default_factory=dict,
+                                              description='Timings related to resolving ProxyStore proxies on the compute worker')
+
+    additional: Dict[str, float] = Field(default_factory=dict,
+                                         description="Additional timings reported by a task server")
+
+
 class Result(BaseModel):
     """A class which describes the inputs and results of the calculations evaluated by the MethodServer
 
@@ -187,30 +223,11 @@ class Result(BaseModel):
     resources: ResourceRequirements = Field(default_factory=ResourceRequirements, help='List of the resources required for a task, if desired')
     failure_info: Optional[FailureInformation] = Field(None, description="Messages about task failure. Provided by Task Server")
     worker_info: Optional[WorkerInformation] = Field(None, description="Information about the worker which executed a task. Provided by Task Server")
-
-    # Performance tracking
-    time_created: float = Field(None, description="Time this value object was created")
-    time_input_received: float = Field(None, description="Time the inputs was received by the task server")
-    time_compute_started: float = Field(None, description="Time workflow process began executing a task")
-    time_compute_ended: float = Field(None, description="Time workflow process finished executing a task")
-    time_result_sent: float = Field(None, description="Time message was sent from the server")
-    time_result_received: float = Field(None, description="Time value was received by client")
-    time_start_task_submission: float = Field(None, description="Time marking the start of the task submission to workflow engine")
-    time_task_received: float = Field(None, description="Time task result received from workflow engine")
-
-    time_running: float = Field(None, description="Runtime of the method, if available")
-    time_serialize_inputs: float = Field(None, description="Time required to serialize inputs on client")
-    time_deserialize_inputs: float = Field(None, description="Time required to deserialize inputs on worker")
-    time_serialize_results: float = Field(None, description="Time required to serialize results on worker")
-    time_deserialize_results: float = Field(None, description="Time required to deserialize results on client")
-    time_async_resolve_proxies: float = Field(None,
-                                              description="Time required to scan function inputs and start async resolves of proxies")
-
-    additional_timing: dict = Field(default_factory=dict,
-                                    description="Timings recorded by a TaskServer that are not defined by above")
-    proxy_timing: Dict[str, Dict[str, dict]] = Field(default_factory=dict,
-                                                     description='Timings related to resolving ProxyStore proxies on the compute worker')
     message_sizes: Dict[str, int] = Field(default_factory=dict, description='Sizes of the inputs and results in bytes')
+
+    # Timings
+    timestamp: Timestamps = Field(default_factory=Timestamps, help='Times at which major events occurred')
+    time: TimeSpans = Field(default_factory=TimeSpans, help='Elapsed time between major events')
 
     # Serialization options
     serialization_method: SerializationMethod = Field(SerializationMethod.JSON,
@@ -228,10 +245,6 @@ class Result(BaseModel):
              inputs (Any, Dict): Inputs to a function. Separated into positional and keyword arguments
         """
         super().__init__(inputs=inputs, **kwargs)
-
-        # Mark "created" only if the value is not already set
-        if 'time_created' not in kwargs:
-            self.time_created = datetime.now().timestamp()
 
     @property
     def args(self) -> Tuple[Any]:
@@ -277,31 +290,31 @@ class Result(BaseModel):
 
     def mark_result_received(self):
         """Mark that a completed computation was received by a client"""
-        self.time_result_received = datetime.now().timestamp()
+        self.timestamp.result_received = datetime.now().timestamp()
 
     def mark_input_received(self):
         """Mark that a task server has received a value"""
-        self.time_input_received = datetime.now().timestamp()
+        self.timestamp.input_received = datetime.now().timestamp()
 
     def mark_compute_started(self):
         """Mark that the compute for a method has started"""
-        self.time_compute_started = datetime.now().timestamp()
+        self.timestamp.compute_started = datetime.now().timestamp()
 
     def mark_result_sent(self):
         """Mark when a result is sent from the task server"""
-        self.time_result_sent = datetime.now().timestamp()
+        self.timestamp.result_sent = datetime.now().timestamp()
 
     def mark_start_task_submission(self):
         """Mark when the Task Server submits a task to the engine"""
-        self.time_start_task_submission = datetime.now().timestamp()
+        self.timestamp.start_task_submission = datetime.now().timestamp()
 
     def mark_task_received(self):
         """Mark when the Task Server receives the task from the engine"""
-        self.time_task_received = datetime.now().timestamp()
+        self.timestamp.task_received = datetime.now().timestamp()
 
     def mark_compute_ended(self):
         """Mark when the task finished executing"""
-        self.time_compute_ended = datetime.now().timestamp()
+        self.timestamp.compute_ended = datetime.now().timestamp()
 
     def set_result(self, result: Any, runtime: float = None):
         """Set the value of this computation
@@ -318,7 +331,7 @@ class Result(BaseModel):
         self.value = result
         if not self.keep_inputs:
             self.inputs = ((), {})
-        self.time_running = runtime
+        self.time.running = runtime
         self.success = True
 
     def serialize(self) -> Tuple[float, List[Proxy]]:
@@ -386,7 +399,7 @@ class Result(BaseModel):
                 proxies.append(value_proxy)
 
                 # Update the statistics
-                store_proxy_stats(value_proxy, self.proxy_timing)
+                store_proxy_stats(value_proxy, self.time.proxy)
 
                 # Serialize the proxy with Colmena's utilities. This is
                 # efficient since the proxy is just a reference and metadata

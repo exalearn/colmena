@@ -52,13 +52,13 @@ def _execute_preprocess(task: ExecutableTask, result: Result) -> Tuple[Result, P
     result.mark_compute_started()
 
     # Unpack the inputs
-    result.time_deserialize_inputs = result.deserialize()
+    result.time.deserialize_inputs = result.deserialize()
 
     # Start resolving any proxies in the input asynchronously
     start_time = perf_counter()
     resolve_proxies_async(result.args)
     resolve_proxies_async(result.kwargs)
-    result.time_async_resolve_proxies = perf_counter() - start_time
+    result.time.async_resolve_proxies = perf_counter() - start_time
 
     # Create a temporary directory
     #  TODO (wardlt): Figure out how to allow users to define a path for temporary directories
@@ -76,7 +76,7 @@ def _execute_preprocess(task: ExecutableTask, result: Result) -> Tuple[Result, P
         end_time = perf_counter()
 
     # Record the time required to perform the pre-processing
-    result.additional_timing['exec_preprocess'] = end_time - start_time
+    result.time.additional['exec_preprocess'] = end_time - start_time
 
     # Remove the inputs. We don't need to send them back to the manager (the manager already knows what it sent out)
     result.inputs = ((), {})
@@ -108,23 +108,23 @@ def _execute_postprocess(task: ExecutableTask, exit_code: int, result: Result, t
         result.failure_info = FailureInformation.from_exception(e)
     finally:
         end_time = perf_counter()
-    result.additional_timing['exec_postprocess'] = end_time - start_time
+    result.time.additional['exec_postprocess'] = end_time - start_time
 
     # Store the results
     if result.success:
-        result.set_result(output, datetime.now().timestamp() - result.time_compute_started)
+        result.set_result(output, datetime.now().timestamp() - result.timestamp.compute_started)
 
     # Store the run time in the result object
-    result.additional_timing['exec_execution'] = (result.time_running -
-                                                  result.additional_timing['exec_postprocess'] -
-                                                  result.additional_timing['exec_preprocess'])
+    result.time.additional['exec_execution'] = (result.time.running -
+                                                result.time.additional['exec_postprocess'] -
+                                                result.time.additional['exec_preprocess'])
 
     # Add the worker information into the tasks, if available
     worker_info = {'hostname': platform.node()}
     result.worker_info = worker_info
 
     # Re-pack the results (will use proxystore, if able)
-    result.time_serialize_results, _ = result.serialize()
+    result.time.serialize_results, _ = result.serialize()
 
     # Put the serialized inputs back, if desired
     if result.keep_inputs:
@@ -222,7 +222,7 @@ def _preprocess_callback(
             result.inputs = serialized_inputs
 
         # Store the time it took to run the preprocessing
-        result.time_running = result.additional_timing.get('exec_preprocess', 0)
+        result.time.running = result.time.additional.get('exec_preprocess', 0)
         return task_server.queues.send_result(result, topic)
 
     # If successful, submit the execute step and pass its result to Parsl

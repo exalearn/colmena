@@ -39,7 +39,7 @@ def count_nodes(x, _resources: ResourceRequirements):
 def config(tmpdir):
     return Config(
         executors=[
-            HighThroughputExecutor(max_workers=1)
+            HighThroughputExecutor(max_workers=1, address='127.0.0.1')
         ],
         strategy=None,
         run_dir=str(tmpdir / 'run'),
@@ -93,11 +93,11 @@ def test_run_simple(server_and_queue):
     result = queue.get_result()
     assert result.success
     assert result.value == 2
-    assert result.time_running > 0
-    assert result.time_deserialize_inputs > 0
-    assert result.time_serialize_results > 0
-    assert result.time_compute_started is not None
-    assert result.time_result_sent is not None
+    assert result.time.running > 0
+    assert result.time.deserialize_inputs > 0
+    assert result.time.serialize_results > 0
+    assert result.timestamp.compute_started is not None
+    assert result.timestamp.result_sent is not None
 
 
 @mark.timeout(30)
@@ -125,7 +125,7 @@ def test_error_handling(server_and_queue):
     assert result.value is None
     assert not result.success
     assert result.failure_info is not None
-    assert result.time_running is not None
+    assert result.time.running is not None
 
     # Send a task that kills the worker
     queue.send_inputs(None, method='bad_task')
@@ -146,7 +146,7 @@ def test_bash(server_and_queue):
     assert result.success, result.failure_info
     assert result.value == '1\n'
     assert result.keep_inputs
-    assert result.additional_timing['exec_execution'] > 0
+    assert result.time.additional['exec_execution'] > 0
     assert result.inputs == ((1,), {})
 
     # Send an MPI task
@@ -155,7 +155,7 @@ def test_bash(server_and_queue):
     assert result.success, result.failure_info
     assert result.value == '-N 1 -n 1 --cc depth echo -n 1\n'  # We're actually testing that it makes the correct command string
     assert result.keep_inputs
-    assert result.additional_timing['exec_execution'] > 0
+    assert result.time.additional['exec_execution'] > 0
     assert result.inputs == ((1,), {})
 
     # Send an MPI task
@@ -163,7 +163,7 @@ def test_bash(server_and_queue):
     result = queue.get_result()
     assert result.success, result.failure_info
     assert result.value == '-N 8 -n 4 --cc depth echo -n 1\n'
-    assert result.additional_timing['exec_execution'] > 0
+    assert result.time.additional['exec_execution'] > 0
     assert result.inputs == ((1,), {})
 
 
@@ -201,7 +201,7 @@ def test_proxy(server_and_queue, store):
     queue.send_inputs([little_string], big_string, method='capitalize')
     result = queue.get_result()
     assert result.success, result.failure_info.exception
-    assert len(result.proxy_timing) == 3  # There are two proxies to resolve, one is created
+    assert len(result.time.proxy) == 3  # There are two proxies to resolve, one is created
 
     # Proxy the results ahead of time
     little_proxy = store.proxy(little_string)
@@ -209,14 +209,14 @@ def test_proxy(server_and_queue, store):
     queue.send_inputs([little_proxy], big_string, method='capitalize')
     result = queue.get_result()
     assert result.success, result.failure_info.exception
-    assert len(result.proxy_timing) == 3
+    assert len(result.time.proxy) == 3
 
     # Try it with a kwarg
     queue.send_inputs(['a'], big_string, input_kwargs={'little': little_proxy}, method='capitalize',
                       keep_inputs=False)  # TODO (wardlt): test does not work with keep-inputs=True
     result = queue.get_result()
     assert result.success, result.failure_info.exception
-    assert len(result.proxy_timing) == 3
+    assert len(result.time.proxy) == 3
 
 
 @mark.timeout(10)
