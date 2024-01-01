@@ -383,20 +383,12 @@ class ParslTaskServer(FutureBasedTaskServer):
 
         logger.info(f'Defined {len(self.methods_)} methods: {", ".join(self.methods_.keys())}')
 
-        # If only one method, store a default method
-        self.default_method_ = list(self.methods_.keys())[0] if len(self.methods_) == 1 else None
-        if self.default_method_ is not None:
-            logger.info(f'There is only one method, so we are using {self.default_method_} as a default')
-
         # Initialize the base class
         super().__init__(queues, self.methods_.keys(), timeout)
 
     def _submit(self, task: Result, topic: str) -> Optional[Future]:
         # Determine which method to run
-        if self.default_method_ and task.method is None:
-            method = self.default_method_
-        else:
-            method = task.method
+        method = task.method
 
         # Submit the application
         task.mark_start_task_submission()
