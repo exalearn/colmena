@@ -29,7 +29,7 @@ class GlobusComputeTaskServer(FutureBasedTaskServer):
     `registers <https://funcx.readthedocs.io/en/latest/sdk.html#registering-functions>`_
     the wrapped function with Globus Compute.
     You must also provide a Globus Compute :class:`~globus_compute_sdk.client.Client`
-     that the task server will use to authenticate with the web service.
+    that the task server will use to authenticate with the web service.
 
     The task server works using Globus Compute's :class:`~globus_compute_sdk.executor.Executor`
     to communicate to the web service over a web socket.

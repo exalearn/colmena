@@ -41,6 +41,8 @@ Papers where Colmena was used
   [`ChemRxiv <https://doi.org/10.26434/chemrxiv-2022-8w9ft>`_]
 - Zvyagin et al. "GenSLMs: Genome-scale language models reveal SARS-CoV-2 evolutionary dynamics."
   [`bioRxiv <https://doi.org/10.1101/2022.10.10.511571>`_]
+- Dharuman et al. "Protein Generation via Genome-scale Language Models with Bio-physical Scoring"
+  [`SC-W '23 <https://dl.acm.org/doi/abs/10.1145/3624062.3626087>`_]
 
 Open-Source Software
 --------------------
