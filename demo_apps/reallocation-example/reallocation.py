@@ -1,4 +1,4 @@
-"""Perform GPR Active Learning where we periodicially dedicate resources to
+"""Perform GPR Active Learning where we periodically dedicate resources to
 re-prioritizing a list of simulations to run"""
 from colmena.models import Result
 from colmena.queue.base import ColmenaQueues
@@ -94,7 +94,8 @@ def reprioritize_queue(database: List[Tuple[np.ndarray, float]],
 class Thinker(BaseThinker):
     """Tool that monitors results of simulations and calls for new ones, as appropriate"""
 
-    def __init__(self, queues: ColmenaQueues,
+    def __init__(self,
+                 queues: ColmenaQueues,
                  output_dir: str,
                  dim: int = 2,
                  retrain_after: int = 5,
@@ -244,17 +245,27 @@ if __name__ == '__main__':
         run_params['file'] = os.path.basename(__file__)
         json.dump(run_params, fp)
 
+    # Make the thinker
+    thinker = Thinker(queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
+                      batch_size=args.num_parallel)
+
     # Set up the logging
-    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        level=logging.INFO,
-                        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
-                                  logging.StreamHandler(sys.stdout)])
+    my_logger = logging.getLogger('main')
+    col_logger = logging.getLogger('colmena')
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    file_handler = logging.FileHandler(os.path.join(out_dir, 'run.log'))
+    for logger in [my_logger, col_logger, thinker.logger]:
+        for hnd in [stdout_handler, file_handler]:
+            hnd.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            logger.addHandler(hnd)
+        logger.setLevel(logging.INFO)
+    my_logger.info(f'Running in {out_dir}')
 
     # Write the configuration
     config = Config(
         executors=[
             HighThroughputExecutor(
-                address="localhost",
+                address="127.0.0.1",
                 label="workers",
                 max_workers=args.num_parallel,
                 cores_per_worker=0.0001,
@@ -276,19 +287,17 @@ if __name__ == '__main__':
     my_rep = partial(reprioritize_queue, opt_delay=args.opt_delay)
     update_wrapper(my_rep, reprioritize_queue)
     doer = ParslTaskServer([my_ackley, my_rep], queues, config)
-    thinker = Thinker(queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
-                      batch_size=args.num_parallel)
-    logging.info('Created the task server and task generator')
+    my_logger.info('Created the task server and task generator')
 
     try:
         # Launch the servers
         doer.start()
         thinker.start()
-        logging.info('Launched the servers')
+        my_logger.info('Launched the servers')
 
         # Wait for the task generator to complete
         thinker.join()
-        logging.info('Task generator has completed')
+        my_logger.info('Task generator has completed')
     finally:
         queues.send_kill_signal()
 
@@ -296,7 +305,7 @@ if __name__ == '__main__':
     train_X, train_y = zip(*thinker.database)
     best_ind = np.argmin(train_y)
     train_X = np.array(train_X)
-    logging.info(f'Done! Best result {np.array2string(train_X[best_ind, :], precision=2)} = {train_y[best_ind]:.2f}')
+    my_logger.info(f'Done! Best result {np.array2string(train_X[best_ind, :], precision=2)} = {train_y[best_ind]:.2f}')
 
     # Wait for the task server to complete
     doer.join()

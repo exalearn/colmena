@@ -1,0 +1,18 @@
+# Environment useful for development and running examples
+name: colmena
+channels:
+  - defaults
+dependencies:
+  - python==3.11.*
+
+  # Used in examples
+  - pandas==1.*
+  - matplotlib
+  - scikit-learn
+  - jupyterlab
+  
+  - pip
+  - pip:
+    - jupyterlab-spellchecker
+    - nbstripout
+    - -e ..[test,globus]

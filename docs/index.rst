@@ -26,7 +26,7 @@ Colmena provides a few main components to enable building thinking applications:
 
     #. An extensible base class for building thinking applications with a dataflow-like programming model
     #. A "Task Server" that provides a simplified interface to HPC-ready workflow systems
-    #. A high-performance queuing system communicating between tasks server(s) from thinking applications
+    #. A high-performance queuing system communicating to tasks servers from thinking applications
 
 The `demo applications <https://github.com/exalearn/colmena/tree/master/demo_apps/optimizer-examples>`_
 illustrate how to implement different thinking applications that solve optimization problems.

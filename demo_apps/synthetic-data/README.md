@@ -1,9 +1,9 @@
 # Synthetic Data Application
 
-A demo Colmena application that generates synthetic tasks.
+A demo Colmena application that generates synthetic tasks which test data bandwidth using different [ProxyStore](https://docs.proxystore.dev/latest/) connectors.
 The following options can be configured:
 
-- Task Server type: `--funcx` or `--parsl`
+- Task Server type: `--globus` or `--parsl`
 - Number of tasks to generate: `--count 10`
 - Input size of task: `--input-size [MB]`
 - Output size of task: `--output-size [MB]`

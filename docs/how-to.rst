@@ -40,7 +40,7 @@ Methods that used Compiled Applications
 Many Colmena applications launch tasks that use software written in languages besides Python.
 Colmena provides the :class:`~colmena.models.ExecutableTask` class to help integrate these tasks into a Colmena application.
 
-The definition of an `ExectuableTask` is split into three parts:
+The definition of an ``ExectuableTask`` is split into three parts:
 
 1. ``__init__``: create the shell command needed to launch your code and pass it to the initializer of the base class.
 2. ``preprocess``: use method arguments to create the input files, command line arguments, or stdin needed to execute
@@ -71,7 +71,7 @@ then stores the result in stdout.
 Some Task Server implements execute the pre- and post-processing step on separate resources
 from the executable task to make more efficient use of the compute resources.
 
-See the `MPI with RADICAL Cybertools (RCT) <#>`_ example for a demonstration.
+See the `MPI example <https://github.com/exalearn/colmena/tree/master/demo_apps/mpi-with-rct>`_.
 
 MPI Applications
 ................

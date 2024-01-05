@@ -26,7 +26,7 @@ Translating our target function, *f(x)*, and search algorithm into Python yields
         return best_to_date + random() - 0.5
 
 1. Define Communication
-------------------------------
+-----------------------
 
 .. image:: _static/overview.svg
     :height: 100
@@ -85,7 +85,7 @@ it to only use up to 4 processes on a single machine:
 
     config = Config(executors=[HighThroughputExecutor(max_workers=4)])
 
-The list of methods and resources are used to define the "task server":
+Build a task server by providing a list of methods and resources:
 
 .. code-block:: python
 
@@ -98,7 +98,7 @@ Colmena provides a "BaseThinker" class to create steering applications.
 These applications run multiple operations (called agents) that send tasks and receive results
 from the task server.
 
-Our thinker has two agents that each are class methods marked with the ``@agent`` decorator:
+Our example thinker has two agents that each are class methods marked with the ``@agent`` decorator:
 
 .. code-block:: python
 
@@ -171,7 +171,7 @@ Accordingly, we call their ``.start()`` methods to launch them.
 
 Launch the Colmena application by running it with Python: ``python multi-agent-thinker.py``
 
-The application will produce a prolific about of log messages, including:
+The application will produce log messages from many components, including:
 
 1. Log items from the thinker that mark the agent which wrote them:
 

@@ -15,3 +15,7 @@ Installation on Windows
 
 We recommend installing the Windows Subsystem for Linux in order to use Colmena from a Windows system.
 
+Development Environment
+-----------------------
+
+The Anaconda environment in the ``dev`` folder provides an environment capable of running the examples.

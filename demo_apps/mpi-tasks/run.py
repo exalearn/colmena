@@ -45,7 +45,10 @@ class Thinker(BaseThinker):
 
         # Make a random guess to start
         for i in range(self.batch_size):
-            self.queues.send_inputs(np.random.uniform(-32.768, 32.768, size=(self.dim,)).tolist())
+            self.queues.send_inputs(
+                np.random.uniform(-32.768, 32.768, size=(self.dim,)).tolist(),
+                method='simulation'
+            )
         self.logger.info('Submitted initial random guesses to queue')
         train_X = []
         train_y = []
@@ -92,7 +95,7 @@ class Thinker(BaseThinker):
             self.logger.info(f'Selected {len(best_inds)} best samples. EI: {ei[best_inds]}')
             for i in best_inds:
                 best_ei = sample_X[i, :]
-                self.queues.send_inputs(best_ei.tolist())
+                self.queues.send_inputs(best_ei.tolist(), method='simulation')
             self.logger.info('Sent all of the inputs')
 
         # Print out the result
@@ -109,9 +112,6 @@ if __name__ == '__main__':
                         type=int, default=os.cpu_count())
     args = parser.parse_args()
 
-    # Connect to the redis server
-    queues = PipeQueues(keep_inputs=True)
-
     # Make the output directory
     out_dir = os.path.join('runs',
                            f'batch-N{args.num_guesses}-P{args.num_parallel}'
@@ -122,11 +122,21 @@ if __name__ == '__main__':
         run_params['file'] = os.path.basename(__file__)
         json.dump(run_params, fp)
 
+    # Make the queue and thinker
+    queues = PipeQueues(keep_inputs=True)
+    thinker = Thinker(queues, out_dir, n_guesses=args.num_guesses, batch_size=args.num_parallel)
+
     # Set up the logging
-    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        level=logging.INFO,
-                        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
-                                  logging.StreamHandler(sys.stdout)])
+    my_logger = logging.getLogger('main')
+    col_logger = logging.getLogger('colmena')
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    file_handler = logging.FileHandler(os.path.join(out_dir, 'run.log'))
+    for logger in [my_logger, col_logger, thinker.logger]:
+        for hnd in [stdout_handler, file_handler]:
+            hnd.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            logger.addHandler(hnd)
+        logger.setLevel(logging.INFO)
+    my_logger.info(f'Running in {out_dir}')
 
     # Write the configuration
     config = Config(
@@ -140,18 +150,17 @@ if __name__ == '__main__':
     # Create the task server and task generator
     my_sim = Simulation(Path('./simulate'))
     doer = ParslTaskServer([my_sim], queues, config, default_executors=['htex'])
-    thinker = Thinker(queues, out_dir, n_guesses=args.num_guesses, batch_size=args.num_parallel)
-    logging.info('Created the task server and task generator')
+    my_logger.info('Created the task server and task generator')
 
     try:
         # Launch the servers
         doer.start()
         thinker.start()
-        logging.info('Launched the servers')
+        my_logger.info('Launched the servers')
 
         # Wait for the task generator to complete
         thinker.join()
-        logging.info('Task generator has completed')
+        my_logger.info('Task generator has completed')
     finally:
         queues.send_kill_signal()
 
