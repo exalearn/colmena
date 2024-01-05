@@ -6,8 +6,7 @@ from colmena.task_server import ParslTaskServer
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
-from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
-from parsl.providers import LocalProvider
+from parsl.executors import HighThroughputExecutor
 from functools import partial, update_wrapper
 from parsl.config import Config
 from datetime import datetime
@@ -79,7 +78,8 @@ class Thinker(BaseThinker):
 
         # Make a random guess to start
         for i in range(self.batch_size):
-            self.queues.send_inputs(np.random.uniform(-32.768, 32.768, size=(self.dim,)).tolist())
+            self.queues.send_inputs(np.random.uniform(-32.768, 32.768, size=(1, self.dim)).tolist(),
+                                    method='ackley')
         self.logger.info('Submitted initial random guesses to queue')
         train_X = []
         train_y = []
@@ -91,14 +91,17 @@ class Thinker(BaseThinker):
         ])
 
         with open(self.output_path, 'a') as fp:
-            for _ in range(self.batch_size):
+            for i in range(self.batch_size):
                 result = self.queues.get_result()
+                assert result.success, result.failure_info
                 print(result.json(), file=fp)
                 train_X.append(result.args[0])
                 train_y.append(result.value)
+                self.logger.info(f'Stored result {len(train_y)}/{self.n_guesses}')
 
         # Make guesses based on expected improvement
-        for _ in range(self.n_guesses // self.batch_size - 1):
+        for b in range(self.n_guesses // self.batch_size - 1):
+            self.logger.info(f'Starting batch {b}')
             # Update the GPR with the available training data
             gpr.fit(np.vstack(train_X), train_y)
 
@@ -115,16 +118,17 @@ class Thinker(BaseThinker):
             self.logger.info(f'Selected {len(best_inds)} best samples. EI: {ei[best_inds]}')
             for i in best_inds:
                 best_ei = sample_X[i, :]
-                self.queues.send_inputs(best_ei.tolist())
+                self.queues.send_inputs(best_ei.tolist(), method='ackley')
             self.logger.info('Sent all of the inputs')
 
             # Wait for the value to complete
             with open(self.output_path, 'a') as fp:
-                for _ in range(self.batch_size):
+                for i in range(self.batch_size):
                     result = self.queues.get_result()
                     print(result.json(), file=fp)
                     train_X.append(result.args)
                     train_y.append(result.value)
+                    self.logger.info(f'Stored result {len(train_y)}/{self.n_guesses}')
 
         # Print out the result
         best_ind = np.argmin(train_y)
@@ -138,7 +142,7 @@ if __name__ == '__main__':
     parser.add_argument("--num-guesses", "-n", help="Total number of guesses", type=int, default=100)
     parser.add_argument("--num-parallel", "-p", help="Number of guesses to evaluate in parallel (i.e., the batch size)",
                         type=int, default=os.cpu_count())
-    parser.add_argument("--dim",  help="Dimensionality of the Ackley function", type=int, default=4)
+    parser.add_argument("--dim", help="Dimensionality of the Ackley function", type=int, default=4)
     parser.add_argument('--runtime', help="Average runtime for the target function", type=float, default=2)
     parser.add_argument('--runtime-var', help="Average runtime for the target function", type=float, default=4)
     args = parser.parse_args()
@@ -156,28 +160,26 @@ if __name__ == '__main__':
         run_params['file'] = os.path.basename(__file__)
         json.dump(run_params, fp)
 
+    # Define the thinker
+    thinker = Thinker(queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
+                      batch_size=args.num_parallel)
+
     # Set up the logging
-    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        level=logging.INFO,
-                        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
-                                  logging.StreamHandler(sys.stdout)])
+    my_logger = logging.getLogger('main')
+    col_logger = logging.getLogger('colmena')
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    file_handler = logging.FileHandler(os.path.join(out_dir, 'run.log'))
+    for logger in [my_logger, col_logger, thinker.logger]:
+        for hnd in [stdout_handler, file_handler]:
+            hnd.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            logger.addHandler(hnd)
+        logger.setLevel(logging.INFO)
+    my_logger.info(f'Running in {out_dir}')
 
     # Write the configuration
     config = Config(
         executors=[
-            HighThroughputExecutor(
-                address="localhost",
-                label="htex",
-                # Max workers limits the concurrency exposed via mom node
-                max_workers=args.num_parallel,
-                cores_per_worker=0.0001,
-                worker_port_range=(10000, 20000),
-                provider=LocalProvider(
-                    init_blocks=1,
-                    max_blocks=1,
-                ),
-            ),
-            ThreadPoolExecutor(label="local_threads", max_threads=4)
+            HighThroughputExecutor(address="127.0.0.1", max_workers=args.num_parallel, cpu_affinity='block')
         ],
         strategy=None,
     )
@@ -186,20 +188,18 @@ if __name__ == '__main__':
     # Create the task server and task generator
     my_ackley = partial(ackley, mean_rt=np.log(args.runtime), std_rt=np.log(args.runtime_var))
     update_wrapper(my_ackley, ackley)
-    doer = ParslTaskServer([my_ackley], queues, config, default_executors=['htex'])
-    thinker = Thinker(queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
-                      batch_size=args.num_parallel)
-    logging.info('Created the task server and task generator')
+    doer = ParslTaskServer([my_ackley], queues, config)
+    my_logger.info('Created the task server and task generator')
 
     try:
         # Launch the servers
         doer.start()
         thinker.start()
-        logging.info('Launched the servers')
+        my_logger.info('Launched the servers')
 
         # Wait for the task generator to complete
         thinker.join()
-        logging.info('Task generator has completed')
+        my_logger.info('Task generator has completed')
     finally:
         queues.send_kill_signal()
 

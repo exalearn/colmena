@@ -55,7 +55,7 @@ class SerializationMethod(str, Enum):
         """Deserialize an object
 
         Args:
-            method: Method used to serialize the message
+            method: Method used to serialize
             message: Message to deserialize
         Returns:
             Result object
@@ -76,7 +76,7 @@ def _serialized_str_to_bytes_shim(
     """Shim between Colmena serialized objects and bytes.
 
     Colmena's serialization mechanisms produce strings but ProxyStore
-    serializes to bytes, so this shim takes a an object serialized by Colmena
+    serializes to bytes, so this shim takes an object serialized by Colmena
     and converts it to bytes.
 
     Args:
@@ -90,7 +90,7 @@ def _serialized_str_to_bytes_shim(
         return s.encode('utf-8')
     elif method == "pickle":
         # In this case the conversion goes from obj > bytes > str > bytes
-        # which results in an unecessary conversion to a string but this is
+        # which results in an unnecessary conversion to a string but this is
         # an unavoidable side effect of converting between the Colmena
         # and ProxyStore serialization formats.
         return bytes.fromhex(s)
@@ -431,9 +431,9 @@ class Result(BaseModel):
             # so the value is evicted from the value server once it is resolved
             # by the thinker.
             if _value is not None:
-                self.value, value_size = _serialize_and_proxy(_value, evict=True)
+                self.value, size = _serialize_and_proxy(_value, evict=True)
                 if 'value' not in self.message_sizes:
-                    self.message_sizes['value'] = value_size
+                    self.message_sizes['value'] = size
 
             return perf_counter() - start_time, proxies
         except Exception as e:

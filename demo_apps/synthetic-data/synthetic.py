@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 import logging
 import os
@@ -9,19 +7,16 @@ from datetime import datetime
 from typing import Any
 
 import numpy as np
-from proxystore.connectors.connector import Connector
 from proxystore.connectors.file import FileConnector
 from proxystore.connectors.globus import GlobusEndpoints
 from proxystore.connectors.globus import GlobusConnector
+from proxystore.connectors.protocols import Connector
 from proxystore.connectors.redis import RedisConnector
 from proxystore.store import Store
 from proxystore.store import register_store
 from globus_compute_sdk import Client
 from parsl import HighThroughputExecutor
-from parsl.addresses import address_by_hostname
 from parsl.config import Config
-from parsl.launchers import AprunLauncher
-from parsl.providers import LocalProvider
 
 from colmena.queue.python import PipeQueues
 from colmena.queue.base import ColmenaQueues
@@ -112,16 +107,10 @@ def get_args():
 
     parsl_group = parser.add_argument_group()
     parsl_group.add_argument(
-        '--local',
-        action='store_true',
-        default=False,
-        help='Launch jobs on local host',
-    )
-    parsl_group.add_argument(
         '--workers',
         type=int,
         default=10,
-        help='# workers to use (worker/node=worker-count//node',
+        help='# workers to use (workers/node)',
     )
 
     ps_group = parser.add_argument_group()
@@ -299,29 +288,11 @@ if __name__ == '__main__':
         )
     elif args.parsl:
         # Define the worker configuration
-        if args.local:
-            executors = [HighThroughputExecutor(max_workers=args.workers)]
-        else:
-            node_count = int(os.environ.get('COBALT_JOBSIZE', 1))
-            executors = [
-                HighThroughputExecutor(
-                    address=address_by_hostname(),
-                    label='workers',
-                    max_workers=args.workers,
-                    cores_per_worker=max(1, args.workers // node_count),
-                    provider=LocalProvider(
-                        nodes_per_block=node_count,
-                        init_blocks=1,
-                        max_blocks=1,
-                        launcher=AprunLauncher('-d 64 --cc depth'),
-                        worker_init=(
-                            'module load miniconda-3\nconda activate colmena\n'
-                        ),
-                    ),
-                ),
-            ]
+        executors = [HighThroughputExecutor(max_workers=args.workers)]
         config = Config(executors=executors, run_dir=out_dir)
         doer = ParslTaskServer([target_function], queues, config)
+    else:
+        raise ValueError(f'No such task server')
 
     thinker = Thinker(
         queue=queues,

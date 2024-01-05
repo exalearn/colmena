@@ -6,6 +6,8 @@ import sys
 import time
 
 import numpy as np
+from proxystore.connectors.file import FileConnector
+from proxystore.store import Store, register_store
 from scipy.stats import truncnorm
 
 from datetime import datetime
@@ -40,10 +42,10 @@ def get_args():
                         help='Length of task in seconds')
     parser.add_argument('--task-length-std', type=float, default=0.1,
                         help='Standard deviation of task length, expressed as a fraction of task length')
-    parser.add_argument('--use-value-server', action='store_true', default=False,
-                        help='Use the value server for sending data to worker')
-    parser.add_argument('--value-server-threshold', type=float, default=1,
-                        help='Threshold object size for value server [MB]')
+    parser.add_argument('--use-proxystore', action='store_true', default=False,
+                        help='Use the proxystore for sending data to worker')
+    parser.add_argument('--proxystore-threshold', type=float, default=1,
+                        help='Threshold object size for proxystore [MB]')
     parser.add_argument('--reuse-data', action='store_true', default=False,
                         help='Send the same input to each task')
     parser.add_argument('--output-dir', type=str, default='runs',
@@ -143,24 +145,25 @@ if __name__ == "__main__":
     out_dir = os.path.join(args.output_dir, datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S'))
     os.makedirs(out_dir, exist_ok=True)
 
-    # Set up the logging
-    logging.basicConfig(
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.INFO,
-        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
-                  logging.StreamHandler(sys.stdout)]
-    )
+    proxystore_threshold = args.proxystore_threshold * 1000 * 1000 if args.use_proxystore else None
 
-    logging.info('Args: {}'.format(args))
-
-    value_server_threshold = args.value_server_threshold * 1000 * 1000 if args.use_value_server else None
+    # Make a proxy store, if needed
+    store = None
+    if args.use_proxystore:
+        #  TODO: Set up to use your target proxystore connector
+        store = Store(
+            name='store',
+            connector=FileConnector(store_dir=os.path.join(out_dir, 'proxystore'))
+        )
+        register_store(store)
 
     # Make the queues
     queues = PipeQueues(
         topics=['generate'],
         serialization_method='pickle',
         keep_inputs=False,
-        proxystore_threshold=value_server_threshold
+        proxystore_name=store.name if store is not None else None,
+        proxystore_threshold=proxystore_threshold
     )
 
     # Define the worker configuration
@@ -168,6 +171,7 @@ if __name__ == "__main__":
         node_count = 1
         executors = [HighThroughputExecutor(max_workers=args.worker_count)]
     else:
+        # TODO: Fill in with configuration for your supercomputer
         node_count = int(os.environ.get('COBALT_JOBSIZE', 1))
         executors = [
             HighThroughputExecutor(
@@ -188,8 +192,7 @@ if __name__ == "__main__":
 
     config = Config(executors=executors, run_dir=out_dir)
 
-    doer = ParslTaskServer([target_function], queues, config)
-
+    # Make the thinker
     thinker = Thinker(
         queue=queues,
         task_input_size=args.task_input_size,
@@ -201,15 +204,30 @@ if __name__ == "__main__":
         out_dir=out_dir
     )
 
+    # Set up the logging
+    my_logger = logging.getLogger('main')
+    col_logger = logging.getLogger('colmena')
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    file_handler = logging.FileHandler(os.path.join(out_dir, 'run.log'))
+    for logger in [my_logger, col_logger, thinker.logger]:
+        for hnd in [stdout_handler, file_handler]:
+            hnd.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            logger.addHandler(hnd)
+        logger.setLevel(logging.INFO)
+    my_logger.info(f'Running in {out_dir}')
+
+    my_logger.info('Args: {}'.format(args))
+
+    doer = ParslTaskServer([target_function], queues, config)
+
     # Save the configuration
     with open(os.path.join(out_dir, 'config.json'), 'w') as fp:
         params = args.__dict__.copy()
         params['parallel_tasks'] = args.worker_count * node_count
-        params['queue'] = os.environ.get('COBALT_QUEUE')
         json.dump(params, fp)
 
-    logging.info('Created the method server and task generator')
-    logging.info(thinker)
+    my_logger.info('Created the method server and task generator')
+    my_logger.info(thinker)
 
     start_time = time.time()
 
@@ -217,16 +235,21 @@ if __name__ == "__main__":
         # Launch the servers
         doer.start()
         thinker.start()
-        logging.info('Launched the servers')
+        my_logger.info('Launched the servers')
 
         # Wait for the task generator to complete
         thinker.join()
-        logging.info('Task generator has completed')
+        my_logger.info('Task generator has completed')
     finally:
         queues.send_kill_signal()
 
     # Wait for the method server to complete
     doer.join()
 
+    # Exit the proxystore
+    if store is not None:
+        store.close()
+        my_logger.info('Closed the proxystore')
+
     # Print the output result
-    logging.info('Finished. Runtime = {}s'.format(time.time() - start_time))
+    my_logger.info('Finished. Runtime = {}s'.format(time.time() - start_time))

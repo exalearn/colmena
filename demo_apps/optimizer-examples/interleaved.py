@@ -7,8 +7,7 @@ from colmena.task_server import ParslTaskServer
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
-from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
-from parsl.providers import LocalProvider
+from parsl.executors import HighThroughputExecutor
 from functools import partial, update_wrapper
 from parsl.config import Config
 from threading import Lock, Event
@@ -145,7 +144,7 @@ class Thinker(BaseThinker):
 
             # If have required amount, terminate program
             if len(self.database) == self.n_guesses:
-                logging.info('Done running new calculations')
+                self.logger.info('Done running new calculations')
                 self.done.set()
 
             # Mark that we have some data now
@@ -163,7 +162,7 @@ class Thinker(BaseThinker):
 
         # Wait until we have data
         self.has_data.wait()
-        logging.info('Task reprioritization worker has started')
+        self.logger.info('Task reprioritization worker has started')
 
         while not self.done.is_set():
             # Send out an update task
@@ -178,14 +177,14 @@ class Thinker(BaseThinker):
 
             # Update the queue (requires locking)
             with self.queue_lock:
-                logging.info('Reordering task queue')
+                self.logger.info('Reordering task queue')
                 # Copy out the old values
                 current_queue = self.task_queue.copy()
                 self.task_queue.clear()
 
                 # Note how many of the tasks have been started
                 num_started = len(new_order) - len(current_queue)
-                logging.info(f'{num_started} jobs have completed in the meanwhile')
+                self.logger.info(f'{num_started} jobs have completed in the meanwhile')
 
                 # Compute the new position of tasks
                 new_order -= num_started
@@ -195,7 +194,7 @@ class Thinker(BaseThinker):
                     if i < 0:  # Task has already been sent out
                         continue
                     self.task_queue.append(current_queue[i])
-                logging.info(f'New queue contains {len(self.task_queue)} tasks')
+                self.logger.info(f'New queue contains {len(self.task_queue)} tasks')
 
 
 if __name__ == '__main__':
@@ -223,36 +222,36 @@ if __name__ == '__main__':
         run_params['file'] = os.path.basename(__file__)
         json.dump(run_params, fp)
 
+    # Make the thinker
+    thinker = Thinker(queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
+                      batch_size=args.num_parallel)
+
     # Set up the logging
-    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        level=logging.INFO,
-                        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
-                                  logging.StreamHandler(sys.stdout)])
+    my_logger = logging.getLogger('main')
+    col_logger = logging.getLogger('colmena')
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    file_handler = logging.FileHandler(os.path.join(out_dir, 'run.log'))
+    for logger in [my_logger, col_logger, thinker.logger]:
+        for hnd in [stdout_handler, file_handler]:
+            hnd.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            logger.addHandler(hnd)
+        logger.setLevel(logging.INFO)
+    my_logger.info(f'Running in {out_dir}')
 
     # Write the configuration
     config = Config(
         executors=[
             HighThroughputExecutor(
-                address="localhost",
+                address="127.0.0.1",
                 label="simulation",
                 max_workers=args.num_parallel,
                 cores_per_worker=0.0001,
-                worker_port_range=(10000, 20000),
-                provider=LocalProvider(
-                    init_blocks=1,
-                    max_blocks=1,
-                ),
             ),
             HighThroughputExecutor(
-                address="localhost",
+                address="127.0.0.1",
                 label="task_generator",
                 max_workers=1,
-                provider=LocalProvider(
-                    init_blocks=1,
-                    max_blocks=1,
-                ),
             ),
-            ThreadPoolExecutor(label="local_threads", max_threads=4)
         ],
         strategy=None,
     )
@@ -267,19 +266,17 @@ if __name__ == '__main__':
     doer = ParslTaskServer([(my_ackley, {'executors': ['simulation']}),
                             (my_rep, {'executors': ['task_generator']})],
                            queues, config)
-    thinker = Thinker(queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
-                      batch_size=args.num_parallel)
-    logging.info('Created the task server and task generator')
+    my_logger.info('Created the task server')
 
     try:
         # Launch the servers
         doer.start()
         thinker.start()
-        logging.info('Launched the servers')
+        my_logger.info('Launched the servers')
 
         # Wait for the task generator to complete
         thinker.join()
-        logging.info('Task generator has completed')
+        my_logger.info('Task generator has completed')
     finally:
         queues.send_kill_signal()
 
@@ -287,7 +284,7 @@ if __name__ == '__main__':
     train_X, train_y = zip(*thinker.database)
     best_ind = np.argmin(train_y)
     train_X = np.array(train_X)
-    logging.info(f'Done! Best result {np.array2string(train_X[best_ind, :], precision=2)} = {train_y[best_ind]:.2f}')
+    my_logger.info(f'Done! Best result {np.array2string(train_X[best_ind, :], precision=2)} = {train_y[best_ind]:.2f}')
 
     # Wait for the task server to complete
     doer.join()

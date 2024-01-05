@@ -31,7 +31,7 @@ if __name__ == "__main__":
     queues = PipeQueues(topics=['generate', 'simulate'], keep_inputs=True)
 
     # Define the worker configuration
-    config = Config(executors=[HighThroughputExecutor()])
+    config = Config(executors=[HighThroughputExecutor(address='127.0.0.1')])
 
     doer = ParslTaskServer([target_function, task_generator], queues, config)
 

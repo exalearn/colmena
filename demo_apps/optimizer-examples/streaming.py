@@ -7,8 +7,7 @@ from colmena.task_server import ParslTaskServer
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
-from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
-from parsl.providers import LocalProvider
+from parsl.executors import HighThroughputExecutor
 from functools import partial, update_wrapper
 from parsl.config import Config
 from datetime import datetime
@@ -76,14 +75,18 @@ class Thinker(BaseThinker):
         self.dim = dim
         self.output_path = os.path.join(output_dir, 'results.json')
         self.opt_delay = opt_delay
+        self.min_training_size = 8
 
     @agent
     def operate(self):
         """Connects to the Redis queue with the results and pulls them"""
 
         # Make a random guesses to start
-        for i in range(self.batch_size):
-            self.queues.send_inputs(np.random.uniform(-32.768, 32.768, size=(self.dim,)).tolist())
+        for i in range(self.batch_size + self.min_training_size):
+            self.queues.send_inputs(
+                np.random.uniform(-32.768, 32.768, size=(self.dim,)).tolist(),
+                method='ackley'
+            )
         self.logger.info('Submitted initial random guesses to queue')
         train_X = []
         train_y = []
@@ -102,6 +105,11 @@ class Thinker(BaseThinker):
                 print(result.json(), file=fp)
             train_X.append(result.args[0])
             train_y.append(result.value)
+            self.logger.info(f'Completed {len(train_y)}/{self.n_guesses}')
+
+            # Skip if dataset too small
+            if len(train_y) < self.min_training_size:
+                continue
 
             # Sleep to simulate a more expensive optimizer
             sleep(self.opt_delay)
@@ -121,7 +129,7 @@ class Thinker(BaseThinker):
             best_ind = np.argmax(ei)
             self.logger.info(f'Selected best samples. EI: {ei[best_ind]}')
             best_ei = sample_X[best_ind, :]
-            self.queues.send_inputs(best_ei.tolist())
+            self.queues.send_inputs(best_ei.tolist(), method='ackley')
             self.logger.info('Sent new input')
 
         # Print out the result
@@ -155,28 +163,31 @@ if __name__ == '__main__':
         run_params['file'] = os.path.basename(__file__)
         json.dump(run_params, fp)
 
+    thinker = Thinker(queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
+                      batch_size=args.num_parallel, opt_delay=args.opt_delay)
+
     # Set up the logging
-    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                        level=logging.INFO,
-                        handlers=[logging.FileHandler(os.path.join(out_dir, 'runtime.log')),
-                                  logging.StreamHandler(sys.stdout)])
+    my_logger = logging.getLogger('main')
+    col_logger = logging.getLogger('colmena')
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    file_handler = logging.FileHandler(os.path.join(out_dir, 'run.log'))
+    for logger in [my_logger, col_logger, thinker.logger]:
+        for hnd in [stdout_handler, file_handler]:
+            hnd.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            logger.addHandler(hnd)
+        logger.setLevel(logging.INFO)
+    my_logger.info(f'Running in {out_dir}')
 
     # Write the configuration
     config = Config(
         executors=[
             HighThroughputExecutor(
-                address="localhost",
+                address="127.0.0.1",
                 label="htex",
                 # Max workers limits the concurrency exposed via mom node
                 max_workers=args.num_parallel,
                 cores_per_worker=0.0001,
-                worker_port_range=(10000, 20000),
-                provider=LocalProvider(
-                    init_blocks=1,
-                    max_blocks=1,
-                ),
             ),
-            ThreadPoolExecutor(label="local_threads", max_threads=4)
         ],
         strategy=None,
     )
@@ -186,19 +197,17 @@ if __name__ == '__main__':
     my_ackley = partial(ackley, mean_rt=args.runtime, std_rt=args.runtime_var)
     update_wrapper(my_ackley, ackley)
     doer = ParslTaskServer([my_ackley], queues, config, default_executors=['htex'])
-    thinker = Thinker(queues, out_dir, dim=args.dim, n_guesses=args.num_guesses,
-                      batch_size=args.num_parallel, opt_delay=args.opt_delay)
-    logging.info('Created the task server and task generator')
+    my_logger.info('Created the task server and task generator')
 
     try:
         # Launch the servers
         doer.start()
         thinker.start()
-        logging.info('Launched the servers')
+        my_logger.info('Launched the servers')
 
         # Wait for the task generator to complete
         thinker.join()
-        logging.info('Task generator has completed')
+        my_logger.info('Task generator has completed')
     finally:
         queues.send_kill_signal()
 
