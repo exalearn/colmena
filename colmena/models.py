@@ -317,7 +317,7 @@ class Result(BaseModel):
         """Mark when the task finished executing"""
         self.timestamp.compute_ended = datetime.now().timestamp()
 
-    def set_result(self, result: Any, runtime: float = None):
+    def set_result(self, result: Any, runtime: float = nan):
         """Set the value of this computation
 
         Automatically sets the "time_result_completed" field and, if known, defines the runtime.
