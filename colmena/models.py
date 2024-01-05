@@ -1,8 +1,9 @@
 import json
 import logging
-import pickle as pkl
 import shlex
 import sys
+from math import nan
+import pickle as pkl
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -169,13 +170,13 @@ class Timestamps(BaseModel):
 
     created: float = Field(description="Time this value object was created",
                            default_factory=lambda: datetime.now().timestamp())
-    input_received: float = Field(None, description="Time the inputs was received by the task server")
-    compute_started: float = Field(None, description="Time workflow process began executing a task")
-    compute_ended: float = Field(None, description="Time workflow process finished executing a task")
-    result_sent: float = Field(None, description="Time message was sent from the server")
-    result_received: float = Field(None, description="Time value was received by client")
-    start_task_submission: float = Field(None, description="Time marking the start of the task submission to workflow engine")
-    task_received: float = Field(None, description="Time task result received from workflow engine")
+    input_received: float = Field(nan, description="Time the inputs was received by the task server")
+    compute_started: float = Field(nan, description="Time workflow process began executing a task")
+    compute_ended: float = Field(nan, description="Time workflow process finished executing a task")
+    result_sent: float = Field(nan, description="Time message was sent from the server")
+    result_received: float = Field(nan, description="Time value was received by client")
+    start_task_submission: float = Field(nan, description="Time marking the start of the task submission to workflow engine")
+    task_received: float = Field(nan, description="Time task result received from workflow engine")
 
 
 class TimeSpans(BaseModel):
@@ -184,12 +185,12 @@ class TimeSpans(BaseModel):
     All are recorded in seconds
     """
 
-    running: float = Field(None, description="Runtime of the method, if available")
-    serialize_inputs: float = Field(None, description="Time required to serialize inputs on client")
-    deserialize_inputs: float = Field(None, description="Time required to deserialize inputs on worker")
-    serialize_results: float = Field(None, description="Time required to serialize results on worker")
-    deserialize_results: float = Field(None, description="Time required to deserialize results on client")
-    async_resolve_proxies: float = Field(None, description="Time required to start async resolves of proxies")
+    running: float = Field(nan, description="Runtime of the method, if available")
+    serialize_inputs: float = Field(nan, description="Time required to serialize inputs on client")
+    deserialize_inputs: float = Field(nan, description="Time required to deserialize inputs on worker")
+    serialize_results: float = Field(nan, description="Time required to serialize results on worker")
+    deserialize_results: float = Field(nan, description="Time required to deserialize results on client")
+    async_resolve_proxies: float = Field(nan, description="Time required to start async resolves of proxies")
     proxy: Dict[str, Dict[str, dict]] = Field(default_factory=dict,
                                               description='Timings related to resolving ProxyStore proxies on the compute worker')
 
