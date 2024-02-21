@@ -123,7 +123,7 @@ def _serialized_bytes_to_obj_wrapper(
     else:
         raise NotImplementedError(f'Method {method} not yet implemented')
 
-    return SerializationMethod.serialize(method, s)
+    return SerializationMethod.deserialize(method, s)
 
 
 class FailureInformation(BaseModel):
