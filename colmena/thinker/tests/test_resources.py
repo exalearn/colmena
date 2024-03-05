@@ -127,6 +127,7 @@ def test_reallocator_deadlock(rec):
 
     # Start the ML allocator, which will pull resources from sim to ml
     ml_alloc.start()
+    sleep(0.010)  # Give enough time for allocation to finish
     assert not ml_alloc.stop_event.is_set()
     assert rec.available_slots("ml") == 8
     assert rec.acquire("ml", 8)
