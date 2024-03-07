@@ -18,6 +18,7 @@ class EchoTask(ExecutableTask):
 class FakeMPITask(ExecutableTask):
     def __init__(self):
         super().__init__(executable=['echo', '-n'],
+                         name='fakempitask',
                          mpi=True,
                          mpi_command_string='echo -N {total_ranks} -n {cpu_processes} --cc depth')
 
