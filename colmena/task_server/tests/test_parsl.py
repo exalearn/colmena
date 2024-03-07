@@ -141,7 +141,7 @@ def test_bash(server_and_queue):
     server.start()
 
     # Send a standard task
-    queue.send_inputs(1, method='echotask', keep_inputs=True)
+    queue.send_inputs(1, method='echo', keep_inputs=True)
     result = queue.get_result()
     assert result.success, result.failure_info
     assert result.value == '1\n'
