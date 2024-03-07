@@ -1,5 +1,4 @@
-from typing import Tuple, List, Optional, Dict, Any
-from collections.abc import Generator
+from typing import Tuple, List, Optional, Dict, Any, Iterator
 from pathlib import Path
 from math import isnan
 
@@ -44,7 +43,7 @@ def echo(x: Any) -> Any:
     return x
 
 
-def generator(i: int) -> Generator[int, None, str]:
+def generator(i: int) -> Iterator[int]:
     """Generator which iterates over a list then returns a string saying "done" """
     yield from range(i)
     return "done"
