@@ -164,15 +164,15 @@ class ExecutableTask(ColmenaTask):
     and a "post-processing" step which stores the outputs (either produced from stdout or written to files)
     as Python objects.
 
-   Separating the task into these two functions and a system call for launching the program
+    Separating the task into these two functions and a system call for launching the program
     simplifies development (shorter functions that ar easier to test), and allows some workflow
     engines to improve performance by running processing and execution tasks separately.
 
-   Implement a new ExecutableTask by defining the executable, a preprocessing method (:meth:`preprocess`),
+    Implement a new ExecutableTask by defining the executable, a preprocessing method (:meth:`preprocess`),
     and a postprocessing method (:meth:`postprocess`).
 
     Use the ExecutableTask by instantiating a copy of your new class and then passing it to the task server
-     as you would with any other function.
+    as you would with any other function.
 
     **MPI Executables**
 
@@ -233,7 +233,7 @@ class ExecutableTask(ColmenaTask):
         Args:
             run_dir: Path to a directory in which to write files used by an executable
             args: Arguments to the task, control how the run is set up
-            kwargs: Keyword arguments to
+            kwargs: Keyword arguments to the function
         Returns:
             - Options to be passed as command line arguments to the executable
             - Values to pass to the standard in of the executable
@@ -291,7 +291,7 @@ class ExecutableTask(ColmenaTask):
 
         Args:
             run_dir: Run directory for the executable. Stdout will be written to `run_dir/colmena.stdout`
-            and stderr to `run_dir/colmena.stderr`
+                    and stderr to `run_dir/colmena.stderr`
         """
         raise NotImplementedError()
 
