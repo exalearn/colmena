@@ -29,6 +29,10 @@ class ColmenaTask:
     name: str
     """Name used to identify the function"""
 
+    @property
+    def __name__(self):
+        return self.name
+
     def function(self, *args, **kwargs) -> Any:
         """Function provided by the Colmena user"""
         raise NotImplementedError()

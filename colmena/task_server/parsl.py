@@ -5,7 +5,7 @@ import logging
 import platform
 import shutil
 from concurrent.futures import Future
-from functools import partial, update_wrapper
+from functools import partial
 from pathlib import Path
 from tempfile import mkdtemp
 from time import perf_counter
@@ -22,7 +22,7 @@ from colmena.models.tasks import ExecutableTask
 from colmena.queue.base import ColmenaQueues
 from colmena.models import Result, FailureInformation, ResourceRequirements
 from colmena.proxy import resolve_proxies_async
-from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
+from colmena.task_server.base import convert_to_colmena_task, FutureBasedTaskServer
 
 logger = logging.getLogger(__name__)
 
@@ -352,14 +352,13 @@ class ParslTaskServer(FutureBasedTaskServer):
                 options = {'executors': default_executors}
                 logger.info(f'Using default executors for {function.__name__}: {default_executors}')
 
-            # Make the Parsl app
-            name = function.__name__
+            # Convert the function to a Colmena task
+            function = convert_to_colmena_task(method)
+            name = function.name
 
-            # If the function is an executable, just wrap it
+            # If the function is not an executable, submit it as a single task
             if not isinstance(function, ExecutableTask):
-                wrapped_function = partial(run_and_record_timing, function)
-                wrapped_function = update_wrapper(wrapped_function, function)
-                app = PythonApp(wrapped_function, **options)
+                app = PythonApp(function, **options)
                 self.methods_[name] = (app, 'basic')
             else:
                 logger.info(f'Building a chain of apps for an ExecutableTask, {function.__name__}')
@@ -406,6 +405,7 @@ class ParslTaskServer(FutureBasedTaskServer):
         elif func_type == 'exec':
             # For executable functions, we have a different route for returning results
             exec_app, post_app = self.exec_apps_[method]
+            # TODO (wardlt): Use a join_app rather than callback?
             future.add_done_callback(lambda x: _preprocess_callback(x, serialized_inputs, task, self, topic, exec_app, post_app))
             return None  # `None` prevents the Task Server from adding its own callback
         else:

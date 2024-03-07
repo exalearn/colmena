@@ -5,13 +5,12 @@ computational resources (e.g., cloud providers, HPC).
 Tasks and results are communicated to/from the endpoint through a cloud service secured using Globus Auth."""
 
 import logging
-from functools import partial, update_wrapper
 from typing import Dict, Callable, Optional, Tuple
 from concurrent.futures import Future
 
 from globus_compute_sdk import Client, Executor
 
-from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
+from colmena.task_server.base import convert_to_colmena_task, FutureBasedTaskServer
 from colmena.queue.python import PipeQueues
 
 from colmena.models import Result
@@ -58,13 +57,12 @@ class GlobusComputeTaskServer(FutureBasedTaskServer):
         # Create a function with the latest version of the wrapper function
         self.registered_funcs: Dict[str, Tuple[str, str]] = {}  # Function name -> (funcX id, endpoints)
         for func, endpoint in methods.items():
-            # Make a wrapped version of the function
-            func_name = func.__name__
-            new_func = partial(run_and_record_timing, func)
-            update_wrapper(new_func, func)
-            func_fxid = self.fx_client.register_function(new_func)
+            # Register a wrapped version of the function
+            task = convert_to_colmena_task(func)
+            func_fxid = self.fx_client.register_function(task)
+
             # Store the information for the function
-            self.registered_funcs[func_name] = (func_fxid, endpoint)
+            self.registered_funcs[task.name] = (func_fxid, endpoint)
 
         self._batch_options = dict(
             batch_size=batch_size,

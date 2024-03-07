@@ -1,17 +1,14 @@
 """Base classes for the Task Server and associated functions"""
 import logging
-import os
-import platform
+from inspect import isgeneratorfunction
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import Future
-from inspect import signature
 from multiprocessing import Process
-from time import perf_counter
-from typing import Optional, Callable, Collection
+from typing import Collection, Optional, Callable, Union
 
 from colmena.exceptions import KillSignalException, TimeoutException
+from colmena.models.tasks import ColmenaTask, PythonGeneratorTask, PythonTask
 from colmena.models import Result, FailureInformation
-from colmena.proxy import resolve_proxies_async, store_proxy_stats
 from colmena.queue.base import ColmenaQueues
 
 logger = logging.getLogger(__name__)
@@ -164,68 +161,18 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
             future.add_done_callback(lambda x: self.perform_callback(x, task, topic))
 
 
-def run_and_record_timing(func: Callable, result: Result) -> Result:
-    """Run a function and also return the runtime
+def convert_to_colmena_task(function: Union[Callable, ColmenaTask]) -> ColmenaTask:
+    """Wrap user-supplified functions in the task model wrapper, if needed
 
     Args:
-        func: Function to invoke
-        result: Result object describing task request
+        function: User-provided function
     Returns:
-        Result object with the serialized result
+        Function as appropriate subclasses of Colmena Task wrapper
     """
-    # Mark that compute has started on the worker
-    result.mark_compute_started()
 
-    # Unpack the inputs
-    result.time.deserialize_inputs = result.deserialize()
-
-    # Start resolving any proxies in the input asynchronously
-    start_time = perf_counter()
-    input_proxies = []
-    for arg in result.args:
-        input_proxies.extend(resolve_proxies_async(arg))
-    for value in result.kwargs.values():
-        input_proxies.extend(resolve_proxies_async(value))
-    result.time.async_resolve_proxies = perf_counter() - start_time
-
-    # Execute the function
-    start_time = perf_counter()
-    success = True
-    try:
-        if '_resources' in result.kwargs:
-            logger.warning('`_resources` provided as a kwargs. Unexpected things are about to happen')
-        if '_resources' in signature(func).parameters:
-            output = func(*result.args, **result.kwargs, _resources=result.resources)
-        else:
-            output = func(*result.args, **result.kwargs)
-    except BaseException as e:
-        output = None
-        success = False
-        result.failure_info = FailureInformation.from_exception(e)
-    finally:
-        end_time = perf_counter()
-
-    # Store the results
-    result.set_result(output, end_time - start_time)
-    if not success:
-        result.success = False
-
-    # Add the worker information into the tasks, if available
-    worker_info = {}
-    # TODO (wardlt): Move this information into a separate, parsl-specific wrapper
-    for tag in ['PARSL_WORKER_RANK', 'PARSL_WORKER_POOL_ID']:
-        if tag in os.environ:
-            worker_info[tag] = os.environ[tag]
-    worker_info['hostname'] = platform.node()
-    result.worker_info = worker_info
-
-    result.mark_compute_ended()
-
-    # Re-pack the results. Will store the proxy statistics
-    result.time.serialize_results, _ = result.serialize()
-
-    # Get the statistics for the proxy resolution
-    for proxy in input_proxies:
-        store_proxy_stats(proxy, result.time.proxy)
-
-    return result
+    if isinstance(function, ColmenaTask):
+        return function
+    elif isgeneratorfunction(function):
+        return PythonGeneratorTask(function)
+    else:
+        return PythonTask(function)
