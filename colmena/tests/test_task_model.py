@@ -4,9 +4,13 @@ from pathlib import Path
 from math import isnan
 
 from pytest import fixture
+from proxystore.connectors.file import FileConnector
+from proxystore.store import Store
+from proxystore.store import register_store
+from proxystore.store import unregister_store
 
 from colmena.models.tasks import ExecutableTask, PythonTask, PythonGeneratorTask
-from colmena.models import ResourceRequirements, Result
+from colmena.models import ResourceRequirements, Result, SerializationMethod
 
 
 class EchoTask(ExecutableTask):
@@ -26,6 +30,14 @@ def result() -> Result:
     result = Result.from_args_and_kwargs((1,), method='echo')
     result.serialize()
     return result
+
+
+@fixture
+def store(tmpdir):
+    with Store('store', FileConnector(tmpdir), metrics=True) as store:
+        register_store(store)
+        yield store
+        unregister_store(store)
 
 
 def echo(x: Any) -> Any:
@@ -100,3 +112,36 @@ def test_executable_task(result):
     result = task(result)
     result.deserialize()
     assert result.value == '-N 6 -n 3 --cc depth echo 1\n'
+
+
+def test_run_function(store):
+    """Make sure the run function behaves as expected:
+
+    - Records runtimes
+    - Tracks proxy statistics
+    """
+
+    # Make the result and configure it to use the store
+    result = Result(inputs=(('a' * 1024,), {}))
+    result.proxystore_name = store.name
+    result.proxystore_threshold = 128
+    result.proxystore_config = store.config()
+
+    # Serialize it
+    result.serialization_method = SerializationMethod.PICKLE
+    result.serialize()
+
+    # Run the function
+    task = PythonTask(lambda x: x.upper(), name='upper')
+    result = task(result)
+
+    # Make sure the timings are all set
+    assert result.time.running > 0
+    assert result.time.async_resolve_proxies > 0
+    assert result.time.deserialize_inputs > 0
+    assert result.time.serialize_results > 0
+    assert result.timestamp.compute_ended > result.timestamp.compute_started
+
+    # Make sure we have stats for both proxies
+    assert len(result.time.proxy) == 2
+    assert all('store.proxy' in v['times'] for v in result.time.proxy.values())
