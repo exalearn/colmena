@@ -1,12 +1,13 @@
 from pathlib import Path
 
-from colmena.models import ExecutableTask
+from colmena.models.tasks import ExecutableTask
 
 
 class Simulation(ExecutableTask):
 
     def __init__(self, executable: Path):
         super().__init__(executable=[executable.absolute()],
+                         name='simulation',
                          mpi=True,
                          mpi_command_string='mpirun -np {total_ranks}')
 
