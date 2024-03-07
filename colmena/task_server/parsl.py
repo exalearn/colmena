@@ -17,9 +17,10 @@ from parsl.app.app import AppBase
 from parsl.app.bash import BashApp
 from parsl.config import Config
 from parsl.app.python import PythonApp
+from colmena.models.tasks import ExecutableTask
 
 from colmena.queue.base import ColmenaQueues
-from colmena.models import Result, ExecutableTask, FailureInformation, ResourceRequirements
+from colmena.models import Result, FailureInformation, ResourceRequirements
 from colmena.proxy import resolve_proxies_async
 from colmena.task_server.base import run_and_record_timing, FutureBasedTaskServer
 

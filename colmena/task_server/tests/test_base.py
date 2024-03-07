@@ -7,7 +7,8 @@ from proxystore.store import register_store
 from proxystore.store import unregister_store
 from pytest import fixture
 
-from colmena.models import Result, ExecutableTask, SerializationMethod
+from colmena.models import Result, SerializationMethod
+from colmena.models.tasks import ExecutableTask
 from colmena.task_server.base import run_and_record_timing
 
 

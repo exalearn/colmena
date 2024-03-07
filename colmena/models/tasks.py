@@ -9,9 +9,9 @@ from subprocess import run
 from tempfile import TemporaryDirectory
 from time import perf_counter
 from inspect import signature, isgeneratorfunction
-from typing import Any, Dict, List, Tuple, Optional, Callable, Iterable
+from typing import Any, Dict, List, Tuple, Optional, Callable, Generator
 
-from .results import ResourceRequirements, Result, FailureInformation
+from colmena.models.results import ResourceRequirements, Result, FailureInformation
 from colmena.proxy import resolve_proxies_async, store_proxy_stats
 from colmena.queue import ColmenaQueues
 
@@ -33,11 +33,12 @@ class ColmenaTask:
         """Function provided by the Colmena user"""
         raise NotImplementedError()
 
-    def __call__(self, result: Result, queues: Optional[ColmenaQueues]) -> Result:
+    def __call__(self, result: Result, queues: Optional[ColmenaQueues] = None) -> Result:
         """Invoke a Colmena task request
 
         Args:
             result: Request, which inclues the arguments and will hold the result
+            queues: Queues used to send intermediate results back [Not Yet Used]
         Returns:
             The input result object, populated with the results
         """
@@ -100,7 +101,12 @@ class ColmenaTask:
 
 
 class PythonTask(ColmenaTask):
-    """A Python function to be executed on a single worker of a larger workflow"""
+    """A Python function to be executed on a single worker
+
+    Args:
+        function: Generator function to be executed
+        name: Name of the function. Defaults to `function.__name__`
+    """
 
     function: Callable
 
@@ -112,21 +118,39 @@ class PythonTask(ColmenaTask):
 
 
 class PythonGeneratorTask(ColmenaTask):
-    """Python task which generates intermediate results"""
+    """Python task which runs on a single worker and generates results iteratively
 
-    def __init__(self, function: Callable[..., Iterable], name: Optional[str] = None) -> None:
+    Args:
+        function: Generator function to be executed
+        name: Name of the function. Defaults to `function.__name__`
+        store_return_value: Whether to capture the `return value <https://docs.python.org/3/reference/simple_stmts.html#the-return-statement>`_
+            of the generator and store it in the Result object.
+    """
+
+    def __init__(self,
+                 function: Callable[..., Generator],
+                 name: Optional[str] = None,
+                 store_return_value: bool = False) -> None:
         if not isgeneratorfunction(function):
             raise ValueError('Function is not a generator function. Use `PythonTask` instead.')
         self._function = function
         self.name = name or function.__name__
+        self.store_return_value = store_return_value
 
     def function(self, *args, **kwargs) -> Any:
         """Run the Colmena task and collect intermediate results to provide as a list"""
 
         # TODO (wardlt): Have the function push intemediate results back to a function queue
-        return [
-            result for result in self._function(*args, **kwargs)
-        ]
+        gen = self._function(*args, **kwargs)
+        iter_results = []
+        while True:
+            try:
+                iter_results.append(next(gen))
+            except StopIteration as e:
+                if self.store_return_value:
+                    return iter_results, e.value
+                else:
+                    return iter_results
 
 
 class ExecutableTask(ColmenaTask):
@@ -160,6 +184,12 @@ class ExecutableTask(ColmenaTask):
     The attributes of this class (e.g., ``node_count``, ``total_ranks``) will be used as arguments to `format`.
     For example, a template of ``aprun -N {total_ranks} -n {cpu_process}`` will produce ``aprun -N 6 -n 3`` if you
     specify ``node_count=2`` and ``cpu_processes=3``.
+
+    Args:
+        executable: List of executable arguments
+        name: Name used for the task. Defaults to ``executable[0]``
+        mpi: Whether to use MPI to launch the exectuable
+        mpi_command_string: Template for MPI launcher. See :attr:`mpi_command_string`.
     """
 
     executable: List[str]
@@ -173,9 +203,13 @@ class ExecutableTask(ColmenaTask):
     Should include placeholders named after the fields in ResourceRequirements marked using {}'s.
     Example: `mpirun -np {total_ranks}`"""
 
-    @property
-    def __name__(self):
-        return self.__class__.__name__.lower()
+    def __init__(self, executable: List[str], name: Optional[str] = None,
+                 mpi: bool = False, mpi_command_string: Optional[str] = None) -> None:
+        super().__init__()
+        self.name = name or executable[0]
+        self.executable = executable
+        self.mpi = mpi
+        self.mpi_command_string = mpi_command_string
 
     def render_mpi_launch(self, resources: ResourceRequirements) -> str:
         """Create an MPI launch command given the configuration
