@@ -101,10 +101,12 @@ def test_generator_streaming(result):
     assert result.success, result.failure_info.traceback
     result.deserialize()
     assert result.value == 'done'
+    assert result.complete
 
     intermediate = queue.get_result(timeout=1)
     assert intermediate.success
     intermediate.deserialize()
+    assert not intermediate.complete
     assert intermediate.value == 0
 
     assert result.time.running >= intermediate.time.running
