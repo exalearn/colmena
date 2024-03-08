@@ -224,7 +224,7 @@ def _preprocess_callback(
 
         # Store the time it took to run the preprocessing
         result.time.running = result.time.additional.get('exec_preprocess', 0)
-        return task_server.queues.send_result(result, topic)
+        return task_server.queues.send_result(result)
 
     # If successful, submit the execute step and pass its result to Parsl
     logger.info(f'Preprocessing was successful for {result.method} task. Submitting to execute')

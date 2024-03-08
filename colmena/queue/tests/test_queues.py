@@ -44,7 +44,7 @@ def test_flush(queue):
     # Test that it will flush a result
     queue.send_inputs(1, method='method')
     topic, result = queue.get_task()
-    queue.send_result(result, topic)
+    queue.send_result(result)
     queue.flush()
 
     with raises(TimeoutException):
@@ -66,7 +66,7 @@ def test_basic(queue, topic):
         result.deserialize()
         result.set_result(1, 1)
         result.serialize()
-        pool.apply(queue.send_result, (result, topic))
+        pool.apply(queue.send_result, (result,))
 
         # Make sure it does not appear in b
         with raises(TimeoutException):

@@ -235,6 +235,9 @@ class Result(BaseModel):
     proxystore_threshold: Optional[int] = Field(None,
                                                 description="Proxy all input/output objects larger than this threshold in bytes")
 
+    # Task routing information
+    topic: Optional[str] = Field(None, description='Label used to group results in queue between Thinker and Task Server')
+
     def __init__(self, inputs: Tuple[Tuple[Any], Dict[str, Any]], **kwargs):
         """
         Args:

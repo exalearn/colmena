@@ -201,7 +201,8 @@ class ColmenaQueues:
         self._check_role(QueueRole.CLIENT, 'send_inputs')
 
         # Make sure the queue topic exists
-        assert topic in self.topics, f'Unknown topic: {topic}. Known are: {", ".join(self.topics)}'
+        if topic not in self.topics:
+            raise ValueError(f'Unknown topic: {topic}. Known are: {", ".join(self.topics)}')
 
         # Make fake kwargs, if needed
         if input_kwargs is None:
@@ -233,7 +234,8 @@ class ColmenaQueues:
             keep_inputs=_keep_inputs,
             serialization_method=self.serialization_method,
             task_info=task_info,
-            resources=resources or ResourceRequirements(),  # Takes either the user specified or a default
+            resources=resources or ResourceRequirements(),  # Takes either the user specified or a default,
+            topic=topic,
             **ps_kwargs
         )
 
@@ -285,7 +287,7 @@ class ColmenaQueues:
         self._check_role(QueueRole.CLIENT, 'send_kill_signal')
         self._send_request("null", topic='default')
 
-    def send_result(self, result: Result, topic: str):
+    def send_result(self, result: Result):
         """Send a value to a client
 
         Args:
@@ -294,7 +296,7 @@ class ColmenaQueues:
         """
         self._check_role(QueueRole.SERVER, 'send_result')
         result.mark_result_sent()
-        self._send_result(result.json(), topic=topic)
+        self._send_result(result.json(), topic=result.topic)
 
     @abstractmethod
     def _get_request(self, timeout: int = None) -> Tuple[str, str]:

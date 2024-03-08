@@ -72,7 +72,7 @@ class BaseTaskServer(Process, metaclass=ABCMeta):
                     task.failure_info = FailureInformation.from_exception(
                         ValueError(f'Method name "{task.method}" not recognized. Options: {", ".join(self.method_names)}')
                     )
-                    self.queues.send_result(task, topic)
+                    self.queues.send_result(task)
 
             except KillSignalException:
                 logger.info('Kill signal received')
@@ -138,7 +138,7 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
         result.mark_task_received()
 
         # Put them back in the pipe with the proper topic
-        self.queues.send_result(result, topic)
+        self.queues.send_result(result)
 
     @abstractmethod
     def _submit(self, task: Result, topic: str) -> Optional[Future]:
