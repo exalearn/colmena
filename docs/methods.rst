@@ -61,6 +61,32 @@ Colmena returns only the yielded values by default.
 Setting ``store_return_values`` to ``True`` will return a tuple of results, such as ``([1], "done")`` for ``x=1``, 
 and return only the first element of the tuple if ``False``.
 
+Streaming Results
++++++++++++++++++
+
+Configure a generator tasks to stream results as soon as they are created by
+supplying a :class:`~colmena.queue.base.ColmenaQueues` when defining the method.
+
+
+.. code-block:: python
+
+    queues = RedisQueues()
+    wrapper = PythonGeneratorMethod(
+        function=f,
+        store_return_value=True
+        streaming_queue=queues
+    )
+
+
+The Thinker will receive the yielded results over the task queue provied to the function.
+Each of the yielded result will have the ``completed`` field of the :class:`~colmena.models.results.Results` 
+set to ``False``, wheras the returned value will have a value of ``True``.
+
+.. note::
+
+    We recommend using :class:`~colmena.queue.redis.RedisQueues` with Redis configured to accept 
+    connections from other nodes if workers are run on a different node than the Thinker.
+
 Running Executables
 -------------------
 
@@ -102,7 +128,7 @@ from the executable task to make more efficient use of the compute resources.
 See the `MPI example <https://github.com/exalearn/colmena/tree/master/demo_apps/mpi-with-rct>`_.
 
 MPI Applications
-................
+++++++++++++++++
 
 Message-Passing Interface (MPI) codes are the standard type of application that
 utilize multiple nodes of a supercomputer for the same task.
