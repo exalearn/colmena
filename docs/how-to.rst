@@ -34,74 +34,8 @@ there are several limitations in practice:
 3. *Functions must be pure.* Colmena is designed with the assumption that the order
    in which you execute tasks does not change the outcomes.
 
-Methods that used Compiled Applications
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Many Colmena applications launch tasks that use software written in languages besides Python.
-Colmena provides the :class:`~colmena.models.ExecutableTask` class to help integrate these tasks into a Colmena application.
-
-The definition of an ``ExectuableTask`` is split into three parts:
-
-1. ``__init__``: create the shell command needed to launch your code and pass it to the initializer of the base class.
-2. ``preprocess``: use method arguments to create the input files, command line arguments, or stdin needed to execute
-   the simulation code with the desired settings
-3. ``postprocess``: extract the desired outputs for the function from any files or the standard out produced
-   when executing the code.
-
-The example code below runs the ``simulator`` software, which reads inputs from CLI arguments and from a ``options.json`` file
-then stores the result in stdout.
-
-.. code-block:: python
-
-    class Simulation(ExecutableTask):
-
-        def __init__(self):
-            super().__init__(executable=['/path/to/my/simulator'])
-
-        def preprocess(self, run_dir, args, kwargs):
-            with open(run_dir / 'option.json', 'w') as fp:
-                json.dump(kwargs, fp)  # Write any kwargs to disk
-            return [str(args[0])], None  # Uses the args as CLI arguments
-
-        def postprocess(self, run_dir: Path):
-            # The stdout of the code is routed to `colmena.stdout`
-            with open(run_dir / 'colmena.stdout') as fp:
-                return float(fp.read().strip())
-
-Some Task Server implements execute the pre- and post-processing step on separate resources
-from the executable task to make more efficient use of the compute resources.
-
-See the `MPI example <https://github.com/exalearn/colmena/tree/master/demo_apps/mpi-with-rct>`_.
-
-MPI Applications
-................
-
-Message-Passing Interface (MPI) codes are the standard type of application that
-utilize multiple nodes of a supercomputer for the same task.
-In addition to defining the path to the executable and processing operations, MPI codes
-also require a definition of how to launch the executable across many compute nodes.
-
-For most cases, provide these option in the ``__init__`` method of your executable and set the ``mpi`` option to ``True``.
-
-.. code-block:: python
-
-    class Simulation(ExecutableTask):
-
-        def __init__(self):
-            super().__init__(
-                executable=['/path/to/my/simulator'],
-                mpi=True,  # Designate this as an MPI application
-                mpi_command_string='mpirun -np {total_ranks}',  # Optionally provide the MPI invocation template
-            )
-
-Some workflow tools, like RCT, can supply the ``mpi_command_string`` information automatically.
-
-A key note about using MPI application is that you should supply resource requirements when sending task requests.
-These are accomplished by sending the resource requirements along with the task request:
-
-.. code-block:: python
-
-    client_queue.send_inputs(1, resources={'node_count': 2})
+See more details about the task types, especially how to include non-Python, 
+in `the Method model documentation <./methods.html>`_.
 
 Specifying Computational Resources
 ++++++++++++++++++++++++++++++++++
@@ -215,7 +149,7 @@ A minimal Thinker is as follows:
 
         @agent
         def operation(self):
-            self.queues.send_inputs(4)
+            self.queues.send_inputs(4, method='simulate')
             result = self.queues.get_result()
             self.output = result.value
 
@@ -240,16 +174,26 @@ Submit requests to the task server with the ``send_inputs`` function.
 Besides the input arguments and method name, the function also accepts a
 "topic" for the method queue used when filtering the output results.
 
-.. note::
 
-    If your task invokes an MPI executable, remember to pass resources requirements
-    along with input arguments.
+.. code-block:: python
+
+    client_queue.send_inputs(
+        1,
+        input_kwargs={'operation': "+"},
+        method='f',
+        topic='simulation',
+        task_info={'key': 'value},
+        resources={'node_count': 2}
+    )
+
 
 The ``get_result`` function retrieves the next result from the task server
 as a :class:`~colmena.models.Result` object.
 The ``Result`` object contains the output task and the performance information
 (e.g., how long communication to the client required).
 ``get_result`` accepts a "topic" to only pull tasks sent with a certain topic to the queue.
+
+See the `Queue documentation <./queues.html>`_ for the available queues.
 
 Inter-agent Communication
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -354,7 +298,6 @@ task queue.
 
         # Sent new task to the queue
         queues.send_inputs(task, method="simulate")
-
 
 
 Interleaved Optimizer

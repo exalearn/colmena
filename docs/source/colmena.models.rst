@@ -6,8 +6,9 @@ colmena.models
    :undoc-members:
    :show-inheritance:
 
-colmena.models.tasks
-====================
+colmena.models.methods
+======================
 
-.. automodule:: colmena.models.tasks
+.. automodule:: colmena.models.methods
    :members:
+   :member-order: bysource
