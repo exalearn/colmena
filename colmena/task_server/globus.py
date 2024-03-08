@@ -10,7 +10,7 @@ from concurrent.futures import Future
 
 from globus_compute_sdk import Client, Executor
 
-from colmena.task_server.base import convert_to_colmena_task, FutureBasedTaskServer
+from colmena.task_server.base import convert_to_colmena_method, FutureBasedTaskServer
 from colmena.queue.python import PipeQueues
 
 from colmena.models import Result
@@ -58,7 +58,7 @@ class GlobusComputeTaskServer(FutureBasedTaskServer):
         self.registered_funcs: Dict[str, Tuple[str, str]] = {}  # Function name -> (funcX id, endpoints)
         for func, endpoint in methods.items():
             # Register a wrapped version of the function
-            task = convert_to_colmena_task(func)
+            task = convert_to_colmena_method(func)
             func_fxid = self.fx_client.register_function(task)
 
             # Store the information for the function

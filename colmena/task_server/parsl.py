@@ -17,18 +17,18 @@ from parsl.app.app import AppBase
 from parsl.app.bash import BashApp
 from parsl.config import Config
 from parsl.app.python import PythonApp
-from colmena.models.tasks import ExecutableTask
+from colmena.models.methods import ExecutableMethod
 
 from colmena.queue.base import ColmenaQueues
 from colmena.models import Result, FailureInformation, ResourceRequirements
 from colmena.proxy import resolve_proxies_async
-from colmena.task_server.base import convert_to_colmena_task, FutureBasedTaskServer
+from colmena.task_server.base import convert_to_colmena_method, FutureBasedTaskServer
 
 logger = logging.getLogger(__name__)
 
 
 # Functions related to splitting "ExecutableTasks" into multiple steps
-def _execute_preprocess(task: ExecutableTask, result: Result) -> Tuple[Result, Path, Tuple[List[str], Optional[str]]]:
+def _execute_preprocess(task: ExecutableMethod, result: Result) -> Tuple[Result, Path, Tuple[List[str], Optional[str]]]:
     """Perform the pre-processing step for an executable task
 
     Must execute on the remote system
@@ -85,7 +85,7 @@ def _execute_preprocess(task: ExecutableTask, result: Result) -> Tuple[Result, P
     return result, temp_dir, output
 
 
-def _execute_postprocess(task: ExecutableTask, exit_code: int, result: Result, temp_dir: Path, serialized_inputs: str):
+def _execute_postprocess(task: ExecutableMethod, exit_code: int, result: Result, temp_dir: Path, serialized_inputs: str):
     """Execute the post-processing function after an executable completes
 
     Args:
@@ -134,7 +134,7 @@ def _execute_postprocess(task: ExecutableTask, exit_code: int, result: Result, t
     return result
 
 
-def _execute_execute(task: ExecutableTask, task_path: Path, arguments: List[str],
+def _execute_execute(task: ExecutableMethod, task_path: Path, arguments: List[str],
                      stdin: Optional[str], cpu_process_type: str, *,
                      stdout: str, stderr: str, pre_exec: str = None, **kwargs) -> str:
     """Execute the executable step of an executable task
@@ -353,11 +353,11 @@ class ParslTaskServer(FutureBasedTaskServer):
                 logger.info(f'Using default executors for {function.__name__}: {default_executors}')
 
             # Convert the function to a Colmena task
-            function = convert_to_colmena_task(method)
+            function = convert_to_colmena_method(method)
             name = function.name
 
             # If the function is not an executable, submit it as a single task
-            if not isinstance(function, ExecutableTask):
+            if not isinstance(function, ExecutableMethod):
                 app = PythonApp(function, **options)
                 self.methods_[name] = (app, 'basic')
             else:

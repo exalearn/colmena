@@ -7,7 +7,7 @@ from multiprocessing import Process
 from typing import Collection, Optional, Callable, Union
 
 from colmena.exceptions import KillSignalException, TimeoutException
-from colmena.models.tasks import ColmenaTask, PythonGeneratorTask, PythonTask
+from colmena.models.methods import ColmenaMethod, PythonGeneratorMethod, PythonMethod
 from colmena.models import Result, FailureInformation
 from colmena.queue.base import ColmenaQueues
 
@@ -161,7 +161,7 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
             future.add_done_callback(lambda x: self.perform_callback(x, task, topic))
 
 
-def convert_to_colmena_task(function: Union[Callable, ColmenaTask]) -> ColmenaTask:
+def convert_to_colmena_method(function: Union[Callable, ColmenaMethod]) -> ColmenaMethod:
     """Wrap user-supplified functions in the task model wrapper, if needed
 
     Args:
@@ -170,9 +170,9 @@ def convert_to_colmena_task(function: Union[Callable, ColmenaTask]) -> ColmenaTa
         Function as appropriate subclasses of Colmena Task wrapper
     """
 
-    if isinstance(function, ColmenaTask):
+    if isinstance(function, ColmenaMethod):
         return function
     elif isgeneratorfunction(function):
-        return PythonGeneratorTask(function)
+        return PythonGeneratorMethod(function)
     else:
-        return PythonTask(function)
+        return PythonMethod(function)

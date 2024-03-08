@@ -1,10 +1,10 @@
 from typing import Any, Dict, Tuple, List, Optional
 from pathlib import Path
 
-from colmena.models.tasks import ExecutableTask
+from colmena.models.methods import ExecutableMethod
 
 
-class EchoTask(ExecutableTask):
+class EchoTask(ExecutableMethod):
     def __init__(self):
         super().__init__(executable=['echo'])
 
@@ -15,7 +15,7 @@ class EchoTask(ExecutableTask):
         return (run_dir / 'colmena.stdout').read_text()
 
 
-class FakeMPITask(ExecutableTask):
+class FakeMPITask(ExecutableMethod):
     def __init__(self):
         super().__init__(executable=['echo', '-n'],
                          name='fakempitask',

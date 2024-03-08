@@ -8,11 +8,11 @@ from proxystore.store import Store
 from proxystore.store import register_store
 from proxystore.store import unregister_store
 
-from colmena.models.tasks import ExecutableTask, PythonTask, PythonGeneratorTask
+from colmena.models.methods import ExecutableMethod, PythonMethod, PythonGeneratorMethod
 from colmena.models import ResourceRequirements, Result, SerializationMethod
 
 
-class EchoTask(ExecutableTask):
+class EchoTask(ExecutableMethod):
     def __init__(self):
         super().__init__(executable=['echo'])
 
@@ -53,10 +53,10 @@ def test_python_task(result):
     """A standard Python function"""
 
     # Make sure name resolution functions as intended
-    task = PythonTask(function=echo)
+    task = PythonMethod(function=echo)
     assert task.name == 'echo'
 
-    task = PythonTask(function=echo, name='test')
+    task = PythonMethod(function=echo, name='test')
     assert task.name == 'test'
 
     # Ensure it sets the task timings while running
@@ -70,7 +70,7 @@ def test_python_task(result):
 
 
 def test_generator(result):
-    task = PythonGeneratorTask(function=generator, store_return_value=False)
+    task = PythonGeneratorMethod(function=generator, store_return_value=False)
     assert task.name == 'generator'
 
     result = task(result)
@@ -80,7 +80,7 @@ def test_generator(result):
 
 
 def test_generator_with_return(result):
-    task = PythonGeneratorTask(function=generator, name='with_return', store_return_value=True)
+    task = PythonGeneratorMethod(function=generator, name='with_return', store_return_value=True)
     assert task.name == 'with_return'
 
     result = task(result)
@@ -131,7 +131,7 @@ def test_run_function(store):
     result.serialize()
 
     # Run the function
-    task = PythonTask(lambda x: x.upper(), name='upper')
+    task = PythonMethod(lambda x: x.upper(), name='upper')
     result = task(result)
 
     # Make sure the timings are all set
