@@ -210,6 +210,7 @@ class Result(BaseModel):
     value: Any = Field(None, description="Output of a function")
     method: Optional[str] = Field(None, description="Name of the method to run.")
     success: Optional[bool] = Field(None, description="Whether the task completed successfully")
+    complete: Optional[bool] = Field(None, description="Whether this result is the last for a task instead of an intermediate result")
 
     # Store task information
     task_info: Optional[Dict[str, Any]] = Field(default_factory=dict,
@@ -325,7 +326,7 @@ class Result(BaseModel):
         """Mark when the task finished executing"""
         self.timestamp.compute_ended = datetime.now().timestamp()
 
-    def set_result(self, result: Any, runtime: float = nan):
+    def set_result(self, result: Any, runtime: float = nan, intermediate: bool = False):
         """Set the value of this computation
 
         Automatically sets the "time_result_completed" field and, if known, defines the runtime.
@@ -335,13 +336,15 @@ class Result(BaseModel):
 
         Args:
             result: Result to be stored
-            runtime (float): Runtime for the function
+            runtime: Runtime for the function
+            intermediate: If this result is not the final one in a workflow
         """
         self.value = result
         if not self.keep_inputs:
             self.inputs = ((), {})
         self.time.running = runtime
         self.success = True
+        self.complete = not intermediate
 
     def serialize(self) -> Tuple[float, List[Proxy]]:
         """Stores the input and value fields as a pickled objects
