@@ -41,6 +41,7 @@ illustrate how to implement different thinking applications that solve optimizat
    design
    how-to
    thinker
+   methods
    task-servers
    queues
    examples
