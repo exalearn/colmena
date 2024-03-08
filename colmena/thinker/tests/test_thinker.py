@@ -136,7 +136,6 @@ def test_logger_timings_process(queues, caplog):
     thinker.start()
 
     # Spoof a result completing
-
     queues.send_inputs(1, method='test')
     topic, result = queues.get_task()
     result.set_result(1, 1)

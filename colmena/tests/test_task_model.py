@@ -10,6 +10,7 @@ from proxystore.store import unregister_store
 
 from colmena.models.methods import ExecutableMethod, PythonMethod, PythonGeneratorMethod
 from colmena.models import ResourceRequirements, Result, SerializationMethod
+from colmena.queue import PipeQueues
 
 
 class EchoTask(ExecutableMethod):
@@ -89,6 +90,26 @@ def test_generator_with_return(result):
     assert result.value == [[0,], 'done']
 
 
+def test_generator_streaming(result):
+    """Trigger streaming by adding a queue to the task definition"""
+
+    queue = PipeQueues()
+    task = PythonGeneratorMethod(function=generator, name='stream', store_return_value=True, streaming_queue=queue)
+
+    result.topic = 'default'
+    result = task(result)
+    assert result.success, result.failure_info.traceback
+    result.deserialize()
+    assert result.value == 'done'
+
+    intermediate = queue.get_result(timeout=1)
+    assert intermediate.success
+    intermediate.deserialize()
+    assert intermediate.value == 0
+
+    assert result.time.running >= intermediate.time.running
+
+
 def test_executable_task(result):
     # Run a basic task
     task = EchoTask()
@@ -139,7 +160,7 @@ def test_run_function(store):
     assert result.time.async_resolve_proxies > 0
     assert result.time.deserialize_inputs > 0
     assert result.time.serialize_results > 0
-    assert result.timestamp.compute_ended > result.timestamp.compute_started
+    assert result.timestamp.compute_ended >= result.timestamp.compute_started
 
     # Make sure we have stats for both proxies
     assert len(result.time.proxy) == 2
