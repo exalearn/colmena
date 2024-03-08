@@ -141,7 +141,7 @@ def test_logger_timings_process(queues, caplog):
     topic, result = queues.get_task()
     result.set_result(1, 1)
     with caplog.at_level(logging.INFO):
-        queues.send_result(result, topic)
+        queues.send_result(result)
 
         # Wait then check the logs
         sleep(0.5)
@@ -194,7 +194,7 @@ def test_run(queues):
     queues.send_inputs(1)
     topic, task = queues.get_task()
     task.set_result(4)
-    queues.send_result(task, topic=topic)
+    queues.send_result(task)
     sleep(0.1)
     assert th.last_value == 4
 
@@ -230,7 +230,7 @@ def test_run(queues):
     # The system should not exit until all results are back
     topic, task = queues.get_task()
     task.set_result(4)
-    queues.send_result(task, topic)
+    queues.send_result(task)
     assert th.queues.wait_until_done(timeout=2)
     sleep(0.1)
     assert not th.is_alive()
