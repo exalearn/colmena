@@ -23,6 +23,15 @@ colmena.task\_server.globus
    :undoc-members:
    :show-inheritance:
 
+colmena.task\_server.local
+--------------------------
+
+.. automodule:: colmena.task_server.local
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
 colmena.task\_server.base
 ---------------------------
 
