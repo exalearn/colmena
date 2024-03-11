@@ -43,3 +43,11 @@ Like Parsl, the task server is defined using a list of methods mapped to the res
 Unlike Parsl, the execution resources are defined using the ID of a Globus Compute endpoint rather than a name of a specific executor.
 Any configuration for how that endpoint actually provides compute resources (e.g., launching Kubernetes pods, requesting HPC jobs)
 is provided when setting up the endpoint (see `Globus Compute docs <https://funcx.readthedocs.io/en/latest/endpoints.html#example-configurations>`_).
+
+Python's Native executor
+------------------------
+
+The :class:`~colmena.task_server.local.LocalTaskServer` is backed by Python's native :class:`~concurrent.futures.Executor` classes.
+It is useful for developing new Colmena workflows because it runs with minimal configuraiton.
+``LocalTaskServer`` will automatically run workers on as many threads as your computer has processors,
+though you can configure it to use separate processes and change the number of workers.

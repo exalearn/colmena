@@ -20,7 +20,7 @@ from parsl.config import Config
 
 from colmena.queue.python import PipeQueues
 from colmena.queue.base import ColmenaQueues
-from colmena.task_server import ParslTaskServer
+from colmena.task_server.parsl import ParslTaskServer
 from colmena.task_server.base import BaseTaskServer
 from colmena.task_server.globus import GlobusComputeTaskServer
 from colmena.thinker import agent

@@ -1,3 +1,6 @@
+"""Evaluate the effect of task duration and size on throughput"""
+from random import randbytes
+from typing import TextIO
 import argparse
 import json
 import logging
@@ -12,15 +15,13 @@ from scipy.stats import truncnorm
 
 from datetime import datetime
 
-from parsl import HighThroughputExecutor
-from parsl.addresses import address_by_hostname
-from parsl.config import Config
-from parsl.launchers import AprunLauncher
-from parsl.providers import LocalProvider
-
+from colmena.models import Result
 from colmena.queue import ColmenaQueues, PipeQueues
-from colmena.task_server import ParslTaskServer
-from colmena.thinker import BaseThinker, agent
+from colmena.task_server.local import LocalTaskServer
+from colmena.thinker import BaseThinker, result_processor, task_submitter, ResourceCounter
+
+
+logger = logging.getLogger('main')
 
 
 def get_args():
@@ -59,21 +60,17 @@ def get_args():
                 if key in args:
                     setattr(args, key, value)
                 else:
-                    logging.error('Unknown key {} in {}'.format(
-                        key, args.config))
+                    logging.warning('Unknown key {} in {}'.format(key, args.config))
 
     return args
 
 
-def empty_array(size: int) -> np.ndarray:
-    return np.empty(int(1000 * 1000 * size / 4), dtype=np.float32)
-
-
-def target_function(data: np.ndarray, output_size: int, runtime: float) -> np.ndarray:
-    import numpy as np
+def target_function(data: bytes, output_size: int, runtime: float) -> bytes:
     import time
+    from random import randbytes
     time.sleep(runtime)
-    return np.empty(int(1000 * 1000 * output_size / 4), dtype=np.float32)
+    assert len(data) > 0  # Run a method which requires loading the entire dataset
+    return randbytes(output_size * 1024 * 1024)
 
 
 class Thinker(BaseThinker):
@@ -86,7 +83,7 @@ class Thinker(BaseThinker):
                  length_mean: float,
                  length_std: float,
                  parallel_tasks: int,
-                 out_dir: str):
+                 output_file: TextIO):
         """
         Args:
             queue
@@ -96,46 +93,36 @@ class Thinker(BaseThinker):
             length_mean: Average length of tasks (s)
             length_std: Standard deviation of task length (s)
             parallel_tasks: Number of tasks to run in parallel
-            out_dir: Task output directory
+            output_file: File to write completed results
         """
-        super().__init__(queue)
-        self.task_input_size = task_input_size
+        super().__init__(queue, resource_counter=ResourceCounter(parallel_tasks))
         self.task_output_size = task_output_size
-        self.length_mean = length_mean
-        self.length_std = length_std
-        self.task_count = task_count
         self.parallel_tasks = parallel_tasks
-        self.count = 0
-        self.time_dist = truncnorm(0, np.inf, scale=length_std, loc=length_mean)
-        self.out_dir = out_dir
+        self.output_file = output_file
 
+        # Define the list of tasks
+        time_dist = truncnorm(0, np.inf, scale=length_std, loc=length_mean)
+
+        self.task_queue = [
+            (time_dist.rvs(), randbytes(task_input_size * 1024 * 1024))
+            for _ in range(task_count)
+        ]
+
+    @task_submitter()
     def submit(self):
-        """Submit a new task to queue"""
-        input_data = empty_array(self.task_input_size)
+        """Submit a new task if resources are available"""
+        time, input_data = self.task_queue.pop()
         self.queues.send_inputs(
-            input_data, self.task_output_size, self.time_dist.rvs(),
-            method='target_function', topic='generate')
+            input_data, self.task_output_size, time,
+            method='target_function')
+        if len(self.task_queue) == 0:
+            self.done.set()
 
-    @agent
-    def resubmitter(self):
-        with open(os.path.join(self.out_dir, 'results.json'), 'w') as fp:
-            while self.count < self.task_count:
-                result = self.queues.get_result(topic='generate')
-                self.submit()
-                print(result.json(exclude={'inputs', 'value'}), file=fp)
-                self.count += 1
-                self.logger.info(f'Completed task {self.count}/{self.task_count}')
-
-            for i in range(self.parallel_tasks):
-                result = self.queues.get_result(topic='generate')
-                print(result.json(exclude={'inputs', 'value'}), file=fp)
-                self.logger.info(f'Retrieved remaining task {i + 1}/{self.parallel_tasks}')
-
-    @agent(startup=False)
-    def startup(self):
-        """Submit the initial tasks"""
-        for _ in range(self.parallel_tasks):
-            self.submit()
+    @result_processor
+    def resubmitter(self, result: Result):
+        assert len(result.value) > 0
+        self.rec.release()
+        print(result.json(exclude={'inputs', 'value'}), file=self.output_file, flush=False)
 
 
 if __name__ == "__main__":
@@ -169,9 +156,16 @@ if __name__ == "__main__":
     # Define the worker configuration
     if args.local_host:
         node_count = 1
-        executors = [HighThroughputExecutor(max_workers=args.worker_count)]
+        doer = LocalTaskServer(queues, [target_function], num_workers=args.worker_count)
     else:
         # TODO: Fill in with configuration for your supercomputer
+        from parsl import HighThroughputExecutor
+        from parsl.addresses import address_by_hostname
+        from parsl.config import Config
+        from parsl.launchers import AprunLauncher
+        from parsl.providers import LocalProvider
+        from colmena.task_server.parsl import ParslTaskServer
+
         node_count = int(os.environ.get('COBALT_JOBSIZE', 1))
         executors = [
             HighThroughputExecutor(
@@ -190,7 +184,9 @@ if __name__ == "__main__":
             ),
         ]
 
-    config = Config(executors=executors, run_dir=out_dir)
+        config = Config(executors=executors, run_dir=out_dir)
+
+        doer = ParslTaskServer([target_function], queues, config)
 
     # Make the thinker
     thinker = Thinker(
@@ -201,24 +197,21 @@ if __name__ == "__main__":
         parallel_tasks=args.worker_count * node_count,
         length_mean=args.task_length,
         length_std=args.task_length * args.task_length_std,
-        out_dir=out_dir
+        output_file=open(os.path.join(out_dir, 'results.json'), 'w')
     )
 
     # Set up the logging
-    my_logger = logging.getLogger('main')
     col_logger = logging.getLogger('colmena')
     stdout_handler = logging.StreamHandler(sys.stdout)
     file_handler = logging.FileHandler(os.path.join(out_dir, 'run.log'))
-    for logger in [my_logger, col_logger, thinker.logger]:
+    for logger in [col_logger, thinker.logger]:
         for hnd in [stdout_handler, file_handler]:
             hnd.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
             logger.addHandler(hnd)
         logger.setLevel(logging.INFO)
-    my_logger.info(f'Running in {out_dir}')
+    logger.info(f'Running in {out_dir}')
 
-    my_logger.info('Args: {}'.format(args))
-
-    doer = ParslTaskServer([target_function], queues, config)
+    logger.info('Args: {}'.format(args))
 
     # Save the configuration
     with open(os.path.join(out_dir, 'config.json'), 'w') as fp:
@@ -226,8 +219,8 @@ if __name__ == "__main__":
         params['parallel_tasks'] = args.worker_count * node_count
         json.dump(params, fp)
 
-    my_logger.info('Created the method server and task generator')
-    my_logger.info(thinker)
+    logger.info('Created the method server and task generator')
+    logger.info(thinker)
 
     start_time = time.time()
 
@@ -235,13 +228,13 @@ if __name__ == "__main__":
         # Launch the servers
         doer.start()
         thinker.start()
-        my_logger.info('Launched the servers')
+        logger.info('Launched the servers')
 
         # Wait for the task generator to complete
         thinker.join()
-        my_logger.info('Task generator has completed')
     finally:
         queues.send_kill_signal()
+        thinker.output_file.close()
 
     # Wait for the method server to complete
     doer.join()
@@ -249,7 +242,7 @@ if __name__ == "__main__":
     # Exit the proxystore
     if store is not None:
         store.close()
-        my_logger.info('Closed the proxystore')
+        logger.info('Closed the proxystore')
 
     # Print the output result
-    my_logger.info('Finished. Runtime = {}s'.format(time.time() - start_time))
+    logger.info('Finished. Runtime = {}s'.format(time.time() - start_time))

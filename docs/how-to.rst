@@ -399,7 +399,7 @@ A common pattern is as follows:
 
 .. code-block:: python
 
-    from colmena.task_server import ParslTaskServer
+    from colmena.task_server.parsl import ParslTaskServer
     from colmena.queue import PipeQueues
 
     if __name__ == "__main__":
