@@ -6,7 +6,7 @@ from math import inf
 from parsl import HighThroughputExecutor
 from parsl.config import Config
 
-from colmena.task_server import ParslTaskServer
+from colmena.task_server.parsl import ParslTaskServer
 from colmena.queue import PipeQueues
 from colmena.thinker import BaseThinker, agent
 

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from colmena.queue.base import ColmenaQueues
 from colmena.thinker import BaseThinker, agent
-from colmena.task_server import ParslTaskServer
+from colmena.task_server.parsl import ParslTaskServer
 from colmena.queue.python import PipeQueues
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels
 from sklearn.preprocessing import MinMaxScaler

@@ -44,7 +44,7 @@ thinker = Thinker(queues, 8)
 
 ### Building the doer
 from parsl.configs.htex_local import config  # Configuration to run locally
-from colmena.task_server import ParslTaskServer
+from colmena.task_server.parsl import ParslTaskServer
 
 
 # Define your function

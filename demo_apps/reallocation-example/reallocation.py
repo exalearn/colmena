@@ -4,7 +4,7 @@ from colmena.models import Result
 from colmena.queue.base import ColmenaQueues
 from colmena.queue.python import PipeQueues
 from colmena.thinker import BaseThinker, result_processor, task_submitter, event_responder
-from colmena.task_server import ParslTaskServer
+from colmena.task_server.parsl import ParslTaskServer
 from colmena.thinker.resources import ResourceCounter
 
 from sklearn.gaussian_process import GaussianProcessRegressor, kernels

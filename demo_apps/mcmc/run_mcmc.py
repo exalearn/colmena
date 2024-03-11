@@ -13,7 +13,7 @@ import numpy as np
 
 from colmena.models import Result
 from colmena.queue import PipeQueues, ColmenaQueues
-from colmena.task_server import ParslTaskServer
+from colmena.task_server.parsl import ParslTaskServer
 from colmena.thinker import BaseThinker, agent, result_processor
 
 
