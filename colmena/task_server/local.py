@@ -32,7 +32,7 @@ class LocalTaskServer(FutureBasedTaskServer):
         self.threads = threads
         super().__init__(queues=queues, method_names=list(self._methods.keys()))
 
-    def _submit(self, task: Result, topic: str) -> Future | None:
+    def _submit(self, task: Result, topic: str) -> Optional[Future]:
         return self._executor.submit(self._methods[task.method], task)
 
     def _setup(self):
