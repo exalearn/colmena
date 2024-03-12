@@ -169,7 +169,7 @@ class PythonGeneratorMethod(ColmenaMethod):
     def function(self, *args, _result: Result, **kwargs) -> Any:
         """Run the Colmena task and collect intermediate results to provide as a list"""
 
-        # TODO (wardlt): Have the function push intemediate results back to a function queue
+        # TODO (wardlt): Make push to task queue asynchronous
         gen = self._function(*args, **kwargs)
         iter_results = []
         start_time = perf_counter()
