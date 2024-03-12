@@ -71,7 +71,7 @@ def test_results(queue):
 
     # Set a result value and send it back
     request.serialize()
-    queue.send_result(request, topic)
+    queue.send_result(request)
     result = queue.get_result(topic=topic)
     assert result.value == 1
 
@@ -91,7 +91,7 @@ def test_serialization(queue):
     x.x = 1
     task.set_result(x)
     task.serialize()
-    queue.send_result(task, topic)
+    queue.send_result(task)
     result = queue.get_result(topic=topic)
     assert result.args[0].x is None
     assert result.value.x == 1
@@ -138,7 +138,7 @@ def test_task_info(queue):
 
     # Send it back
     result.serialize()
-    queue.send_result(result, topic)
+    queue.send_result(result)
     result = queue.get_result()
     assert result.task_info == {'id': 'test'}
 
@@ -169,7 +169,7 @@ def test_event_count(queue):
     task.set_result(1)
     print(queue._active_tasks)
     print(task)
-    queue.send_result(task, topic)
+    queue.send_result(task)
     queue.get_result()
     assert queue.active_count == 0
     assert queue.wait_until_done(timeout=1)

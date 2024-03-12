@@ -37,12 +37,11 @@ class ColmenaMethod:
         """Function provided by the Colmena user"""
         raise NotImplementedError()
 
-    def __call__(self, result: Result, queues: Optional[ColmenaQueues] = None) -> Result:
+    def __call__(self, result: Result) -> Result:
         """Invoke a Colmena task request
 
         Args:
             result: Request, which inclues the arguments and will hold the result
-            queues: Queues used to send intermediate results back [Not Yet Used]
         Returns:
             The input result object, populated with the results
         """
@@ -61,16 +60,28 @@ class ColmenaMethod:
             input_proxies.extend(resolve_proxies_async(value))
         result.time.async_resolve_proxies = perf_counter() - start_time
 
+        # Add the worker information into the tasks, if available
+        worker_info = {}
+        # TODO (wardlt): Move this information into a separate, parsl-specific wrapper
+        for tag in ['PARSL_WORKER_RANK', 'PARSL_WORKER_POOL_ID']:
+            if tag in os.environ:
+                worker_info[tag] = os.environ[tag]
+        worker_info['hostname'] = platform.node()
+        result.worker_info = worker_info
+
+        # Determine additional kwargs to provide to the function
+        additional_kwargs = {}
+        for k, v in [('_resources', result.resources), ('_result', result)]:
+            if k in result.kwargs:
+                logger.warning(f'`{k}` provided as a kwargs. Unexpected things are about to happen')
+            if k in signature(self.function).parameters:
+                additional_kwargs[k] = v
+
         # Execute the function
         start_time = perf_counter()
         success = True
         try:
-            if '_resources' in result.kwargs:
-                logger.warning('`_resources` provided as a kwargs. Unexpected things are about to happen')
-            if '_resources' in signature(self.function).parameters:
-                output = self.function(*result.args, **result.kwargs, _resources=result.resources)
-            else:
-                output = self.function(*result.args, **result.kwargs)
+            output = self.function(*result.args, **result.kwargs, **additional_kwargs)
         except BaseException as e:
             output = None
             success = False
@@ -82,16 +93,6 @@ class ColmenaMethod:
         result.set_result(output, end_time - start_time)
         if not success:
             result.success = False
-
-        # Add the worker information into the tasks, if available
-        worker_info = {}
-        # TODO (wardlt): Move this information into a separate, parsl-specific wrapper
-        for tag in ['PARSL_WORKER_RANK', 'PARSL_WORKER_POOL_ID']:
-            if tag in os.environ:
-                worker_info[tag] = os.environ[tag]
-        worker_info['hostname'] = platform.node()
-        result.worker_info = worker_info
-
         result.mark_compute_ended()
 
         # Re-pack the results. Will store the proxy statistics
@@ -124,6 +125,9 @@ class PythonMethod(ColmenaMethod):
 class PythonGeneratorMethod(ColmenaMethod):
     """Python function which runs on a single worker and generates results iteratively
 
+    Generator functions support streaming each iteration of the generator
+    to the Thinker when a `streaming_queue` is provided.
+
     Args:
         function: Generator function to be executed
         name: Name of the function. Defaults to `function.__name__`
@@ -134,24 +138,53 @@ class PythonGeneratorMethod(ColmenaMethod):
     def __init__(self,
                  function: Callable[..., Generator],
                  name: Optional[str] = None,
-                 store_return_value: bool = False) -> None:
+                 store_return_value: bool = False,
+                 streaming_queue: Optional[ColmenaQueues] = None) -> None:
         if not isgeneratorfunction(function):
             raise ValueError('Function is not a generator function. Use `PythonTask` instead.')
         self._function = function
         self.name = name or function.__name__
         self.store_return_value = store_return_value
+        self.streaming_queue = streaming_queue
 
-    def function(self, *args, **kwargs) -> Any:
+    def stream_result(self, y: Any, result: Result, start_time: float):
+        """Send an intermediate result using the task queue
+
+        Args:
+            y: Intermediate result
+            result: Result package carrying task metadata
+            start_time: Start time of the algorithm, used to report
+        """
+
+        # Store the intermediate result in a copy of the input object
+        result = result.copy(deep=True)
+        result.set_result(
+            y, perf_counter() - start_time, intermediate=True,
+        )
+        result.time.serialize_results, _ = result.serialize()
+
+        # Send it back to the queue
+        self.streaming_queue.send_result(result)
+
+    def function(self, *args, _result: Result, **kwargs) -> Any:
         """Run the Colmena task and collect intermediate results to provide as a list"""
 
-        # TODO (wardlt): Have the function push intemediate results back to a function queue
+        # TODO (wardlt): Make push to task queue asynchronous
         gen = self._function(*args, **kwargs)
         iter_results = []
+        start_time = perf_counter()
         while True:
             try:
-                iter_results.append(next(gen))
+                y = next(gen)
+                if self.streaming_queue is None:
+                    iter_results.append(y)
+                else:
+                    self.stream_result(y, _result, start_time)
             except StopIteration as e:
-                if self.store_return_value:
+                if self.streaming_queue is not None:
+                    if self.store_return_value:
+                        return e.value
+                elif self.store_return_value:
                     return iter_results, e.value
                 else:
                     return iter_results

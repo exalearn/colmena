@@ -76,7 +76,7 @@ Building one using Parsl requires only that your computations are expressed as P
 
 ```python
 from parsl.configs.htex_local import config  # Configuration to run locally
-from colmena.task_server import ParslTaskServer
+from colmena.task_server.parsl import ParslTaskServer
 
 # Define your function
 def simulate(x: float) -> float:
