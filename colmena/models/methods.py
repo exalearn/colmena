@@ -8,7 +8,7 @@ from pathlib import Path
 from subprocess import run
 from tempfile import TemporaryDirectory
 from time import perf_counter
-from inspect import signature, isgeneratorfunction
+from inspect import signature
 from typing import Any, Dict, List, Tuple, Optional, Callable, Generator
 
 from colmena.models.results import ResourceRequirements, Result, FailureInformation
@@ -116,8 +116,6 @@ class PythonMethod(ColmenaMethod):
     function: Callable
 
     def __init__(self, function: Callable, name: Optional[str] = None) -> None:
-        if isgeneratorfunction(function):
-            raise ValueError('Function is a generator function. Use `PythonGeneratorTask` instead.')
         self.name = name or function.__name__
         self.function = function
 
@@ -140,8 +138,6 @@ class PythonGeneratorMethod(ColmenaMethod):
                  name: Optional[str] = None,
                  store_return_value: bool = False,
                  streaming_queue: Optional[ColmenaQueues] = None) -> None:
-        if not isgeneratorfunction(function):
-            raise ValueError('Function is not a generator function. Use `PythonTask` instead.')
         self._function = function
         self.name = name or function.__name__
         self.store_return_value = store_return_value
