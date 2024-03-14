@@ -170,9 +170,12 @@ def convert_to_colmena_method(function: Union[Callable, ColmenaMethod]) -> Colme
         Function as appropriate subclasses of Colmena Task wrapper
     """
 
+    name = function.__name__
     if isinstance(function, ColmenaMethod):
         return function
     elif isgeneratorfunction(function):
+        logger.info(f'Assigned a PythonGeneratorMethod wrapper to {name}')
         return PythonGeneratorMethod(function)
     else:
+        logger.info(f'Assigned a PythonMethod wrapper to {name}')
         return PythonMethod(function)

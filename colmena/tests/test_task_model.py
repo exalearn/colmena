@@ -1,4 +1,5 @@
 from typing import Tuple, List, Optional, Dict, Any, Iterator
+from functools import lru_cache, update_wrapper
 from pathlib import Path
 from math import isnan
 
@@ -167,3 +168,17 @@ def test_run_function(store):
     # Make sure we have stats for both proxies
     assert len(result.time.proxy) == 2
     assert all('store.proxy' in v['times'] for v in result.time.proxy.values())
+
+
+def test_with_decorator(result):
+    """Ensure streaming still works with decorators"""
+
+    dec = lru_cache()(generator)
+    update_wrapper(dec, generator)
+    task = PythonGeneratorMethod(function=generator, store_return_value=True)
+    assert task.name == 'generator'
+
+    result = task(result)
+    assert result.success, result.failure_info.traceback
+    result.deserialize()
+    assert result.value == [[0], 'done']
