@@ -11,6 +11,14 @@ need to instantiate your own wrapper `for non-Python tasks <#running-executable>
 While you thus do not need to know about the wrappers in most cases,
 we describe what each does and how they can be adjusted here.
 
+.. note::
+
+    Apply the ``PythonGeneratorMethod`` wrapper before supplying to
+    the Task Server for wrapped generator functions.
+    Automatic detection of `Python generator function <#generator-python-functions>`_
+    usually fails for wrapped functions.
+
+
 Basic Python Functions
 ----------------------
 
