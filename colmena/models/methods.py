@@ -9,7 +9,7 @@ from subprocess import run
 from tempfile import TemporaryDirectory
 from time import perf_counter
 from inspect import signature
-from typing import Any, Dict, List, Tuple, Optional, Callable, Generator
+from typing import Any, Dict, List, Tuple, Optional, Callable, Generator, Union, Iterable
 
 from colmena.models.results import ResourceRequirements, Result, FailureInformation
 from colmena.proxy import resolve_proxies_async, store_proxy_stats
@@ -134,7 +134,7 @@ class PythonGeneratorMethod(ColmenaMethod):
     """
 
     def __init__(self,
-                 function: Callable[..., Generator],
+                 function: Callable[..., Union[Generator, Iterable]],
                  name: Optional[str] = None,
                  store_return_value: bool = False,
                  streaming_queue: Optional[ColmenaQueues] = None) -> None:
@@ -147,7 +147,7 @@ class PythonGeneratorMethod(ColmenaMethod):
         """Send an intermediate result using the task queue
 
         Args:
-            y: Intermediate result
+            y: Yielded data from the generator function
             result: Result package carrying task metadata
             start_time: Start time of the algorithm, used to report
         """
