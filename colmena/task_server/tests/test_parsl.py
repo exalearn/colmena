@@ -59,7 +59,7 @@ def store(tmpdir):
 @fixture(autouse=True)
 def server_and_queue(config, store) -> Tuple[ParslTaskServer, ColmenaQueues]:
     queues = PipeQueues(proxystore_name='store', proxystore_threshold=5000, serialization_method='pickle')
-    server = ParslTaskServer([f, capitalize, bad_task, EchoTask(), FakeMPITask(), count_nodes], queues, config)
+    server = ParslTaskServer([(f, {'executors': 'all'}), capitalize, bad_task, EchoTask(), FakeMPITask(), count_nodes], queues, config)
     yield server, queues
     if server.is_alive():
         queues.send_kill_signal()

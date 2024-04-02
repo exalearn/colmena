@@ -353,7 +353,7 @@ class ParslTaskServer(FutureBasedTaskServer):
                 logger.info(f'Using default executors for {function.__name__}: {default_executors}')
 
             # Convert the function to a Colmena task
-            function = convert_to_colmena_method(method)
+            function = convert_to_colmena_method(function)
             name = function.name
 
             # If the function is not an executable, submit it as a single task
