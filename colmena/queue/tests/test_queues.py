@@ -1,5 +1,6 @@
 """Tests across different queue implementations"""
 from multiprocessing import Pool
+import pickle as pkl
 
 from pytest import fixture, raises, mark
 from redis import Redis, ConnectionError
@@ -79,3 +80,12 @@ def test_kill_signal(queue):
     queue.send_kill_signal()
     with raises(KillSignalException):
         queue.get_task()
+
+
+def test_pickle(queue):
+    """Ensure that we can still send and receive after pickling"""
+    queue: ColmenaQueues = pkl.loads(pkl.dumps(queue))
+
+    queue.send_inputs(1, method='test')
+    _, task = queue.get_task()
+    assert task.method == 'test'

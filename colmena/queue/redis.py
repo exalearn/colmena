@@ -74,10 +74,9 @@ class RedisQueues(ColmenaQueues):
         self.connect()
 
     def __setstate__(self, state):
-        self.__dict__ = state
+        super().__setstate__(state)
 
-        # If you find the RedisClient placeholder,
-        #  attempt to reconnect
+        # If you find the RedisClient placeholder, attempt to reconnect
         if self.redis_client == 'connected':
             self.redis_client = None
             self.connect()
@@ -85,8 +84,7 @@ class RedisQueues(ColmenaQueues):
     def __getstate__(self):
         state = super().__getstate__()
 
-        # If connected, remove the unpicklable RedisClient and
-        #  put a placeholder instead
+        # If connected, remove the unpicklable RedisClient and put a placeholder instead
         if self.is_connected:
             state['redis_client'] = 'connected'
         return state
