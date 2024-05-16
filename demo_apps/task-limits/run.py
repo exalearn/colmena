@@ -2,6 +2,7 @@
 from platform import node
 from datetime import datetime
 from random import randbytes
+from time import perf_counter
 from typing import TextIO
 import argparse
 import json
@@ -127,6 +128,15 @@ class Thinker(BaseThinker):
     def resubmitter(self, result: Result):
         assert result.success, result.failure_info.traceback
         self.rec.release()
+
+        # Force access to the data
+        read_time = perf_counter()
+        data_size = len(result.value)
+        read_time = perf_counter() - read_time
+        result.task_info['read_time'] = read_time
+        result.task_info['read_size'] = data_size
+
+        # Store
         print(result.json(exclude={'inputs', 'value'}), file=self.output_file, flush=False)
 
 
@@ -148,7 +158,8 @@ if __name__ == "__main__":
         #  TODO: Set up to use your target proxystore connector
         store = Store(
             name='store',
-            connector=RedisConnector(hostname='localhost', port=6379)
+            connector=RedisConnector(hostname='localhost', port=6379),
+            metrics=True,
         )
         register_store(store)
         run_params['store_config'] = str(store)
