@@ -1,7 +1,6 @@
 """Evaluate the effect of task duration and size on throughput"""
 from platform import node
 from datetime import datetime
-from random import randbytes
 from time import perf_counter
 from typing import TextIO
 import argparse
@@ -12,7 +11,6 @@ import sys
 import time
 
 import numpy as np
-from proxystore.connectors.file import FileConnector
 from proxystore.connectors.redis import RedisConnector
 from proxystore.store import Store, register_store
 from scipy.stats import truncnorm
@@ -117,7 +115,7 @@ class Thinker(BaseThinker):
     def submit(self):
         """Submit a new task if resources are available"""
         runtime, task_size = self.task_queue.pop()
-        input_data = randbytes(task_size)
+        input_data = np.empty(task_size, bool)
         self.queues.send_inputs(
             input_data, self.task_output_size, runtime,
             method='target_function')
