@@ -10,6 +10,7 @@ dependencies:
   - matplotlib
   - scikit-learn
   - jupyterlab
+  - redis
   
   - pip
   - pip:
