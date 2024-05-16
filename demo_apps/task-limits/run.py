@@ -51,6 +51,8 @@ def get_args():
                         help='Use the proxystore for sending data to worker')
     parser.add_argument('--proxystore-threshold', type=float, default=1,
                         help='Threshold object size for proxystore [MB]')
+    parser.add_argument('--redis-host', default='localhost',
+                        help='Host for Redis instance used by Proxystire')
     parser.add_argument('--reuse-data', action='store_true', default=False,
                         help='Send the same input to each task')
     parser.add_argument('--output-dir', type=str, default='runs',
@@ -148,7 +150,8 @@ if __name__ == "__main__":
         #  TODO: Set up to use your target proxystore connector
         store = Store(
             name='store',
-            connector=RedisConnector(hostname='localhost', port=6379)
+            connector=RedisConnector(hostname=args.redis_host, port=6379),
+            metrics=True
         )
         register_store(store)
         run_params['store_config'] = str(store)
@@ -170,12 +173,13 @@ if __name__ == "__main__":
             run_dir=out_dir
         )
     else:
-        # TODO: Fill in with configuration for your supercomputer
+        # TODO: Fill in with configuration for your supercomputer. The following is for Polaris
         from parsl.providers import LocalProvider
         from parsl.launchers import MpiExecLauncher
         from parsl.addresses import address_by_interface
 
-        node_count = int(os.environ.get('PBS_NNODES', 1))
+        with open(os.environ.get('PBS_NODEFILE')) as fp:
+            node_count = len(fp.readlines())
         executors = [
             HighThroughputExecutor(
                 address=address_by_interface('bond0'),
@@ -250,7 +254,7 @@ if __name__ == "__main__":
 
     # Exit the proxystore
     if store is not None:
-        store.close()
+        store.close(clear=True)
         logger.info('Closed the proxystore')
 
     # Print the output result
