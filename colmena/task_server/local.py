@@ -20,7 +20,7 @@ class LocalTaskServer(FutureBasedTaskServer):
         """
         Args:
             methods: Methods to be served
-            queues: Queues used to commmunicate with thinker
+            queues: Queues used to communicate with thinker
             threads: Use threads instead of workers
             num_workers: Number of workers to deploy.
         """
