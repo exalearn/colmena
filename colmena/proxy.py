@@ -36,7 +36,11 @@ def get_store(
     store = proxystore.store.get_store(name)
     if store is None and config is not None:
         store = Store.from_config(config)
-        proxystore.store.register_store(store)
+        # If the config has `register=True`, then the above line will
+        # register the store for us. So we set `exist_ok=True` so the next
+        # line does not raise an error. This only applies for
+        # ProxyStore v0.6.5 and later.
+        proxystore.store.register_store(store, exist_ok=True)
     return store
 
 
