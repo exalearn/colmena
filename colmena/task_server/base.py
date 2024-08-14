@@ -128,6 +128,16 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
 
         # If it was, send back a modified copy of the input structure
         if task_exc is not None:
+            # If we have retries left, try again
+            if result.retries <= result.max_retries:
+                logger.warning(f'Task {result.task_id} failed with exception {task_exc}. Retrying...')
+                # Increment the retry count
+                result.retries += 1
+                # Provide it to the workflow system to be re-executed
+                self.process_queue(topic, result)
+                # Do not send the result back to the user
+                return
+
             # Mark it as unsuccessful and capture the exception information
             result.success = False
             result.failure_info = FailureInformation.from_exception(task_exc)
