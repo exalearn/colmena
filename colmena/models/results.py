@@ -15,8 +15,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 from proxystore.proxy import Proxy
 
-from colmena.proxy import get_store, store_proxy_stats
-from colmena.proxy import proxy_json_encoder
+from colmena.proxy import get_store, store_proxy_stats, StoreConfig, proxy_json_encoder
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +232,7 @@ class Result(BaseModel):
     keep_inputs: bool = Field(True, description="Whether to keep the inputs with the result object or delete "
                                                 "them after the method has completed")
     proxystore_name: Optional[str] = Field(None, description="Name of ProxyStore backend you use for transferring large objects")
-    proxystore_config: Optional[Dict] = Field(None, description="ProxyStore backend configuration")
+    proxystore_config: Optional[StoreConfig] = Field(None, description="ProxyStore backend configuration")
     proxystore_threshold: Optional[int] = Field(None,
                                                 description="Proxy all input/output objects larger than this threshold in bytes")
 
