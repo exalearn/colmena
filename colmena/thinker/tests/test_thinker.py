@@ -135,6 +135,10 @@ def test_logger_timings_process(queues, caplog):
     thinker = TestThinker(queues, daemon=True)
     thinker.start()
 
+    # Thinker sets queue roles to "client". Switch back to "any" role
+    # since we use methods intended for the "server" role in the test.
+    queues.set_role("any")
+
     # Spoof a result completing
     queues.send_inputs(1, method='test')
     topic, result = queues.get_task()
@@ -175,6 +179,10 @@ def test_run(queues):
     rec = ResourceCounter(1, ["event"])
     rec.acquire(None, 1)
     th = ExampleThinker(queues, rec, flag, daemon=True)
+
+    # Thinker sets queue roles to "client". Switch back to "any" role
+    # since we use methods intended for the "server" role in the test.
+    queues.set_role("any")
 
     # Launch it and wait for it to run
     th.start()
