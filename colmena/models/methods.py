@@ -11,7 +11,7 @@ from time import perf_counter
 from inspect import signature
 from typing import Any, Dict, List, Tuple, Optional, Callable, Generator, Union, Iterable
 
-from colmena.models.results import ResourceRequirements, Result, FailureInformation
+from colmena.models.results import ResourceRequirements, Result, FailureInformation, WorkerInformation
 from colmena.proxy import resolve_proxies_async, store_proxy_stats
 from colmena.queue import ColmenaQueues
 
@@ -67,7 +67,7 @@ class ColmenaMethod:
             if tag in os.environ:
                 worker_info[tag] = os.environ[tag]
         worker_info['hostname'] = platform.node()
-        result.worker_info = worker_info
+        result.worker_info = WorkerInformation(**worker_info)
 
         # Determine additional kwargs to provide to the function
         additional_kwargs = {}
@@ -153,7 +153,7 @@ class PythonGeneratorMethod(ColmenaMethod):
         """
 
         # Store the intermediate result in a copy of the input object
-        result = result.copy(deep=True)
+        result = result.model_copy(deep=True)
         result.set_result(
             y, perf_counter() - start_time, intermediate=True,
         )
@@ -251,7 +251,7 @@ class ExecutableMethod(ColmenaMethod):
             MPI launch configuration
         """
         return self.mpi_command_string.format(total_ranks=resources.total_ranks,
-                                              **resources.dict(exclude={'mpi_command_string'}))
+                                              **resources.model_dump(exclude={'mpi_command_string'}))
 
     def preprocess(self, run_dir: Path, args: Tuple[Any], kwargs: Dict[str, Any]) -> Tuple[List[str], Optional[str]]:
         """Perform preprocessing steps necessary to prepare for executable to be started.

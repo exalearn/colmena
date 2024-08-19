@@ -162,7 +162,7 @@ class ColmenaQueues:
         logger.debug(f'Received value: {str(message)[:25]}')
 
         # Parse the value and mark it as complete
-        result_obj = Result.parse_raw(message)
+        result_obj = Result.model_validate_json(message)
         result_obj.time.deserialize_results = result_obj.deserialize()
         result_obj.mark_result_received()
 
@@ -278,7 +278,7 @@ class ColmenaQueues:
         logger.debug(f'Received a task message with topic {topic} inbound queue')
 
         # Get the message
-        task = Result.parse_raw(message)
+        task = Result.model_validate_json(message)
         task.mark_input_received()
         return topic, task
 
