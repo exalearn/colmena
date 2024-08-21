@@ -11,6 +11,7 @@ from proxystore.connectors.local import LocalConnector
 
 from colmena.proxy import get_store
 from colmena.proxy import proxy_json_encoder
+from colmena.proxy import ProxyJSONSerializationWarning
 from colmena.proxy import resolve_proxies_async
 
 
@@ -46,7 +47,8 @@ def test_get_store_initialize_from_config() -> None:
 
 def test_proxy_json_encoder() -> None:
     p = Proxy(lambda: 'test-value')
-    result = json.dumps({'proxy': p}, default=proxy_json_encoder)
+    with pytest.warns(ProxyJSONSerializationWarning):
+        result = json.dumps({'proxy': p}, default=proxy_json_encoder)
     reconstructed_data = json.loads(result)
     assert 'proxy' in reconstructed_data
 
