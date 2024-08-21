@@ -239,6 +239,10 @@ class Result(BaseModel):
     # Task routing information
     topic: Optional[str] = Field(None, description='Label used to group results in queue between Thinker and Task Server')
 
+    # Fault tolerance
+    max_retries: int = Field(0, description='Maximum number of times this task should be retried if it fails')
+    retries: int = Field(0, description='Number of times this task has been retried')
+
     def __init__(self, inputs: Tuple[Tuple[Any], Dict[str, Any]], **kwargs):
         """
         Args:

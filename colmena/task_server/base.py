@@ -126,6 +126,25 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
 
         task_exc = future.exception()
 
+        # The task could have failed at the workflow engine level (task_exc)
+        # or application level (result.failure_info)
+        task_failed = (task_exc is not None) or (result.failure_info is not None)
+
+        # If the task failed and we have retries left, try again
+        if task_failed and result.retries < result.max_retries:
+            # Increment the retry count and clear the failure information
+            result.retries += 1
+            result.failure_info, result.success = None, None
+
+            # Log the retry
+            logger.warning(f'Task {result.task_id} failed. Retrying with {result.retries}/{result.max_retries} retries.')
+
+            # Provide it to the workflow system to be re-executed
+            self.process_queue(topic, result)
+
+            # Do not send the result back to the user
+            return
+
         # If it was, send back a modified copy of the input structure
         if task_exc is not None:
             # Mark it as unsuccessful and capture the exception information

@@ -184,7 +184,8 @@ class ColmenaQueues:
                     keep_inputs: Optional[bool] = None,
                     resources: Optional[Union[ResourceRequirements, dict]] = None,
                     topic: str = 'default',
-                    task_info: Optional[Dict[str, Any]] = None) -> str:
+                    task_info: Optional[Dict[str, Any]] = None,
+                    max_retries: int = 0) -> str:
         """Send a task request
 
         Args:
@@ -195,6 +196,7 @@ class ColmenaQueues:
             topic (str): Topic for the queue, which sets the topic for the result
             resources: Suggestions for how many resources to use for the task
             task_info (dict): Any information used for task tracking
+            max_retries (int): Maximum number of times to retry the task if it fails
         Returns:
             Task ID
         """
@@ -236,6 +238,7 @@ class ColmenaQueues:
             task_info=task_info,
             resources=resources or ResourceRequirements(),  # Takes either the user specified or a default,
             topic=topic,
+            max_retries=max_retries,
             **ps_kwargs
         )
 
