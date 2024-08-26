@@ -39,7 +39,7 @@ def count_nodes(x, _resources: ResourceRequirements):
 def config(tmpdir):
     return Config(
         executors=[
-            HighThroughputExecutor(max_workers=1, address='127.0.0.1')
+            HighThroughputExecutor(max_workers_per_node=1, address='127.0.0.1')
         ],
         strategy=None,
         run_dir=str(tmpdir / 'run'),

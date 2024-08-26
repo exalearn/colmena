@@ -12,11 +12,10 @@ from traceback import TracebackException
 from typing import Any, Tuple, Dict, Optional, Union, List, Sequence
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, Extra
+from pydantic import BaseModel, ConfigDict, Field
 from proxystore.proxy import Proxy
 
-from colmena.proxy import get_store, store_proxy_stats
-from colmena.proxy import proxy_json_encoder
+from colmena.proxy import get_store, store_proxy_stats, StoreConfig, proxy_json_encoder
 
 logger = logging.getLogger(__name__)
 
@@ -132,10 +131,12 @@ class FailureInformation(BaseModel):
         return cls(exception=repr(exc), traceback="".join(tb.format()))
 
 
-class WorkerInformation(BaseModel, extra=Extra.allow):
+class WorkerInformation(BaseModel):
     """Information about the worker that executed this task"""
 
     hostname: Optional[str] = Field(None, description='Hostname of the worker who executed this task')
+
+    model_config = ConfigDict(extra='allow')
 
 
 class ResourceRequirements(BaseModel):
@@ -216,14 +217,14 @@ class Result(BaseModel):
     task_info: Optional[Dict[str, Any]] = Field(default_factory=dict,
                                                 description="Task tracking information to be transmitted "
                                                             "along with inputs and results. User provided")
-    resources: ResourceRequirements = Field(default_factory=ResourceRequirements, help='List of the resources required for a task, if desired')
+    resources: ResourceRequirements = Field(default_factory=ResourceRequirements, description='List of the resources required for a task, if desired')
     failure_info: Optional[FailureInformation] = Field(None, description="Messages about task failure. Provided by Task Server")
     worker_info: Optional[WorkerInformation] = Field(None, description="Information about the worker which executed a task. Provided by Task Server")
     message_sizes: Dict[str, int] = Field(default_factory=dict, description='Sizes of the inputs and results in bytes')
 
     # Timings
-    timestamp: Timestamps = Field(default_factory=Timestamps, help='Times at which major events occurred')
-    time: TimeSpans = Field(default_factory=TimeSpans, help='Elapsed time between major events')
+    timestamp: Timestamps = Field(default_factory=Timestamps, description='Times at which major events occurred')
+    time: TimeSpans = Field(default_factory=TimeSpans, description='Elapsed time between major events')
 
     # Serialization options
     serialization_method: SerializationMethod = Field(SerializationMethod.JSON,
@@ -231,7 +232,7 @@ class Result(BaseModel):
     keep_inputs: bool = Field(True, description="Whether to keep the inputs with the result object or delete "
                                                 "them after the method has completed")
     proxystore_name: Optional[str] = Field(None, description="Name of ProxyStore backend you use for transferring large objects")
-    proxystore_config: Optional[Dict] = Field(None, description="ProxyStore backend configuration")
+    proxystore_config: Optional[StoreConfig] = Field(None, description="ProxyStore backend configuration")
     proxystore_threshold: Optional[int] = Field(None,
                                                 description="Proxy all input/output objects larger than this threshold in bytes")
 
@@ -288,7 +289,7 @@ class Result(BaseModel):
             kwargs['exclude'] = {'inputs', 'value'}
 
         # Use pydantic's encoding for everything except `inputs` and `values`
-        data = super().dict(**kwargs)
+        data = self.model_dump(**kwargs)
 
         # Add inputs/values back to data unless the user excluded them
         if isinstance(user_exclude, set):

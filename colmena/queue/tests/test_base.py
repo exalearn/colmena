@@ -167,8 +167,6 @@ def test_event_count(queue):
 
     # Sent the task back
     task.set_result(1)
-    print(queue._active_tasks)
-    print(task)
     queue.send_result(task)
     queue.get_result()
     assert queue.active_count == 0

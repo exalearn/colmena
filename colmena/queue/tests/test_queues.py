@@ -1,5 +1,5 @@
 """Tests across different queue implementations"""
-from multiprocessing import Pool
+from multiprocessing import Pool, Process
 import pickle as pkl
 
 from pytest import fixture, raises, mark
@@ -82,10 +82,23 @@ def test_kill_signal(queue):
         queue.get_task()
 
 
+@mark.timeout(5)
 def test_pickle(queue):
     """Ensure that we can still send and receive after pickling"""
-    queue: ColmenaQueues = pkl.loads(pkl.dumps(queue))
+    serialized = pkl.dumps(queue)
 
-    queue.send_inputs(1, method='test')
-    _, task = queue.get_task()
-    assert task.method == 'test'
+    # Deserializing the Connection objects owned by PipeQueues must be done
+    # in a different process so that two Connection objects referencing the
+    # same file descriptor do not exist in the same process. Otherwise, the
+    # file descriptor will be closed twice when the objects are garbage
+    # collected, causing an error.
+    def _check(serialized: bytes) -> None:
+        queue: ColmenaQueues = pkl.loads(serialized)
+        queue.send_inputs(1, method='test')
+        _, task = queue.get_task()
+        assert task.method == 'test'
+
+    process = Process(target=_check, args=(serialized,))
+    process.start()
+    process.join()
+    assert process.exitcode == 0

@@ -1,6 +1,7 @@
 """Utilities for interacting with ProxyStore"""
 import logging
 import warnings
+from typing import Dict
 
 import proxystore
 from proxystore.proxy import extract
@@ -10,6 +11,14 @@ from proxystore.store.base import Store
 from proxystore.store.utils import resolve_async, get_key
 
 from typing import Any, Dict, Union, List, Optional
+
+proxystore_version = tuple(int(v) for v in proxystore.__version__.split('.'))
+if proxystore_version >= (0, 7, 0):
+    # In ProxyStore v0.7 and later, the Store config is a pydantic model.
+    from proxystore.store.config import StoreConfig
+else:
+    # In ProxyStore v0.6 and older, the Store config is a dictionary.
+    StoreConfig = Dict
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 [project]
 name = "colmena"
-version = "0.6.1"
+version = "0.7.0"
 authors = [
     { name = "Globus Labs", email = "labs@globus.org" },
     { name = "Logan Ward", email = "lward@anl.gov" },
@@ -24,9 +24,9 @@ classifiers = [
 ]
 dependencies = [
     "parsl>=2022",
-    "pydantic==1.*",
+    "pydantic>=2,<3",
     "redis>=4.3",
-    "proxystore>=0.5.0,<0.7.0"
+    "proxystore>=0.5.0,<0.8.0"
 ]
 
 [tool.setuptools.packages.find]

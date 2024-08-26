@@ -41,7 +41,7 @@ class FakeExecutor:
         new_future.set_result(result)
         return new_future
 
-    def shutdown(self):
+    def shutdown(self, *args, **kwargs):
         pass
 
 
