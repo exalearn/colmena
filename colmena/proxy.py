@@ -1,7 +1,6 @@
 """Utilities for interacting with ProxyStore"""
 import logging
 import warnings
-from typing import Dict
 
 import proxystore
 from proxystore.proxy import extract

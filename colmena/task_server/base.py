@@ -124,7 +124,17 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
             topic: Topic used to send back to the user
         """
 
+        # Get any exception thrown by the workflow engine
         task_exc = future.exception()
+
+        # If it was, send back a modified copy of the input structure
+        if task_exc is not None:
+            # Mark it as unsuccessful and capture the exception information
+            result.success = False
+            result.failure_info = FailureInformation.from_exception(task_exc)
+        else:
+            # If not, the result object is the one we need
+            result = future.result()
 
         # The task could have failed at the workflow engine level (task_exc)
         # or application level (result.failure_info)
@@ -145,15 +155,7 @@ class FutureBasedTaskServer(BaseTaskServer, metaclass=ABCMeta):
             # Do not send the result back to the user
             return
 
-        # If it was, send back a modified copy of the input structure
-        if task_exc is not None:
-            # Mark it as unsuccessful and capture the exception information
-            result.success = False
-            result.failure_info = FailureInformation.from_exception(task_exc)
-        else:
-            # If not, the result object is the one we need
-            result = future.result()
-
+        # Mark the task received timestamp
         result.mark_task_received()
 
         # Put them back in the pipe with the proper topic
