@@ -1,7 +1,7 @@
 """Utilities for interacting with ProxyStore"""
 import logging
 import warnings
-from typing import Dict
+from typing import Any, Dict, Union, List, Optional
 
 import proxystore
 from proxystore.proxy import extract
@@ -9,8 +9,6 @@ from proxystore.proxy import is_resolved
 from proxystore.proxy import Proxy
 from proxystore.store.base import Store
 from proxystore.store.utils import resolve_async, get_key
-
-from typing import Any, Dict, Union, List, Optional
 
 proxystore_version = tuple(int(v) for v in proxystore.__version__.split('.'))
 if proxystore_version >= (0, 7, 0):
