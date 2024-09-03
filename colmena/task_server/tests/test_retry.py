@@ -10,6 +10,7 @@ from pytest import fixture, mark
 # Make global state for the retry task
 RETRY_COUNT = 0
 
+
 def retry_task(success_idx: int) -> bool:
     """Task that will succeed (return True) every `success_idx` times."""
     global RETRY_COUNT
@@ -18,16 +19,18 @@ def retry_task(success_idx: int) -> bool:
     if RETRY_COUNT < success_idx:
         RETRY_COUNT += 1
         raise ValueError('Retry')
-    
+
     # Reset the retry count
     RETRY_COUNT = 0
     return True
+
 
 @fixture
 def reset_retry_count():
     """Reset the retry count before each test."""
     global RETRY_COUNT
     RETRY_COUNT = 0
+
 
 @fixture()
 def config(tmpdir):
@@ -40,8 +43,9 @@ def config(tmpdir):
         run_dir=str(tmpdir / 'run'),
     )
 
+
 @fixture
-def server_and_queue(config) -> Generator[Tuple[ParslTaskServer, ColmenaQueues], None, None]:    
+def server_and_queue(config) -> Generator[Tuple[ParslTaskServer, ColmenaQueues], None, None]:
     queues = PipeQueues()
     server = ParslTaskServer([retry_task], queues, config)
     yield server, queues
@@ -73,11 +77,12 @@ def test_retry_policy_max_retries_zero(server_and_queue, reset_retry_count):
             assert not result.success
             assert 'Retry' in str(result.failure_info.exception)
 
+
 @mark.timeout(10)
 @mark.parametrize(('success_idx', 'max_retries'), [(0, 0), (1, 1), (4, 10)])
 def test_retry_policy_max_retries(server_and_queue, reset_retry_count, success_idx: int, max_retries: int):
     """Test the retry policy.
-    
+
     This test checks the following cases:
     - A task that always succeeds (success_idx=0, max_retries=0)
     - A task that succeeds after one retry (success_idx=1, max_retries=1)
