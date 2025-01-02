@@ -59,9 +59,9 @@ communication between each other.
 Citing Colmena
 --------------
 
-If you use Colmena in academic research cite our 2021 paper:
-`link <https://doi.org/10.1109/MLHPC54614.2021.00007>`_
-`bibtex <https://www.doi2bib.org/bib/https://doi.org/10.1109/MLHPC54614.2021.00007>`_
+Please cite our 2024 paper if you use Colmena in a research paper:
+`link <https://doi.org/10.1177/10943420241288242>`_
+`bibtex <https://www.doi2bib.org/bib/https://doi.org/10.1177/10943420241288242>`_
 
 
 Indices and tables

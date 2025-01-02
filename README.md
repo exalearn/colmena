@@ -116,6 +116,9 @@ Our [Read-the-Docs](https://colmena.readthedocs.io/en/latest/) provides the most
 
 You can also learn more about Colmena in the papers we published about it:
 
+- Ward et al. "Employing artificial intelligence to steer exascale workflows with colmena"
+  _International Journal of High Performance Computing Applications_
+  [[doi](https://doi.org/10.1177/10943420241288242)]
 - Ward et al. "Colmena: Scalable Machine-Learning-Based Steering of Ensemble Simulations for High Performance Computing".
   _2021 IEEE/ACM Workshop on Machine Learning in High Performance Computing Environments (MLHPC)_
   [[doi](https://doi.org/10.1109/MLHPC54614.2021.00007)] [[ArXiv](https://arxiv.org/abs/2110.02827)]

@@ -3,11 +3,12 @@ Examples
 
 Presentations about Colmena, examples of using Colmena in the scientific literature, and in other open-source codes.
 
-Tutorials
----------
+Presentations
+--------------
 
-Presentations focused on how to use Colmena
+Presentations focused on Colmena's design or how to use it
 
+- SIAM PP 2024's symposium on the Exascale Computing Project [`YouTube <https://youtu.be/L1nhpaDerCM>`_]
 - Exascale Computing Project's 2023 Annual Meeting [`YouTube <https://youtu.be/XiU0SI1SyRU>`_]
 
 Publications
@@ -18,6 +19,9 @@ Improvements to Colmena
 
 Papers about improving the performance or utility of Colmena
 
+- Ward et al. "Employing artificial intelligence to steer exascale workflows with colmena"
+  *The International Journal of High Performance Computing Applications*
+  [`paper <https://doi.org/10.1177/10943420241288242>`](https://doi.org/10.1177/10943420241288242)
 - Ward et al. "Colmena: Scalable Machine-Learning-Based Steering of Ensemble Simulations for High Performance Computing".
   *2021 IEEE/ACM Workshop on Machine Learning in High Performance Computing Environments (MLHPC)*
   [`paper <https://doi.org/10.1109/MLHPC54614.2021.00007>`_]
