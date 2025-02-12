@@ -45,7 +45,7 @@ def config(tmpdir):
     return Config(
         executors=[
             HighThroughputExecutor(
-                    address='localhost',
+                    address='127.0.0.1',
                     label='htex',
                     max_workers_per_node=1,
                     provider=LocalProvider(init_blocks=1, max_blocks=1),
