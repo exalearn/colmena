@@ -91,7 +91,7 @@ def test_generator_with_return(result):
     assert result.value == [[0,], 'done']
 
 
-@mark.parameterize('return_value', [True, False])
+@mark.parametrize('return_value', [True, False])
 def test_generator_streaming(result, return_value):
     """Trigger streaming by adding a queue to the task definition"""
 
