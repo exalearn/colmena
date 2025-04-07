@@ -3,7 +3,7 @@ from functools import lru_cache, update_wrapper
 from pathlib import Path
 from math import isnan
 
-from pytest import fixture
+from pytest import fixture, mark
 from proxystore.connectors.file import FileConnector
 from proxystore.store import Store
 from proxystore.store import register_store
@@ -91,17 +91,19 @@ def test_generator_with_return(result):
     assert result.value == [[0,], 'done']
 
 
-def test_generator_streaming(result):
+@mark.parameterize('return_value', [True, False])
+def test_generator_streaming(result, return_value):
     """Trigger streaming by adding a queue to the task definition"""
 
     queue = PipeQueues()
-    task = PythonGeneratorMethod(function=generator, name='stream', store_return_value=True, streaming_queue=queue)
+    task = PythonGeneratorMethod(function=generator, name='stream', store_return_value=return_value, streaming_queue=queue)
 
     result.topic = 'default'
     result = task(result)
     assert result.success, result.failure_info.traceback
     result.deserialize()
-    assert result.value == 'done'
+    if return_value:
+        assert result.value == 'done'
     assert result.complete
 
     intermediate = queue.get_result(timeout=1)
