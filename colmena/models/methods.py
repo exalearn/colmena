@@ -180,6 +180,7 @@ class PythonGeneratorMethod(ColmenaMethod):
                 if self.streaming_queue is not None:
                     if self.store_return_value:
                         return e.value
+                    return None
                 elif self.store_return_value:
                     return iter_results, e.value
                 else:

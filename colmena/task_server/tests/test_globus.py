@@ -15,7 +15,6 @@ class FakeClient:
     """Faked Client that allows you to register functions"""
 
     def register_function(self, new_func, function_name: str = None, **kwargs):
-        global my_funcs
         uuid = uuid4()
         if function_name is None:
             function_name = new_func.__name__
@@ -33,7 +32,6 @@ class FakeExecutor:
 
     def submit_to_registered_function(self, func: str, kwargs: dict):
         # Get the function from the global registry
-        global my_funcs
         func = my_funcs[func][0]
         task = kwargs['result']
         new_future = Future()
