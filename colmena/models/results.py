@@ -252,7 +252,7 @@ class Result(BaseModel):
 
     @classmethod
     def from_args_and_kwargs(cls, fn_args: Sequence[Any], fn_kwargs: Dict[str, Any] = None, **kwargs):
-        """Create a result object form a the arguments and kwargs for the function
+        """Create a result object from the arguments and kwargs for the function
 
         Keyword arguments to this function are passed to the initializer for `Result`.
 
