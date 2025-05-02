@@ -48,4 +48,4 @@ def test_proxy(store):
     key = get_key(proxy)
 
     assert len(result.args[0]) == 1000
-    assert store.exists(key)
+    assert not store.exists(key)

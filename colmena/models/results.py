@@ -371,7 +371,7 @@ class Result(BaseModel):
         else:
             store = None
 
-        def _serialize_and_proxy(value, evict=False) -> Tuple[str, int]:
+        def _serialize_and_proxy(value, evict=True) -> Tuple[str, int]:
             """Helper function for serializing and proxying
 
             Args:
