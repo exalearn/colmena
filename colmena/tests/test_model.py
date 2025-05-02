@@ -1,9 +1,7 @@
 """Tests for the data models"""
 import sys
 
-from proxystore.connectors.local import LocalConnector
 from proxystore.proxy import Proxy
-from proxystore.store import Store
 from proxystore.store.utils import get_key
 
 from colmena.models import ResourceRequirements, Result
@@ -35,20 +33,19 @@ def test_message_sizes():
     assert result.message_sizes['inputs'] >= sys.getsizeof(1)
 
 
-def test_proxy():
-    with Store('store', connector=LocalConnector()) as store:
-        result = Result.from_args_and_kwargs(
-            ('a' * 1000,),
-            serialization_method='pickle',
-            proxystore_name='store',
-            proxystore_threshold=10,
-            proxystore_config=store.config()
-        )
-        result.serialize()
-        result.deserialize()
-        assert isinstance(result.inputs[0][0], Proxy)
-        proxy = result.inputs[0][0]
-        key = get_key(proxy)
+def test_proxy(store):
+    result = Result.from_args_and_kwargs(
+        ('a' * 1000,),
+        serialization_method='pickle',
+        proxystore_name='store',
+        proxystore_threshold=10,
+        proxystore_config=store.config()
+    )
+    result.serialize()
+    result.deserialize()
+    assert isinstance(result.inputs[0][0], Proxy)
+    proxy = result.inputs[0][0]
+    key = get_key(proxy)
 
-        assert len(result.args[0]) == 1000
-        assert store.exists(key)
+    assert len(result.args[0]) == 1000
+    assert store.exists(key)

@@ -4,10 +4,6 @@ from pathlib import Path
 from math import isnan
 
 from pytest import fixture, mark
-from proxystore.connectors.file import FileConnector
-from proxystore.store import Store
-from proxystore.store import register_store
-from proxystore.store import unregister_store
 
 from colmena.models.methods import ExecutableMethod, PythonMethod, PythonGeneratorMethod
 from colmena.models import ResourceRequirements, Result, SerializationMethod
@@ -31,14 +27,6 @@ def result() -> Result:
     result = Result.from_args_and_kwargs((1,), method='echo')
     result.serialize()
     return result
-
-
-@fixture
-def store(tmpdir):
-    with Store('store', FileConnector(tmpdir), metrics=True) as store:
-        register_store(store)
-        yield store
-        unregister_store(store)
 
 
 def echo(x: Any) -> Any:
@@ -78,7 +66,7 @@ def test_generator(result):
     result = task(result)
     assert result.success, result.failure_info.traceback
     result.deserialize()
-    assert result.value == [0,]
+    assert result.value == [0, ]
 
 
 def test_generator_with_return(result):
@@ -88,7 +76,7 @@ def test_generator_with_return(result):
     result = task(result)
     assert result.success, result.failure_info.traceback
     result.deserialize()
-    assert result.value == [[0,], 'done']
+    assert result.value == [[0, ], 'done']
 
 
 @mark.parametrize('return_value', [True, False])
