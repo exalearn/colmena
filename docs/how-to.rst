@@ -182,7 +182,7 @@ Besides the input arguments and method name, the function also accepts a
         input_kwargs={'operation': "+"},
         method='f',
         topic='simulation',
-        task_info={'key': 'value},
+        task_info={'key': 'value'},
         resources={'node_count': 2}
     )
 
